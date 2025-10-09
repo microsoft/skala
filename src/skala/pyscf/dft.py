@@ -83,8 +83,11 @@ class SkalaRKS(dft.rks.RKS):
             enuc += edisp
         return enuc
 
-    def nuc_grad_method(self) -> SkalaRKSGradient:
+    def Gradients(self) -> SkalaRKSGradient:
         return SkalaRKSGradient(self)
+
+    def nuc_grad_method(self) -> SkalaRKSGradient:
+        return self.Gradients()
 
     def gen_response(self, *args, **kwargs) -> Callable[[np.ndarray], np.ndarray]:
         if hasattr(self, "_numint") and hasattr(self._numint, "gen_response"):
@@ -96,7 +99,8 @@ class SkalaRKS(dft.rks.RKS):
         import pyscf.df.df_jk
 
         ks = pyscf.df.df_jk.density_fit(self, auxbasis, with_df, only_dfj)
-        ks.nuc_grad_method = lambda: SkalaRKSGradient(ks)
+        ks.Gradients = lambda: SkalaRKSGradient(ks)
+        ks.nuc_grad_method = ks.Gradients
         return ks
 
 
@@ -122,8 +126,11 @@ class SkalaUKS(dft.uks.UKS):
             enuc += edisp
         return enuc
 
-    def nuc_grad_method(self) -> SkalaUKSGradient:
+    def Gradients(self) -> SkalaUKSGradient:
         return SkalaUKSGradient(self)
+
+    def nuc_grad_method(self) -> SkalaUKSGradient:
+        return self.Gradients()
 
     def gen_response(self, *args, **kwargs) -> Callable[[np.ndarray], np.ndarray]:
         if hasattr(self, "_numint") and hasattr(self._numint, "gen_response"):
@@ -135,5 +142,6 @@ class SkalaUKS(dft.uks.UKS):
         import pyscf.df.df_jk
 
         ks = pyscf.df.df_jk.density_fit(self, auxbasis, with_df, only_dfj)
-        ks.nuc_grad_method = lambda: SkalaUKSGradient(ks)
+        ks.Gradients = lambda: SkalaUKSGradient(ks)
+        ks.nuc_grad_method = ks.Gradients
         return ks

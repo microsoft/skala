@@ -56,6 +56,10 @@ def test_skala_class(
     assert isinstance(grad, SkalaRKSGradient if mol.spin == 0 else SkalaUKSGradient)
     assert grad.with_dftd3 is not None if with_dftd3 else grad.with_dftd3 is None
 
+    grad = ks.Gradients()
+    assert isinstance(grad, SkalaRKSGradient if mol.spin == 0 else SkalaUKSGradient)
+    assert grad.with_dftd3 is not None if with_dftd3 else grad.with_dftd3 is None
+
     ks = grad.base
     assert isinstance(ks, SkalaRKS if mol.spin == 0 else SkalaUKS)
     assert ks.with_dftd3 is not None if with_dftd3 else ks.with_dftd3 is None
