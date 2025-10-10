@@ -1,0 +1,65 @@
+name: Docs
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup micromamba
+        uses: mamba-org/setup-micromamba@v1
+        with:
+          environment-file: environment.yml
+          environment-name: skala
+          cache-environment: true
+          cache-downloads: true
+          create-args: >-
+            python=3.12
+
+      - name: Install package
+        run: |
+          pip install -e '.[docs]' --no-deps
+        shell: micromamba-shell {0}
+
+      - name: Check environment consistency
+        run: |
+          pip check
+        shell: micromamba-shell {0}
+
+      - name: Build documentation
+        run: |
+          sphinx-build -b html docs docs/_build/html
+          touch docs/_build/html/.nojekyll
+        shell: micromamba-shell {0}
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/_build/html
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
