@@ -33,7 +33,7 @@ jobs:
 
       - name: Install package
         run: |
-          pip install -e '.[docs]' --no-deps
+          pip install -e '.[doc]'
         shell: micromamba-shell {0}
 
       - name: Check environment consistency
