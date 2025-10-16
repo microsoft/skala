@@ -9,7 +9,7 @@ Set up the conda environment using the provided environment file:
 ```bash
 cd examples/cpp/cpp_integration
 mamba env create -n skala_cpp_integration -f environment.yml
-mamba activate skala_cpp_integration
+conda activate skala_cpp_integration
 ```
 
 ## Build library

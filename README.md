@@ -13,7 +13,7 @@ Learn more about Skala in our [ArXiv paper](https://arxiv.org/abs/2506.14665).
 
 ## What's in here
 
-This repository contains two main components:
+This repository contains three main components:
 
 1. The Python package `microsoft-skala`, which is also distributed [on PyPI](https://pypi.org/project/microsoft-skala/) and contains a Pytorch implementation of the Skala model, its hookups to quantum chemistry packages [PySCF](https://pyscf.org/) and [ASE](https://ase-lib.org/), and an independent client library for the Skala model served [in Azure AI Foundry](https://ai.azure.com/catalog/models/Skala).
 2. A development version of the CPU/GPU C++ library for XC functionals [GauXC](https://github.com/wavefunction91/GauXC) with an add-on supporting Pytorch-based functionals like Skala. GauXC is part of the stack that serves Skala in Azure AI Foundry and can be used to integrate Skala into other third-party DFT codes.
@@ -60,4 +60,3 @@ This project may contain trademarks or logos for projects, products, or services
 Authorized use of Microsoft trademarks or logos is subject to and must follow [Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks/usage/general).
 Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship.
 Any use of third-party trademarks or logos are subject to those third-party's policies.
-
