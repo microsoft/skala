@@ -8,6 +8,7 @@ from pyscf import dft, gto
 from pyscf.dft import gen_grid
 
 from skala.pyscf.features import generate_features
+from skala.functional.traditional import LDA
 
 
 def main() -> None:
@@ -43,6 +44,9 @@ def main() -> None:
         torch.save(value, str(args.output_dir / f"{key}.pt"))
 
     print(f"Saved features to {args.output_dir}")
+
+    lda_exc = LDA().get_exc(features)
+    print(f"For reference, LDAx Exc = {lda_exc.item()}")
 
 
 def get_density_matrix(mol: gto.Mole) -> torch.Tensor:

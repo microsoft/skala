@@ -1,7 +1,5 @@
 #include <torch/script.h>
 #include <nlohmann/json.hpp>
-// For at::empty_cache()
-#include <ATen/ATen.h>
 
 #include <iostream>
 #include <memory>
@@ -145,8 +143,6 @@ int main(int argc, const char *argv[])
   {
     std::cout << "|dExc/d(" << kv.key() << ")| = " << kv.value().norm().item() << std::endl;
   }
-
-  at::empty_cache();
 
   return 0;
 }

@@ -6,6 +6,7 @@ dependencies:
 - cxx-compiler
 - ninja
 - nlohmann_json
-- pytorch
+- libtorch
+- pytorch  # Only required to produce example features.
 - pip:
   - microsoft-skala
