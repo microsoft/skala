@@ -1,0 +1,11 @@
+name: skala-cpp-integration
+channels:
+- conda-forge
+dependencies:
+- cmake
+- cxx-compiler
+- ninja
+- nlohmann_json
+- pytorch
+- pip:
+  - microsoft-skala
