@@ -7,8 +7,8 @@ import torch
 from pyscf import dft, gto
 from pyscf.dft import gen_grid
 
-from skala.pyscf.features import generate_features
 from skala.functional.traditional import LDA
+from skala.pyscf.features import generate_features
 
 
 def main() -> None:
