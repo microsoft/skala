@@ -1,4 +1,5 @@
 #include <torch/script.h>
+#include <torch/csrc/autograd/autograd.h>
 #include <nlohmann/json.hpp>
 
 #include <iostream>
@@ -91,9 +92,15 @@ get_exc_and_grad(const torch::jit::Method &exc_func, const FeatureDict &features
 {
   // Create a mutable copy only for the tensors that need gradients
   FeatureDict features_with_grad;
+  std::vector<at::Tensor> input_tensors;
+  std::vector<std::string> tensor_keys;
+
   for (const auto &kv : features)
   {
-    features_with_grad.insert(kv.key(), kv.value().clone().requires_grad_(true));
+    auto tensor_with_grad = kv.value().clone().requires_grad_(true);
+    features_with_grad.insert(kv.key(), tensor_with_grad);
+    input_tensors.push_back(tensor_with_grad);
+    tensor_keys.push_back(kv.key());
   }
 
   IValueList args;
@@ -102,12 +109,20 @@ get_exc_and_grad(const torch::jit::Method &exc_func, const FeatureDict &features
 
   auto exc_on_grid = exc_func(args, kwargs).toTensor();
   auto exc = (exc_on_grid * features_with_grad.at("grid_weights")).sum();
-  exc.backward();
+
+  auto gradients = torch::autograd::grad(
+      {exc},                  // outputs
+      input_tensors,          // inputs
+      /*grad_outputs=*/{},    // grad_outputs (defaults to ones)
+      /*retain_graph=*/false, // retain_graph, necessary for higher-order grads
+      /*create_graph=*/false, // create_graph, necessary for higher-order grads
+      /*allow_unused=*/true   // allow_unused
+  );
 
   c10::Dict<std::string, at::Tensor> grad;
-  for (const auto &kv : features_with_grad)
+  for (size_t i = 0; i < tensor_keys.size(); ++i)
   {
-    grad.insert(kv.key(), kv.value().grad());
+    grad.insert(tensor_keys[i], gradients[i]);
   }
 
   return std::make_tuple(exc_on_grid, grad);
@@ -120,7 +135,7 @@ int main(int argc, const char *argv[])
     std::cerr << "usage: skala_cpp_integration <path-to-fun-file> <feature-file-directory>\n";
     return -1;
   }
-  
+
   const torch::DeviceType device = torch::kCPU;
 
   const auto [exc_func, feature_keys] = load_model(std::string(argv[1]), device);
