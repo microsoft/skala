@@ -8,7 +8,7 @@ Set up the conda environment using the provided environment file:
 
 ```bash
 cd examples/cpp/cpp_integration
-mamba env create -n skala_cpp_integration -f environment.yml
+conda env create -n skala_cpp_integration -f environment.yml
 conda activate skala_cpp_integration
 ```
 
