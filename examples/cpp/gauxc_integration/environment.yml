@@ -1,0 +1,20 @@
+name: skala-gauxc
+channels:
+  - conda-forge
+dependencies:
+  ## build requirements
+  - cmake >=3.5,<4
+  - c-compiler
+  - cxx-compiler
+  ## host requirements
+  #- exchcxx (pending on staged-recipes)
+  - gau2grid
+  #- integratorxx (no release)
+  - libxc-c 7.*
+  - nlohmann_json
+  - pytorch
+  ## test requirements
+  #- cereal (cf version not findable by GauXC)
+  - eigen >=3,<4
+  - hdf5
+  #- highfive (GauXC always vendors)

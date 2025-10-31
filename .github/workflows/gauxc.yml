@@ -1,0 +1,44 @@
+name: GauXC
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main, dev ]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mpi: ["nompi"]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup micromamba
+      uses: mamba-org/setup-micromamba@v1
+      with:
+        environment-file: examples/cpp/gauxc_integration/environment.yml
+        environment-name: skala-gauxc
+        cache-environment: true
+        cache-downloads: true
+
+    - name: Configure package
+      run: |
+        cmake -S third_party/gauxc -B _build -G Ninja -DGAUXC_ENABLE_MPI=OFF
+      shell: micromamba-shell {0}
+
+    - name: Build package
+      run: |
+        cmake --build _build
+      shell: micromamba-shell {0}
+
+    - name: Run tests
+      run: |
+        ctest --test-dir _build --output-on-failure
+      shell: micromamba-shell {0}
