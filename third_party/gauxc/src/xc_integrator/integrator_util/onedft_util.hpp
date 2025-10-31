@@ -1,6 +1,8 @@
 #include <torch/script.h>
 #include <torch/torch.h>
+#ifdef GAUXC_HAS_CUDA
 #include <torch/csrc/cuda/CUDAPluggableAllocator.h>
+#endif
 #include <nlohmann/json.hpp>
 #include <gauxc/xc_integrator/local_work_driver.hpp>
 

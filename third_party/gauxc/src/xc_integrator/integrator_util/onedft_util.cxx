@@ -1,16 +1,22 @@
 #include "onedft_util.hpp"
+#ifdef GAUXC_HAS_CUDA
 #include <cuda_runtime.h>
+#endif
 #include <iostream>
 #include <gauxc/exceptions.hpp>
+#ifdef GAUXC_HAS_MPI
 #include <mpi.h>
+#endif
 namespace GauXC {
 
 void print_memory_stats(size_t device_id) {
+#ifdef GAUXC_HAS_CUDA
     size_t free_mem, total_mem;
     cudaMemGetInfo(&free_mem, &total_mem);
     // std::cout << "Device ID: " << device_id << std::endl;
     // std::cout << "Total Memory: " << total_mem / (1024 * 1024) << " MB" << std::endl;
     // std::cout << "Free Memory: " << free_mem / (1024 * 1024) << " MB" << std::endl;
+#endif
 }
 bool valueExists(const std::string& value) {
     for (const auto& pair : feat_map) {

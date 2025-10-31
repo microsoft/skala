@@ -11,7 +11,7 @@ set( GAUXC_CUTLASS_REPOSITORY https://github.com/NVIDIA/cutlass.git )
 set( GAUXC_CUTLASS_REVISION v2.10.0 )
 
 set( GAUXC_EXCHCXX_REPOSITORY https://github.com/wavefunction91/ExchCXX.git )
-set( GAUXC_EXCHCXX_REVISION   f932a1bd3a0ff9d5b1de4cfe7fe86bfb1f20cb74 )
+set( GAUXC_EXCHCXX_REVISION   aa5bc8787c62744ef703d30b133dc37c54530c5f )
 
 set( GAUXC_GAU2GRID_REPOSITORY https://github.com/dgasmith/gau2grid.git )
 set( GAUXC_GAU2GRID_REVISION   v2.0.6 )
