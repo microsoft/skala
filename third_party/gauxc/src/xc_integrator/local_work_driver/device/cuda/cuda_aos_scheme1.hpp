@@ -1,7 +1,11 @@
 /**
  * GauXC Copyright (c) 2020-2024, The Regents of the University of California,
  * through Lawrence Berkeley National Laboratory (subject to receipt of
- * any required approvals from the U.S. Dept. of Energy). All rights reserved.
+ * any required approvals from the U.S. Dept. of Energy).
+ *
+ * (c) 2024-2025, Microsoft Corporation
+ *
+ * All rights reserved.
  *
  * See LICENSE.txt for details
  */
@@ -33,6 +37,7 @@ struct CudaAoSScheme1 : public Base {
 
   // API Overrides
   void partition_weights( XCDeviceData* ) override final;
+  void eval_weight_1st_deriv_contracted( XCDeviceData*, XCWeightAlg ) override final;
 
   std::unique_ptr<XCDeviceData> create_device_data(const DeviceRuntimeEnvironment&) override final;
 

@@ -1,7 +1,11 @@
 /**
  * GauXC Copyright (c) 2020-2024, The Regents of the University of California,
  * through Lawrence Berkeley National Laboratory (subject to receipt of
- * any required approvals from the U.S. Dept. of Energy). All rights reserved.
+ * any required approvals from the U.S. Dept. of Energy).
+ *
+ * (c) 2024-2025, Microsoft Corporation
+ *
+ * All rights reserved.
  *
  * See LICENSE.txt for details
  */
@@ -17,7 +21,7 @@ namespace detail {
 template <typename ValueType>
 void IncoreReplicatedXCDeviceIntegrator<ValueType>::
   eval_exc_grad_( int64_t m, int64_t n, const value_type* P,
-                 int64_t ldp, value_type* EXC_GRAD ) { 
+                 int64_t ldp, value_type* EXC_GRAD, const IntegratorSettingsXC& settings) { 
                  
   const auto& basis = this->load_balancer_->basis();
 
@@ -50,7 +54,7 @@ void IncoreReplicatedXCDeviceIntegrator<ValueType>::
     // data from device 
     this->timer_.time_op("XCIntegrator.LocalWork", [&](){
       eval_exc_grad_local_work_( basis, P, ldp, nullptr, 0, EXC_GRAD, tasks.begin(),
-        tasks.end(), *device_data_ptr );
+        tasks.end(), *device_data_ptr, settings );
     });
 
     GAUXC_MPI_CODE(
@@ -72,7 +76,7 @@ void IncoreReplicatedXCDeviceIntegrator<ValueType>::
 template <typename ValueType>
 void IncoreReplicatedXCDeviceIntegrator<ValueType>::
   eval_exc_grad_( int64_t m, int64_t n, const value_type* Ps, int64_t ldps, 
-                  const value_type* Pz, int64_t ldpz, value_type* EXC_GRAD ) { 
+                  const value_type* Pz, int64_t ldpz, value_type* EXC_GRAD, const IntegratorSettingsXC& settings ) { 
                  
   const auto& basis = this->load_balancer_->basis();
 
@@ -107,7 +111,7 @@ void IncoreReplicatedXCDeviceIntegrator<ValueType>::
     // data from device 
     this->timer_.time_op("XCIntegrator.LocalWork", [&](){
       eval_exc_grad_local_work_( basis, Ps, ldps, Pz, ldpz, EXC_GRAD, tasks.begin(),
-        tasks.end(), *device_data_ptr );
+        tasks.end(), *device_data_ptr, settings );
     });
 
     GAUXC_MPI_CODE(
@@ -131,7 +135,7 @@ void IncoreReplicatedXCDeviceIntegrator<ValueType>::
     const value_type* Ps, int64_t ldps,
     const value_type* Pz, int64_t ldpz,
     host_task_iterator task_begin, host_task_iterator task_end,
-    XCDeviceData& device_data ) {
+    XCDeviceData& device_data, const IntegratorSettingsXC& settings ) {
 
   const bool is_uks = Pz != nullptr;
   const bool is_rks = not is_uks;
@@ -141,6 +145,7 @@ void IncoreReplicatedXCDeviceIntegrator<ValueType>::
   // Setup Aliases
   const auto& func  = *this->func_;
   const auto& mol   = this->load_balancer_->molecule();
+  const auto& meta  = this->load_balancer_->molmeta();
 
   // Sanity gates
   if(func.needs_laplacian()) {
@@ -159,17 +164,24 @@ void IncoreReplicatedXCDeviceIntegrator<ValueType>::
   };
   std::sort( task_begin, task_end, task_comparator );
 
-
-
+  // Misc KS settings
+  IntegratorSettingsEXC_GRAD exc_grad_settings;
+  if( auto* tmp = dynamic_cast<const IntegratorSettingsEXC_GRAD*>(&settings) ) {
+    exc_grad_settings = *tmp;
+  }
 
   // Check that Partition Weights have been calculated
   auto& lb_state = this->load_balancer_->state();
   if( not lb_state.modified_weights_are_stored ) {
     GAUXC_GENERIC_EXCEPTION("Weights Have Not Been Modified"); 
   }
+  XCWeightAlg& weight_alg = lb_state.weight_alg;
+
+
   // Processes batches in groups that saturadate available device memory
   integrator_term_tracker enabled_terms;
   enabled_terms.exc_grad = true;
+  enabled_terms.weights  = true;
 
   if (is_rks) enabled_terms.ks_scheme = RKS;
   else if (is_uks) enabled_terms.ks_scheme = UKS;
@@ -186,6 +198,9 @@ void IncoreReplicatedXCDeviceIntegrator<ValueType>::
   device_data.reset_allocations();
   device_data.allocate_static_data_exc_grad( nbf, nshells, natoms, enabled_terms );
   device_data.send_static_data_density_basis( Ps, ldps, Pz, ldpz, nullptr, 0, nullptr, 0, basis );
+  // for weight contribution
+  device_data.allocate_static_data_weights( natoms );
+  device_data.send_static_data_weights( mol, meta );
 
   // Zero integrands
   device_data.zero_exc_grad_integrands();
@@ -234,13 +249,18 @@ void IncoreReplicatedXCDeviceIntegrator<ValueType>::
     else if( func.is_gga() ) lwd->eval_kern_exc_vxc_gga ( func, &device_data );
     else                     lwd->eval_kern_exc_vxc_lda ( func, &device_data );
 
-    // Do scalar N_EL integration
+
+    // Do scalar N_EL integration    
     lwd->inc_nel( &device_data );
 
     // Increment EXC Gradient
-    if( func.is_mgga() )     lwd->inc_exc_grad_mgga( &device_data, enabled_terms.ks_scheme, need_lapl );
-    else if( func.is_gga() ) lwd->inc_exc_grad_gga ( &device_data, enabled_terms.ks_scheme );
-    else                     lwd->inc_exc_grad_lda ( &device_data, enabled_terms.ks_scheme );
+    if( func.is_mgga() )     lwd->inc_exc_grad_mgga( &device_data, enabled_terms.ks_scheme, need_lapl, exc_grad_settings.include_weight_derivatives );
+    else if( func.is_gga() ) lwd->inc_exc_grad_gga ( &device_data, enabled_terms.ks_scheme, exc_grad_settings.include_weight_derivatives );
+    else                     lwd->inc_exc_grad_lda ( &device_data, enabled_terms.ks_scheme, exc_grad_settings.include_weight_derivatives );
+
+    // weight contribution
+    if(exc_grad_settings.include_weight_derivatives)
+      lwd->eval_weight_1st_deriv_contracted( &device_data, weight_alg );
 
   } // Loop over batches of batches 
 
@@ -253,10 +273,10 @@ void IncoreReplicatedXCDeviceIntegrator<ValueType>::
     const value_type* Pz, int64_t ldpz, 
     value_type* EXC_GRAD, 
     host_task_iterator task_begin, host_task_iterator task_end,
-    XCDeviceData& device_data ) {
+    XCDeviceData& device_data, const IntegratorSettingsXC& settings ) {
 
   // Compute XC gradient and keep data on the device
-  eval_exc_grad_local_work_( basis, Ps, ldps, Pz, ldpz, task_begin, task_end, device_data );
+  eval_exc_grad_local_work_( basis, Ps, ldps, Pz, ldpz, task_begin, task_end, device_data, settings );
 
   // Receive XC gradient from host
   double N_EL;

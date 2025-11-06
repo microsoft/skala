@@ -1,7 +1,11 @@
 /**
  * GauXC Copyright (c) 2020-2024, The Regents of the University of California,
  * through Lawrence Berkeley National Laboratory (subject to receipt of
- * any required approvals from the U.S. Dept. of Energy). All rights reserved.
+ * any required approvals from the U.S. Dept. of Energy).
+ *
+ * (c) 2024-2025, Microsoft Corporation
+ *
+ * All rights reserved.
  *
  * See LICENSE.txt for details
  */
@@ -19,6 +23,10 @@ enum class DeviceBlasUplo : unsigned char {
   Upper,
   Lower
 };
+
+template <typename T>
+void increment( device_blas_handle generic_handle, const T* X, T* Y, int N );
+
 
 template <typename T>
 void dot( device_blas_handle handle,

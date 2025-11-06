@@ -1,12 +1,15 @@
 # About
 
-GauXC Copyright (c) 2020-2024, The Regents of the University of California,
-through Lawrence Berkeley National Laboratory (subject to receipt of
-any required approvals from the U.S. Dept. of Energy). All rights reserved.
+GauXC 
 
-If you have questions about your rights to use or distribute this software,
-please contact Berkeley Lab's Intellectual Property Office at
-IPO@lbl.gov.
+Copyright (c) 2020-2024, The Regents of the University of California,
+through Lawrence Berkeley National Laboratory (subject to receipt of
+any required approvals from the U.S. Dept. of Energy). 
+
+(c) 2024-2025, Microsoft Corporation
+
+All rights reserved.
+
 
 NOTICE.  This Software was developed under funding from the U.S. Department
 of Energy and the U.S. Government consequently retains certain rights.  As
@@ -29,12 +32,7 @@ frameworks to target NVIDIA and AMD GPUs, respectively.
 Evaluation
 of the XC functional CPU/accelerator architectures is provided by the
 [ExchCXX](https://github.com/wavefunction91/ExchCXX) library. Quadratures are generated
-by the [IntegratorXX](https://github.com/wavefunction91/IntegratorXX).
-
-GauXC is a work in progress. Its development has been funded by the U.S.
-Department of Energy Exascale Computing Project
-([NWChemEx](https://github.com/NWChemEx-Project)).
-
+by the [IntegratorXX](https://github.com/wavefunction91/IntegratorXX) library.
 
 # Design Goals
 
@@ -62,17 +60,7 @@ for flexible and agile development in the field of KS-DFT.
 
 # Major Contributors
 
-Primary Developer and Maintainer: David Williams--Young - LBNL (dbwy at lbl dot gov)
-
-GauXC has received major contributions from the following developers (in no particular order):
-* Thom Popovici (LBNL)          - Optimized sn-K kernels for CPU and GPU architectures
-* Teri Lambros (UW)             - Unrestricted (UKS) and Generalized (GKS) DFT
-* Daniel Mejia-Rodriguez (PNNL) - Meta-GGA DFT
-
-We have also receieved significant support from industry collaborators:
-* David Clark (NVIDIA)  - Optimization of critical kernels for NVIDIA architectures
-* Damon McDougall (AMD) - Optimization of critical kernels for AMDGPU architectures
-
+See CONTRIBUTORS.md for a list of major contributors to GauXC.
 
 # Publications
 
@@ -229,7 +217,7 @@ target_link_libraries( my_target PUBLIC gauxc::gauxc )
 
 # Example Usage
 
-Coming Soon.... See `test/standalone_driver.cxx` for an example end-to-end invocation of GauXC for various integrands.
+See `test/standalone_driver.cxx` for an example end-to-end invocation of GauXC for various integrands.
 
 
 # License
@@ -239,6 +227,15 @@ LICENSE.txt for details.
 
 # Acknowledgments
 
-The development of GauXC is supported by the Exascale Computing Project
+The development of GauXC was previously supported by the Exascale Computing Project
 (17-SC-20-SC), a collaborative effort of the U.S. Department of Energy Office
 of Science and the National Nuclear Security Administration.
+
+##Trademarks 
+
+This project may contain trademarks or logos for projects, products, or
+services. Authorized use of Microsoft trademarks or logos is subject to and
+must follow Microsoft’s Trademark & Brand Guidelines. Use of Microsoft
+trademarks or logos in modified versions of this project must not cause
+confusion or imply Microsoft sponsorship. Any use of third-party trademarks or
+logos are subject to those third-party’s policies.

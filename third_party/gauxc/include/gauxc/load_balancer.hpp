@@ -1,7 +1,11 @@
 /**
  * GauXC Copyright (c) 2020-2024, The Regents of the University of California,
  * through Lawrence Berkeley National Laboratory (subject to receipt of
- * any required approvals from the U.S. Dept. of Energy). All rights reserved.
+ * any required approvals from the U.S. Dept. of Energy).
+ *
+ * (c) 2024-2025, Microsoft Corporation
+ *
+ * All rights reserved.
  *
  * See LICENSE.txt for details
  */
@@ -15,6 +19,7 @@
 #include <gauxc/xc_task.hpp>
 #include <gauxc/util/timer.hpp>
 #include <gauxc/runtime_environment.hpp>
+#include <gauxc/enums.hpp>
 
 namespace GauXC {
 
@@ -27,6 +32,8 @@ namespace detail {
 struct LoadBalancerState {
   bool modified_weights_are_stored = false; 
     ///< Whether the load balancer currently stores partitioned weights
+  XCWeightAlg weight_alg = XCWeightAlg::NOTPARTITIONED; 
+    ///< Weight partitioning scheme used by this LoadBalancer
 };
 
 

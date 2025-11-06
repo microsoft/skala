@@ -1,7 +1,11 @@
 /**
  * GauXC Copyright (c) 2020-2024, The Regents of the University of California,
  * through Lawrence Berkeley National Laboratory (subject to receipt of
- * any required approvals from the U.S. Dept. of Energy). All rights reserved.
+ * any required approvals from the U.S. Dept. of Energy).
+ *
+ * (c) 2024-2025, Microsoft Corporation
+ *
+ * All rights reserved.
  *
  * See LICENSE.txt for details
  */
@@ -71,9 +75,9 @@ protected:
 
 
   void eval_exc_grad_( int64_t m, int64_t n, const value_type* P, int64_t ldp, 
-                       value_type* EXC_GRAD ) override;
+                       value_type* EXC_GRAD, const IntegratorSettingsXC& settings ) override;
   void eval_exc_grad_( int64_t m, int64_t n, const value_type* Ps, int64_t ldps, 
-                       const value_type* Pz, int64_t ldpz, value_type* EXC_GRAD ) override;
+                       const value_type* Pz, int64_t ldpz, value_type* EXC_GRAD, const IntegratorSettingsXC& settings ) override;
 
   void eval_exx_( int64_t m, int64_t n, const value_type* P,
                   int64_t ldp, value_type* K, int64_t ldk,
@@ -166,12 +170,12 @@ protected:
   void eval_exc_grad_local_work_( const basis_type& basis, const value_type* Ps, int64_t ldps, 
                                   const value_type* Pz, int64_t ldpz,
                                   host_task_iterator task_begin, host_task_iterator task_end,
-                                  XCDeviceData& device_data );
+                                  XCDeviceData& device_data, const IntegratorSettingsXC& settings );
 
   void eval_exc_grad_local_work_( const basis_type& basis, const value_type* P, int64_t ldp, 
                                   const value_type* Pz, int64_t ldpz, value_type* EXC_GRAD, 
                                   host_task_iterator task_begin, host_task_iterator task_end,
-                                  XCDeviceData& device_data );
+                                  XCDeviceData& device_data, const IntegratorSettingsXC& settings );
 
 
 

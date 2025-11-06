@@ -1,7 +1,11 @@
 /**
  * GauXC Copyright (c) 2020-2024, The Regents of the University of California,
  * through Lawrence Berkeley National Laboratory (subject to receipt of
- * any required approvals from the U.S. Dept. of Energy). All rights reserved.
+ * any required approvals from the U.S. Dept. of Energy).
+ *
+ * (c) 2024-2025, Microsoft Corporation
+ *
+ * All rights reserved.
  *
  * See LICENSE.txt for details
  */
@@ -29,6 +33,9 @@ struct LocalHostWorkDriverPIMPL {
 
   virtual void partition_weights( XCWeightAlg weight_alg, const Molecule& mol, 
     const MolMeta& meta, task_iterator task_begin, task_iterator task_end ) = 0;
+    
+  virtual void eval_weight_1st_deriv_contracted( XCWeightAlg weight_alg, const Molecule& mol, 
+    const MolMeta& meta, const XCTask& task, const double* w_times_f, double* exc_grad_w ) = 0;
 
   virtual void eval_collocation( size_t npts, size_t nshells, size_t nbe, 
     const double* pts, const BasisSet<double>& basis, const int32_t* shell_list, 

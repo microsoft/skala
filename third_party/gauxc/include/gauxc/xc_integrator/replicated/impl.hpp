@@ -1,7 +1,11 @@
 /**
  * GauXC Copyright (c) 2020-2024, The Regents of the University of California,
  * through Lawrence Berkeley National Laboratory (subject to receipt of
- * any required approvals from the U.S. Dept. of Energy). All rights reserved.
+ * any required approvals from the U.S. Dept. of Energy).
+ *
+ * (c) 2024-2025, Microsoft Corporation
+ *
+ * All rights reserved.
  *
  * See LICENSE.txt for details
  */
@@ -175,13 +179,13 @@ typename ReplicatedXCIntegrator<MatrixType>::exc_vxc_type_uks
 
 template <typename MatrixType>
 typename ReplicatedXCIntegrator<MatrixType>::exc_grad_type 
-  ReplicatedXCIntegrator<MatrixType>::eval_exc_grad_( const MatrixType& P ) {
+  ReplicatedXCIntegrator<MatrixType>::eval_exc_grad_( const MatrixType& P, const IntegratorSettingsXC& ks_settings ) {
 
   if( not pimpl_ ) GAUXC_PIMPL_NOT_INITIALIZED();
 
   std::vector<value_type> EXC_GRAD( 3*pimpl_->load_balancer().molecule().natoms() );
   pimpl_->eval_exc_grad( P.rows(), P.cols(), P.data(), P.rows(),
-                         EXC_GRAD.data() );
+                         EXC_GRAD.data(), ks_settings );
 
   return EXC_GRAD;
 
@@ -189,13 +193,13 @@ typename ReplicatedXCIntegrator<MatrixType>::exc_grad_type
 
 template <typename MatrixType>
 typename ReplicatedXCIntegrator<MatrixType>::exc_grad_type 
-  ReplicatedXCIntegrator<MatrixType>::eval_exc_grad_( const MatrixType& Ps, const MatrixType& Pz ) {
+  ReplicatedXCIntegrator<MatrixType>::eval_exc_grad_( const MatrixType& Ps, const MatrixType& Pz, const IntegratorSettingsXC& ks_settings ) {
 
   if( not pimpl_ ) GAUXC_PIMPL_NOT_INITIALIZED();
 
   std::vector<value_type> EXC_GRAD( 3*pimpl_->load_balancer().molecule().natoms() );
   pimpl_->eval_exc_grad( Ps.rows(), Ps.cols(), Ps.data(), Ps.rows(), Pz.data(), Pz.rows(),
-                         EXC_GRAD.data() );
+                         EXC_GRAD.data(), ks_settings );
 
   return EXC_GRAD;
 

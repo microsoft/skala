@@ -1,7 +1,11 @@
 /**
  * GauXC Copyright (c) 2020-2024, The Regents of the University of California,
  * through Lawrence Berkeley National Laboratory (subject to receipt of
- * any required approvals from the U.S. Dept. of Energy). All rights reserved.
+ * any required approvals from the U.S. Dept. of Energy).
+ *
+ * (c) 2024-2025, Microsoft Corporation
+ *
+ * All rights reserved.
  *
  * See LICENSE.txt for details
  */
@@ -34,6 +38,16 @@ void LocalHostWorkDriver::partition_weights( XCWeightAlg weight_alg,
 
   throw_if_invalid_pimpl(pimpl_);
   pimpl_->partition_weights(weight_alg, mol, meta, task_begin, task_end);
+
+}
+
+void LocalHostWorkDriver::eval_weight_1st_deriv_contracted( 
+  XCWeightAlg weight_alg, const Molecule& mol, const MolMeta& meta, 
+  const XCTask& task, const double* w_times_f, double* exc_grad_w ) {
+
+  throw_if_invalid_pimpl(pimpl_);
+  pimpl_->eval_weight_1st_deriv_contracted(weight_alg, mol, meta, task, 
+    w_times_f, exc_grad_w);
 
 }
 

@@ -1,7 +1,11 @@
 /**
  * GauXC Copyright (c) 2020-2024, The Regents of the University of California,
  * through Lawrence Berkeley National Laboratory (subject to receipt of
- * any required approvals from the U.S. Dept. of Energy). All rights reserved.
+ * any required approvals from the U.S. Dept. of Energy).
+ *
+ * (c) 2024-2025, Microsoft Corporation
+ *
+ * All rights reserved.
  *
  * See LICENSE.txt for details
  */
@@ -13,7 +17,9 @@
 #include "host/local_host_work_driver.hpp"
 #include <gauxc/molgrid/defaults.hpp>
 #include <stdexcept>
+#ifdef GAUXC_ENABLE_OPENMP
 #include <omp.h>
+#endif
 
 namespace GauXC::detail {
 template <typename ValueType>
@@ -92,12 +98,16 @@ void ReferenceReplicatedXCHostIntegrator<ValueType>::
 
   // Loop over tasks
   const size_t ntasks = tasks.size();
+  #ifdef GAUXC_ENABLE_OPENMP
   #pragma omp parallel
+  #endif
   {
 
   XCHostData<value_type> host_data; // Thread local host data
 
+  #ifdef GAUXC_ENABLE_OPENMP
   #pragma omp for schedule(dynamic) reduction(+:dd_Psi[:natom * ldPsi])
+  #endif
   for( size_t iT = 0; iT < ntasks; ++iT ) {
 
     // Alias current task

@@ -1,7 +1,11 @@
 /**
  * GauXC Copyright (c) 2020-2024, The Regents of the University of California,
  * through Lawrence Berkeley National Laboratory (subject to receipt of
- * any required approvals from the U.S. Dept. of Energy). All rights reserved.
+ * any required approvals from the U.S. Dept. of Energy).
+ *
+ * (c) 2024-2025, Microsoft Corporation
+ *
+ * All rights reserved.
  *
  * See LICENSE.txt for details
  */
@@ -18,7 +22,7 @@ namespace GauXC::detail {
 template <typename ValueType>
 void ReferenceReplicatedXCHostIntegrator<ValueType>::
   eval_exc_grad_( int64_t m, int64_t n, const value_type* P,
-                 int64_t ldp, value_type* EXC_GRAD ) { 
+                 int64_t ldp, value_type* EXC_GRAD, const IntegratorSettingsXC& ks_settings ) { 
                  
                  
   const auto& basis = this->load_balancer_->basis();
@@ -38,7 +42,7 @@ void ReferenceReplicatedXCHostIntegrator<ValueType>::
                  
   // Compute Local contributions to EXC / VXC
   this->timer_.time_op("XCIntegrator.LocalWork", [&](){
-    exc_grad_local_work_( P, ldp, nullptr, 0, EXC_GRAD );
+    exc_grad_local_work_( P, ldp, nullptr, 0, EXC_GRAD, ks_settings );
   });
 
 
@@ -58,7 +62,7 @@ void ReferenceReplicatedXCHostIntegrator<ValueType>::
 template <typename ValueType>
 void ReferenceReplicatedXCHostIntegrator<ValueType>::
   eval_exc_grad_( int64_t m, int64_t n, const value_type* Ps, int64_t ldps, 
-                  const value_type* Pz, int64_t ldpz, value_type* EXC_GRAD ) { 
+                  const value_type* Pz, int64_t ldpz, value_type* EXC_GRAD, const IntegratorSettingsXC& ks_settings ) { 
                  
                  
   const auto& basis = this->load_balancer_->basis();
@@ -80,7 +84,7 @@ void ReferenceReplicatedXCHostIntegrator<ValueType>::
                  
   // Compute Local contributions to EXC / VXC
   this->timer_.time_op("XCIntegrator.LocalWork", [&](){
-    exc_grad_local_work_( Ps, ldps, Pz, ldpz, EXC_GRAD );
+    exc_grad_local_work_( Ps, ldps, Pz, ldpz, EXC_GRAD, ks_settings );
   });
 
 
@@ -98,7 +102,7 @@ void ReferenceReplicatedXCHostIntegrator<ValueType>::
 
 template <typename ValueType>
 void ReferenceReplicatedXCHostIntegrator<ValueType>::
-  exc_grad_local_work_( const value_type* Ps, int64_t ldps, const value_type* Pz, int64_t ldpz, value_type* EXC_GRAD ) {
+  exc_grad_local_work_( const value_type* Ps, int64_t ldps, const value_type* Pz, int64_t ldpz, value_type* EXC_GRAD, const IntegratorSettingsXC& settings ) {
 
   const bool is_uks = Pz != nullptr;
   const bool is_rks = not is_uks;
@@ -110,13 +114,19 @@ void ReferenceReplicatedXCHostIntegrator<ValueType>::
   const auto& func  = *this->func_;
   const auto& basis = this->load_balancer_->basis();
   const auto& mol   = this->load_balancer_->molecule();
+  const auto& molmeta = this->load_balancer_->molmeta();
 
   // MGGA constants
   const bool needs_laplacian = func.needs_laplacian();
   if(needs_laplacian and is_uks) {
     GAUXC_GENERIC_EXCEPTION("UKS Gradients + Laplacian Dependent MGGAs is Not Yet Implemented");
   }
-  
+
+  // Misc KS settings
+  IntegratorSettingsEXC_GRAD exc_grad_settings;
+  if( auto* tmp = dynamic_cast<const IntegratorSettingsEXC_GRAD*>(&settings) ) {
+    exc_grad_settings = *tmp;
+  }
 
   // Get basis map
   BasisSetMap basis_map(basis,mol);
@@ -138,6 +148,7 @@ void ReferenceReplicatedXCHostIntegrator<ValueType>::
   if( not lb_state.modified_weights_are_stored ) {
     GAUXC_GENERIC_EXCEPTION("Weights Have Not Been Modified"); 
   }
+  XCWeightAlg& weight_alg = lb_state.weight_alg;
 
   // Zero out integrands
   for( auto i = 0; i < 3*natoms; ++i ) {
@@ -155,7 +166,7 @@ void ReferenceReplicatedXCHostIntegrator<ValueType>::
   for( size_t iT = 0; iT < ntasks; ++iT ) {
 
     // Alias current task
-    const auto& task = tasks[iT];
+    auto& task = tasks[iT];
 
     // Get tasks constants
     const int32_t  npts    = task.points.size();
@@ -380,6 +391,16 @@ void ReferenceReplicatedXCHostIntegrator<ValueType>::
     else
       func.eval_exc_vxc( npts, den_eval, eps, vrho );
 
+    if(exc_grad_settings.include_weight_derivatives){
+      // grid weight contribution to exc grad
+      for( int ipt = 0; ipt < npts; ++ipt ) {
+        const auto den = is_rks ? den_eval[ipt] : (den_eval[2*ipt] + den_eval[2*ipt+1]);
+        eps[ipt] *=  den * weights[ipt];
+      }
+      lwd->eval_weight_1st_deriv_contracted( weight_alg, mol, molmeta, 
+        task, eps, EXC_GRAD);
+    }
+
 
     // Increment EXC Gradient
     size_t bf_off = 0;
@@ -387,6 +408,10 @@ void ReferenceReplicatedXCHostIntegrator<ValueType>::
       const int sh_idx = shell_list[ish];
       const int sh_sz  = basis[sh_idx].size();
       const int iAt    = basis_map.shell_to_center( sh_idx );
+      if(iAt == task.iParent and exc_grad_settings.include_weight_derivatives) {
+        bf_off += sh_sz; // Increment basis offset
+        continue;
+      }
 
       double g_acc_x(0), g_acc_y(0), g_acc_z(0);
       for( int ibf = 0, mu = bf_off; ibf < sh_sz; ++ibf, ++mu )
@@ -555,9 +580,19 @@ void ReferenceReplicatedXCHostIntegrator<ValueType>::
       #pragma omp atomic
       EXC_GRAD[3*iAt + 2] += -2 * g_acc_z;
 
+      if(exc_grad_settings.include_weight_derivatives){
+        #pragma omp atomic
+        EXC_GRAD[3*task.iParent + 0] -= -2 * g_acc_x;
+        #pragma omp atomic
+        EXC_GRAD[3*task.iParent + 1] -= -2 * g_acc_y;
+        #pragma omp atomic
+        EXC_GRAD[3*task.iParent + 2] -= -2 * g_acc_z;
+      }
+
       bf_off += sh_sz; // Increment basis offset
 
     } // End loop over shells 
+
   } // End loop over tasks
 
   } // OpenMP Region

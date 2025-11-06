@@ -1,7 +1,11 @@
 /**
  * GauXC Copyright (c) 2020-2024, The Regents of the University of California,
  * through Lawrence Berkeley National Laboratory (subject to receipt of
- * any required approvals from the U.S. Dept. of Energy). All rights reserved.
+ * any required approvals from the U.S. Dept. of Energy).
+ *
+ * (c) 2024-2025, Microsoft Corporation
+ *
+ * All rights reserved.
  *
  * See LICENSE.txt for details
  */
@@ -56,9 +60,9 @@ struct AoSScheme1Base : public detail::LocalDeviceWorkDriverPIMPL {
 
   void inc_exc( XCDeviceData* ) override final;
   void inc_nel( XCDeviceData* ) override final;
-  void inc_exc_grad_lda( XCDeviceData*, integrator_ks_scheme  ) override final;
-  void inc_exc_grad_gga( XCDeviceData*, integrator_ks_scheme  ) override final;
-  void inc_exc_grad_mgga( XCDeviceData*, integrator_ks_scheme , bool ) override final;
+  void inc_exc_grad_lda( XCDeviceData*, integrator_ks_scheme, bool  ) override final;
+  void inc_exc_grad_gga( XCDeviceData*, integrator_ks_scheme, bool  ) override final;
+  void inc_exc_grad_mgga( XCDeviceData*, integrator_ks_scheme , bool, bool ) override final;
   void symmetrize_vxc( XCDeviceData* , density_id) override final;
   void symmetrize_fxc( XCDeviceData* , density_id) override final;
   void symmetrize_exx_k( XCDeviceData* ) override final;

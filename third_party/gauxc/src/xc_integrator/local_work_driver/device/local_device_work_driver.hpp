@@ -1,7 +1,11 @@
 /**
  * GauXC Copyright (c) 2020-2024, The Regents of the University of California,
  * through Lawrence Berkeley National Laboratory (subject to receipt of
- * any required approvals from the U.S. Dept. of Energy). All rights reserved.
+ * any required approvals from the U.S. Dept. of Energy).
+ *
+ * (c) 2024-2025, Microsoft Corporation
+ *
+ * All rights reserved.
  *
  * See LICENSE.txt for details
  */
@@ -56,6 +60,7 @@ public:
   // Public APIs
 
   void partition_weights( XCDeviceData* );
+  void eval_weight_1st_deriv_contracted( XCDeviceData*, XCWeightAlg);
 
   void eval_collocation( XCDeviceData* );
   void eval_collocation_gradient( XCDeviceData* );
@@ -109,9 +114,9 @@ public:
   void inc_nel( XCDeviceData* );
   void inc_vxc( XCDeviceData*, density_id, bool do_m = false );
   void inc_fxc( XCDeviceData*, density_id, bool do_m = false );
-  void inc_exc_grad_lda( XCDeviceData*, integrator_ks_scheme );
-  void inc_exc_grad_gga( XCDeviceData*, integrator_ks_scheme  );
-  void inc_exc_grad_mgga( XCDeviceData*, integrator_ks_scheme , bool );
+  void inc_exc_grad_lda( XCDeviceData*, integrator_ks_scheme, bool );
+  void inc_exc_grad_gga( XCDeviceData*, integrator_ks_scheme, bool );
+  void inc_exc_grad_mgga( XCDeviceData*, integrator_ks_scheme , bool, bool );
   void inc_exx_k( XCDeviceData* );
 
   void eval_exx_ek_screening_bfn_stats( XCDeviceData* );

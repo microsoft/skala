@@ -1,7 +1,11 @@
 /**
  * GauXC Copyright (c) 2020-2024, The Regents of the University of California,
  * through Lawrence Berkeley National Laboratory (subject to receipt of
- * any required approvals from the U.S. Dept. of Energy). All rights reserved.
+ * any required approvals from the U.S. Dept. of Energy).
+ *
+ * (c) 2024-2025, Microsoft Corporation
+ *
+ * All rights reserved.
  *
  * See LICENSE.txt for details
  */
@@ -83,16 +87,16 @@ typename XCIntegrator<MatrixType>::exc_vxc_type_uks
 
 template <typename MatrixType>
 typename XCIntegrator<MatrixType>::exc_grad_type
-  XCIntegrator<MatrixType>::eval_exc_grad( const MatrixType& P ) {
+  XCIntegrator<MatrixType>::eval_exc_grad( const MatrixType& P, const IntegratorSettingsXC& ks_settings ) {
   if( not pimpl_ ) GAUXC_PIMPL_NOT_INITIALIZED();
-  return pimpl_->eval_exc_grad(P);
+  return pimpl_->eval_exc_grad(P, ks_settings);
 };
 
 template <typename MatrixType>
 typename XCIntegrator<MatrixType>::exc_grad_type
-  XCIntegrator<MatrixType>::eval_exc_grad( const MatrixType& Ps, const MatrixType& Pz ) {
+  XCIntegrator<MatrixType>::eval_exc_grad( const MatrixType& Ps, const MatrixType& Pz, const IntegratorSettingsXC& ks_settings ) {
   if( not pimpl_ ) GAUXC_PIMPL_NOT_INITIALIZED();
-  return pimpl_->eval_exc_grad(Ps, Pz);
+  return pimpl_->eval_exc_grad(Ps, Pz, ks_settings);
 };
 
 template <typename MatrixType>

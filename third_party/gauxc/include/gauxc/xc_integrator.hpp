@@ -1,7 +1,11 @@
 /**
  * GauXC Copyright (c) 2020-2024, The Regents of the University of California,
  * through Lawrence Berkeley National Laboratory (subject to receipt of
- * any required approvals from the U.S. Dept. of Energy). All rights reserved.
+ * any required approvals from the U.S. Dept. of Energy).
+ *
+ * (c) 2024-2025, Microsoft Corporation
+ *
+ * All rights reserved.
  *
  * See LICENSE.txt for details
  */
@@ -72,8 +76,8 @@ public:
   exc_vxc_type_uks eval_exc_vxc_onedft( const MatrixType&, const MatrixType&,
                                 const IntegratorSettingsXC& = IntegratorSettingsXC{} );
 
-  exc_grad_type eval_exc_grad( const MatrixType& );
-  exc_grad_type eval_exc_grad( const MatrixType&, const MatrixType& );
+  exc_grad_type eval_exc_grad( const MatrixType&, const IntegratorSettingsXC& = IntegratorSettingsXC{} );
+  exc_grad_type eval_exc_grad( const MatrixType&, const MatrixType&, const IntegratorSettingsXC& = IntegratorSettingsXC{} );
 
   exx_type      eval_exx     ( const MatrixType&, 
                                const IntegratorSettingsEXX& = IntegratorSettingsEXX{} );

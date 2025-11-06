@@ -1,7 +1,11 @@
 /**
  * GauXC Copyright (c) 2020-2024, The Regents of the University of California,
  * through Lawrence Berkeley National Laboratory (subject to receipt of
- * any required approvals from the U.S. Dept. of Energy). All rights reserved.
+ * any required approvals from the U.S. Dept. of Energy).
+ *
+ * (c) 2024-2025, Microsoft Corporation
+ *
+ * All rights reserved.
  *
  * See LICENSE.txt for details
  */
@@ -25,7 +29,7 @@ void HostMolecularWeights::modify_weights( LoadBalancer& lb ) const {
   auto task_comparator = []( const XCTask& a, const XCTask& b ) {
     return (a.points.size() * a.bfn_screening.nbe) > (b.points.size() * b.bfn_screening.nbe);
   };
-  std::sort( tasks.begin(), tasks.end(), task_comparator );
+  std::stable_sort( tasks.begin(), tasks.end(), task_comparator );
 
   // Modify the weights
   const auto& mol  = lb.molecule();
@@ -34,6 +38,7 @@ void HostMolecularWeights::modify_weights( LoadBalancer& lb ) const {
     tasks.begin(), tasks.end() );
 
   lb.state().modified_weights_are_stored = true;
+  lb.state().weight_alg = this->settings_.weight_alg;
 }
 
 }

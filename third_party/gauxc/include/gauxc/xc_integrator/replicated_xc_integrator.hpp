@@ -1,7 +1,11 @@
 /**
  * GauXC Copyright (c) 2020-2024, The Regents of the University of California,
  * through Lawrence Berkeley National Laboratory (subject to receipt of
- * any required approvals from the U.S. Dept. of Energy). All rights reserved.
+ * any required approvals from the U.S. Dept. of Energy).
+ *
+ * (c) 2024-2025, Microsoft Corporation
+ *
+ * All rights reserved.
  *
  * See LICENSE.txt for details
  */
@@ -51,8 +55,8 @@ private:
   exc_vxc_type_uks  eval_exc_vxc_ ( const MatrixType&, const MatrixType&, const IntegratorSettingsXC&) override;
   exc_vxc_type_gks  eval_exc_vxc_ ( const MatrixType&, const MatrixType&, const MatrixType&, const MatrixType&, const IntegratorSettingsXC& ) override;
   exc_vxc_type_uks eval_exc_vxc_onedft_  ( const MatrixType&, const MatrixType&, const IntegratorSettingsXC& ) override;
-  exc_grad_type eval_exc_grad_( const MatrixType& ) override;
-  exc_grad_type eval_exc_grad_( const MatrixType&, const MatrixType& ) override;
+  exc_grad_type eval_exc_grad_( const MatrixType&, const IntegratorSettingsXC& ) override;
+  exc_grad_type eval_exc_grad_( const MatrixType&, const MatrixType&, const IntegratorSettingsXC& ) override;
   exx_type      eval_exx_     ( const MatrixType&, const IntegratorSettingsEXX& ) override;
   fxc_contraction_type_rks  eval_fxc_contraction_ ( const MatrixType&, const MatrixType&, const IntegratorSettingsXC& ) override;
   fxc_contraction_type_uks  eval_fxc_contraction_ ( const MatrixType&, const MatrixType&, const MatrixType&, const MatrixType&, const IntegratorSettingsXC&) override;

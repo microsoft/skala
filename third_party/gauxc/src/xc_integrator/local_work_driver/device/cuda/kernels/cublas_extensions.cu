@@ -1,7 +1,11 @@
 /**
  * GauXC Copyright (c) 2020-2024, The Regents of the University of California,
  * through Lawrence Berkeley National Laboratory (subject to receipt of
- * any required approvals from the U.S. Dept. of Energy). All rights reserved.
+ * any required approvals from the U.S. Dept. of Energy).
+ *
+ * (c) 2024-2025, Microsoft Corporation
+ *
+ * All rights reserved.
  *
  * See LICENSE.txt for details
  */
@@ -44,6 +48,24 @@ template <typename T>
 void increment( const T* X, T* Y, cudaStream_t stream ) {
   increment_kernel<<<1,1,0,stream>>>(X,Y);
 }
+
+template <typename T>
+__global__ void increment_vec_kernel( const T* X, T* Y, int N ) {
+  const auto tid = blockIdx.x * blockDim.x + threadIdx.x;
+  if( tid < N ) Y[tid] += X[tid];
+}
+
+template <typename T>
+void increment( device_blas_handle generic_handle, const T* X, T* Y, int N) {
+  const int threads = cuda::warp_size * cuda::max_warps_per_thread_block;
+  const int blocks = util::div_ceil( N, threads );
+  cublasHandle_t handle = generic_handle.blas_handle_as<util::cublas_handle>();
+  auto stream = util::get_stream(handle);
+  increment_vec_kernel<<<blocks, threads, 0, stream>>>(X,Y,N);
+}
+
+template
+  void increment( device_blas_handle generic_handle, const double* X, double* Y, int N );
 
 template <>
 void dot( device_blas_handle generic_handle,

@@ -1,7 +1,11 @@
 /**
  * GauXC Copyright (c) 2020-2024, The Regents of the University of California,
  * through Lawrence Berkeley National Laboratory (subject to receipt of
- * any required approvals from the U.S. Dept. of Energy). All rights reserved.
+ * any required approvals from the U.S. Dept. of Energy).
+ *
+ * (c) 2024-2025, Microsoft Corporation
+ *
+ * All rights reserved.
  *
  * See LICENSE.txt for details
  */
@@ -70,6 +74,20 @@ public:
    */
   void partition_weights( XCWeightAlg weight_alg, const Molecule& mol, 
     const MolMeta& meta, task_iterator task_begin, task_iterator task_end );
+
+  /** Evaluate the weight first derivative contracted with a function
+   *
+   *  @param[in] weight_alg Molecular partitioning scheme
+   *  @param[in] mol        Molecule being partitioned
+   *  @param[in] molmeta    Metadata associated with mol
+   *  @param[in] task       Task Data
+   *  @param[in] w_times_f  Weight times function evaluation
+   * 
+   *  @param[in/out] exc_grad_w  Weight first derivative times function evaluation (added to this array)
+   *                              Assumed to have length 3*natoms. Example: exc_grad
+   */
+  void eval_weight_1st_deriv_contracted( XCWeightAlg weight_alg, const Molecule& mol, 
+    const MolMeta& meta, const XCTask& task, const double* w_times_f, double* exc_grad_w );
 
 
   /** Evaluation the collocation matrix

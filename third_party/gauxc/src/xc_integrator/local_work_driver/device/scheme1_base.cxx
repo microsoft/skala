@@ -1,7 +1,11 @@
 /**
  * GauXC Copyright (c) 2020-2024, The Regents of the University of California,
  * through Lawrence Berkeley National Laboratory (subject to receipt of
- * any required approvals from the U.S. Dept. of Energy). All rights reserved.
+ * any required approvals from the U.S. Dept. of Energy).
+ *
+ * (c) 2024-2025, Microsoft Corporation
+ *
+ * All rights reserved.
  *
  * See LICENSE.txt for details
  */
@@ -1902,7 +1906,7 @@ void AoSScheme1Base::symmetrize_fxc( XCDeviceData* _data, density_id den_selecto
 
 
 
-void AoSScheme1Base::inc_exc_grad_lda( XCDeviceData* _data, integrator_ks_scheme ks_scheme ) {
+void AoSScheme1Base::inc_exc_grad_lda( XCDeviceData* _data, integrator_ks_scheme ks_scheme, bool with_weight_derivatives ) {
 #ifdef GAUXC_HAS_HIP
   GAUXC_GENERIC_EXCEPTION("LDA Grad NYI for HIP Backends");
 #else
@@ -1916,11 +1920,12 @@ void AoSScheme1Base::inc_exc_grad_lda( XCDeviceData* _data, integrator_ks_scheme
     data->shell_to_task_stack.shell_to_task_device, 
     data->aos_stack.device_tasks,
     data->static_stack.exc_grad_device,
+    with_weight_derivatives,
     data->device_backend_->queue() ); 
 #endif
 }
 
-void AoSScheme1Base::inc_exc_grad_gga( XCDeviceData* _data, integrator_ks_scheme ks_scheme ) {
+void AoSScheme1Base::inc_exc_grad_gga( XCDeviceData* _data, integrator_ks_scheme ks_scheme, bool with_weight_derivatives ) {
 #ifdef GAUXC_HAS_HIP
   GAUXC_GENERIC_EXCEPTION("GGA Grad NYI for HIP Backends");
 #else
@@ -1934,11 +1939,12 @@ void AoSScheme1Base::inc_exc_grad_gga( XCDeviceData* _data, integrator_ks_scheme
     data->shell_to_task_stack.shell_to_task_device, 
     data->aos_stack.device_tasks,
     data->static_stack.exc_grad_device,
+    with_weight_derivatives,
     data->device_backend_->queue() ); 
 #endif
 }
 
-void AoSScheme1Base::inc_exc_grad_mgga( XCDeviceData* _data, integrator_ks_scheme ks_scheme, bool need_lapl ) {
+void AoSScheme1Base::inc_exc_grad_mgga( XCDeviceData* _data, integrator_ks_scheme ks_scheme, bool need_lapl, bool with_weight_derivatives ) {
 #ifdef GAUXC_HAS_HIP
   GAUXC_GENERIC_EXCEPTION("MGGA Grad NYI for HIP Backends");
 #else
@@ -1952,6 +1958,7 @@ void AoSScheme1Base::inc_exc_grad_mgga( XCDeviceData* _data, integrator_ks_schem
     data->shell_to_task_stack.shell_to_task_device, 
     data->aos_stack.device_tasks,
     data->static_stack.exc_grad_device,
+    with_weight_derivatives,
     data->device_backend_->queue() ); 
 #endif
 }
