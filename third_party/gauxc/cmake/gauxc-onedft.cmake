@@ -1,6 +1,27 @@
-find_package(nlohmann_json REQUIRED)
-# store and restore CMAKE_CUDA_ARCHITECTURES if Torch clobbers it
+find_package(nlohmann_json)
+if( NOT nlohmann_json_FOUND )
 
+  message( STATUS "Could Not Find nlohmann_json... Building" )
+  message( STATUS "NLOHMANN_JSON REPO = ${GAUXC_NLOHMANN_JSON_REPOSITORY}" )
+
+  FetchContent_Declare(
+    nlohmann_json
+    GIT_REPOSITORY ${GAUXC_NLOHMANN_JSON_REPOSITORY}
+    GIT_TAG        ${GAUXC_NLOHMANN_JSON_REVISION}
+  )
+
+  FetchContent_GetProperties( nlohmann_json )
+  if( NOT nlohmann_json_POPULATED )
+    FetchContent_Populate( nlohmann_json )
+  endif()
+
+  add_library( nlohmann_json::nlohmann_json INTERFACE IMPORTED )
+  set_target_properties( nlohmann_json::nlohmann_json PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES ${nlohmann_json_SOURCE_DIR}/include
+  )
+endif()
+
+# store and restore CMAKE_CUDA_ARCHITECTURES if Torch clobbers it
 set(_PREV_CUDA_ARCHS "${CMAKE_CUDA_ARCHITECTURES}")
 find_package(Torch REQUIRED)
 if(CMAKE_CUDA_ARCHITECTURES STREQUAL "OFF")

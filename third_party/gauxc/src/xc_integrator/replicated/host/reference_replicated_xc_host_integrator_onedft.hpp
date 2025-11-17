@@ -81,7 +81,11 @@ void ReferenceReplicatedXCHostIntegrator<ValueType>::
   }
   // Get Tasks
   auto& tasks = this->load_balancer_->get_tasks();  
+#ifdef GAUXC_HAS_DEVICE
   auto rt  = detail::as_device_runtime(this->load_balancer_->runtime());
+#else
+  auto rt = this->load_balancer_->runtime();
+#endif
   int32_t world_rank = rt.comm_rank();
   // Temporary electron count to judge integrator accuracy
   value_type N_EL; 
