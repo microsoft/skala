@@ -6,6 +6,44 @@ For this tutorial, we will use the `mamba <https://mamba.readthedocs.io/en/lates
 If you do not have mamba installed, you can download the `miniforge <https://conda-forge.org/download/>`__ installer.
 
 First, we will create a new environment with all the required dependencies for building GauXC with Skala support.
+We provide three different configurations depending on whether you want to build GauXC with OpenMP, MPI, or CUDA support.
+
+.. dropdown:: GauXC dependencies
+
+   The following dependencies are required for building GauXC with Skala support:
+
+   - C/C++ compiler (with C++17 support)
+   - CMake (version 3.15 or higher)
+   - `exchcxx <https://github.com/wavefunction91/exchcxx>`__* (version 1 or higher)
+   - `libxc <https://libxc.gitlab.io/>`__* (version 7 or higher)
+   - `integratorxx <https://github.com/wavefunction91/integratorxx>`__* (version 1 or higher)
+   - `gau2grid <https://github.com/psi4/gau2grid>`__* (version 2.0.6 or higher)
+   - `libtorch <https://docs.pytorch.org/cppdocs/installing.html>`__ (CPU or CUDA version depending on your configuration)
+   - `nlohmann_json <https://github.com/nlohmann/json>`__* (version 3.9.1 or higher)
+   - BLAS library (like OpenBLAS, MKL, etc.)
+
+   When building with MPI support via ``-DGAUXC_ENABLE_MPI=on`` (default ``off``),
+   the following dependencies are also required:
+
+   - MPI implementation (like OpenMPI, MPICH, etc.)
+
+   When building with Cuda support via ``-DGAUXC_ENABLE_CUDA=on`` (default ``off``),
+   the following dependencies are also required:
+
+   - CUDA toolkit
+   - `cuBLAS library <https://developer.nvidia.com/cublas>`__
+   - `Cutlass library <https://github.com/NVIDIA/cutlass>`__*
+   - `CUB library <https://github.com/NVIDIA/cccl/tree/main/cub>`__*
+
+   When building with HDF5 support via ``-DGAUXC_ENABLE_HDF5=on`` (default ``on``),
+   the following dependencies are also required:
+
+   - `HDF5 <https://support.hdfgroup.org/documentation>`__
+   - `HighFive <https://github.com/highfive-dev/highfive>`__* (version 2.4.0 or higher)
+
+   All libraries marked with a * can be automatically fetched by the GauXC build system
+   and do not need to be installed manually.
+
 For this, create a file named `environment.yml` with the following content:
 
 .. tab-set::
