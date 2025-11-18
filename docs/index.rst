@@ -27,6 +27,7 @@ Please stay tuned for updates and new releases.
    pyscf/scf_settings
    ase
    foundry
+   gauxc/index
 
 .. toctree::
    :maxdepth: 1
