@@ -7,6 +7,7 @@ author = "Microsoft Research, AI for Science"
 extensions = [
     "myst_nb",
     "sphinx_book_theme",
+    "sphinx_design",
     "sphinx.ext.autodoc",
 ]
 
