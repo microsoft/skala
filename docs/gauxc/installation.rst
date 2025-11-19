@@ -2,6 +2,18 @@ Installing GauXC
 ================
 
 In this section, we will provide instructions on how to install GauXC with Skala support based on the conda-forge ecosystem.
+As part of this tutorial we will be
+
+* installing dependencies for building GauXC
+* configuring GauXC with different options
+* testing our the Skala implementation in GauXC
+* installing the GauXC library
+* reusing GauXC from the CMake build system
+
+
+Prerequisites
+-------------
+
 For this tutorial, we will use the `mamba <https://mamba.readthedocs.io/en/latest/>`__ package manager for setting up the environment and installing dependencies.
 If you do not have mamba installed, you can download the `miniforge <https://conda-forge.org/download/>`__ installer.
 
@@ -14,12 +26,12 @@ We provide three different configurations depending on whether you want to build
 
    - C/C++ compiler (with C++17 support)
    - CMake (version 3.15 or higher)
-   - `exchcxx <https://github.com/wavefunction91/exchcxx>`__* (version 1 or higher)
-   - `libxc <https://libxc.gitlab.io/>`__* (version 7 or higher)
-   - `integratorxx <https://github.com/wavefunction91/integratorxx>`__* (version 1 or higher)
-   - `gau2grid <https://github.com/psi4/gau2grid>`__* (version 2.0.6 or higher)
+   - `exchcxx <https://github.com/wavefunction91/exchcxx>`__\ * (version 1 or higher)
+   - `libxc <https://libxc.gitlab.io/>`__\ * (version 7 or higher)
+   - `integratorxx <https://github.com/wavefunction91/integratorxx>`__\ * (version 1 or higher)
+   - `gau2grid <https://github.com/psi4/gau2grid>`__\ * (version 2.0.6 or higher)
    - `libtorch <https://docs.pytorch.org/cppdocs/installing.html>`__ (CPU or CUDA version depending on your configuration)
-   - `nlohmann_json <https://github.com/nlohmann/json>`__* (version 3.9.1 or higher)
+   - `nlohmann_json <https://github.com/nlohmann/json>`__\ * (version 3.9.1 or higher)
    - BLAS library (like OpenBLAS, MKL, etc.)
 
    When building with MPI support via ``-DGAUXC_ENABLE_MPI=on`` (default ``off``),
@@ -32,14 +44,14 @@ We provide three different configurations depending on whether you want to build
 
    - CUDA toolkit
    - `cuBLAS library <https://developer.nvidia.com/cublas>`__
-   - `Cutlass library <https://github.com/NVIDIA/cutlass>`__*
-   - `CUB library <https://github.com/NVIDIA/cccl/tree/main/cub>`__*
+   - `Cutlass library <https://github.com/NVIDIA/cutlass>`__\ *
+   - `CUB library <https://github.com/NVIDIA/cccl/tree/main/cub>`__\ *
 
    When building with HDF5 support via ``-DGAUXC_ENABLE_HDF5=on`` (default ``on``),
    the following dependencies are also required:
 
    - `HDF5 <https://support.hdfgroup.org/documentation>`__
-   - `HighFive <https://github.com/highfive-dev/highfive>`__* (version 2.4.0 or higher)
+   - `HighFive <https://github.com/highfive-dev/highfive>`__\ * (version 2.4.0 or higher)
 
    All libraries marked with a * can be automatically fetched by the GauXC build system
    and do not need to be installed manually.
@@ -56,20 +68,20 @@ For this, create a file named `environment.yml` with the following content:
 
          name: gauxc-dev
          channels:
-         - conda-forge
+           - conda-forge
          dependencies:
-         # build requirements
-         - c-compiler
-         - cxx-compiler
-         - cmake
-         - ninja
-         - nlohmann_json
-         # host requirements
-         - exchcxx >=1.0
-         - gau2grid >=2.0.6
-         - hdf5
-         - libblas
-         - pytorch * cpu*
+           # build requirements
+           - c-compiler
+           - cxx-compiler
+           - cmake >=3.15,<4
+           - ninja
+           - nlohmann_json >=3.9
+           # host/runtime requirements
+           - exchcxx >=1.0
+           - gau2grid >=2.0.6
+           - hdf5
+           - libblas
+           - pytorch >=2.0 cpu_*
 
    .. tab-item:: MPI
 
@@ -78,21 +90,21 @@ For this, create a file named `environment.yml` with the following content:
 
          name: gauxc-dev
          channels:
-         - conda-forge
+           - conda-forge
          dependencies:
-         # build requirements
-         - c-compiler
-         - cxx-compiler
-         - cmake
-         - ninja
-         - nlohmann_json
-         # host requirements
-         - openmpi  # or mpich
-         - exchcxx >=1.0
-         - gau2grid >=2.0.6
-         - hdf5 * mpi_*
-         - libblas
-         - pytorch * cpu*
+           # build requirements
+           - c-compiler
+           - cxx-compiler
+           - cmake >=3.15,<4
+           - ninja
+           - nlohmann_json >=3.9
+           # host/runtime requirements
+           - openmpi  # pick mpich if that matches your stack
+           - exchcxx >=1.0
+           - gau2grid >=2.0.6
+           - hdf5 * mpi_*
+           - libblas
+           - pytorch >=2.0 cpu_*
 
    .. tab-item:: CUDA
 
@@ -101,38 +113,62 @@ For this, create a file named `environment.yml` with the following content:
 
          name: gauxc-dev
          channels:
-         - conda-forge
+           - conda-forge
          dependencies:
-         # build requirements
-         - c-compiler
-         - cxx-compiler
-         - cuda-compiler
-         - cmake
-         - ninja
-         - nlohmann_json
-         # host requirements
-         - gau2grid >=2.0.6
-         - hdf5
-         - libblas
-         - pytorch * cuda*
+           # build requirements
+           - c-compiler
+           - cxx-compiler
+           - cuda-compiler
+           - cmake >=3.15,<4
+           - ninja
+           - nlohmann_json >=3.9
+           # host/runtime requirements
+           - gau2grid >=2.0.6
+           - hdf5
+           - libblas
+           - pytorch >=2.0 cuda*
 
-Then, run the following commands to create and activate the new environment:
+Create and activate the environment:
 
 .. code-block:: none
 
    mamba env create -n gauxc-dev -f environment.yml
    mamba activate gauxc-dev
 
-Next, we will download the GauXC source code with Skala support.
-We provide a pre-packaged version of GauXC with Skala integration that can be downloaded from the Skala releases page.
-Run the following command to download and extract the source code:
+Verify that the toolchain is visible:
+
+.. code-block:: bash
+
+   cmake --version
+   python -c "import torch; print(torch.__version__)"
+
+
+Obtain GauXC with Skala
+-----------------------
+
+Download the pre-packaged source bundle from the Skala release page:
 
 .. code-block:: none
 
-   curl -JL https://github.com/microsoft/skala/releases/download/v1.0.0/gauxc-skala.tar.gz > gauxc-skala.tar.gz | tar xzv
+   curl -L https://github.com/microsoft/skala/releases/download/v1.0.0/gauxc-skala.tar.gz | tar xzv
 
-Now we can build GauXC with Skala support using CMake and Ninja.
-Create a build directory and run the following commands to configure and build the library:
+.. tip::
+
+   To verify the downloaded tarball you can obtain a checksum
+
+   .. code-block:: none
+
+      curl -L https://github.com/microsoft/skala/releases/download/v1.0.0/gauxc-skala.tar.gz > gauxc-skala.tar.gz
+      curl -L https://github.com/microsoft/skala/releases/download/v1.0.0/gauxc-skala.tar.gz.sha256 | sha256sum -c
+      tar xzvf gauxc-skala.tar.gz
+
+The archive expands into a ``gauxc`` directory that already contains the Skala patches.
+
+
+Configure and build
+-------------------
+
+Create an out-of-tree build directory and pick the configuration that matches your backend.
 
 .. tab-set::
    :sync-group: config
@@ -141,62 +177,115 @@ Create a build directory and run the following commands to configure and build t
 
       .. code-block:: none
 
-         cmake -B _build -S gauxc -G Ninja -DGAUXC_ENABLE_MPI=no -DGAUXC_ENABLE_OPENMP=yes -DGAUXC_ENABLE_CUDA=no -DCMAKE_INSTALL_PREFIX=${CONDA_PREFIX}
-         cmake --build _build
+         cmake -B build -S gauxc -G Ninja \
+           -DGAUXC_ENABLE_OPENMP=on \
+           -DGAUXC_ENABLE_MPI=off \
+           -DGAUXC_ENABLE_CUDA=off \
+           -DCMAKE_INSTALL_PREFIX=${CONDA_PREFIX}
+         cmake --build build
 
    .. tab-item:: MPI
 
       .. code-block:: none
 
-         cmake -B _build -S gauxc -G Ninja -DGAUXC_ENABLE_MPI=yes -DGAUXC_ENABLE_OPENMP=yes -DGAUXC_ENABLE_CUDA=no -DCMAKE_INSTALL_PREFIX=${CONDA_PREFIX}
-         cmake --build _build
+         cmake -B build -S gauxc -G Ninja \
+           -DGAUXC_ENABLE_OPENMP=on \
+           -DGAUXC_ENABLE_MPI=on \
+           -DGAUXC_ENABLE_CUDA=off \
+           -DCMAKE_INSTALL_PREFIX=${CONDA_PREFIX}
+         cmake --build build
 
    .. tab-item:: CUDA
 
       .. code-block:: none
 
-         cmake -B _build -S gauxc -G Ninja -DGAUXC_ENABLE_MPI=no -DGAUXC_ENABLE_OPENMP=yes -DGAUXC_ENABLE_CUDA=yes -DCMAKE_INSTALL_PREFIX=${CONDA_PREFIX}
-         cmake --build _build
+         cmake -B build -S gauxc -G Ninja \
+           -DGAUXC_ENABLE_OPENMP=on \
+           -DGAUXC_ENABLE_MPI=off \
+           -DGAUXC_ENABLE_CUDA=on \
+           -DCMAKE_INSTALL_PREFIX=${CONDA_PREFIX}
+         cmake --build build
 
-We can check the Skala implementation by evaluating a traditional density functional via the Skala driver.
-In the GauXC test directory we have checkpoints for the PBE and TPSS functionals that can be used for testing.
-To run the test via the standalone driver of GauXC, we can use the following command:
+.. tip::
 
-.. code-block:: none
+   If CMake cannot find libtorch, the ``Torch_DIR`` variable can be set to help discover the package.
+   For conda-forge installed pytorch this should be set as ``-DTorch_DIR=${CONDA_PREFIX}/share/cmake/Torch``
+   and for pip installed pytorch the CMake config file will be in ``${CONDA_PREFIX}/lib/python3.11/site-packages/torch/share/cmake/Torch``
+   where the Python version should be adjusted accordingly to the environment.
+
+
+Quick verification
+------------------
+
+After the build finishes, run the bundled regression test to confirm that Skala-enabled functionals
+are working correctly. The Skala implementation can run different traditional functionals, like PBE and TPSS,
+which can be compared against other libraries.
+
+.. code-block:: bash
 
    cd gauxc/tests/ref_data
-   ../../../_build/tests/standalone_driver onedft_input.inp
+   ../../../build/tests/standalone_driver onedft_input.inp
 
-This will evaluate the TPSS exchange-correlation functional via the Skala driver on a provided density matrix.
+Expected output includes the total TPSS energy computed using a checkpoint compatible for the Skala implementation
+for the reference density matrix.
 
-To use GauXC in your project install the built library into your conda environment:
+.. tip::
+   
+   If the executable cannot locate libtorch or other shared libraries, double-check
+   that ``LD_LIBRARY_PATH`` includes ``${CONDA_PREFIX}/lib``
+   (activating the environment usually handles this).
 
-.. code-block:: none
 
-   cmake --install _build
+Install the library
+-------------------
 
-Finally, you can link against the GauXC library in your own electronic structure package to use Skala as an exchange-correlation functional.
-This can be done by linking against the `gauxc` target in your CMake build system.
+Install into the active conda environment so downstream projects can pick up the CMake config files.
+
+.. code-block:: bash
+
+   cmake --install build
+
+This installs headers, libraries, and CMake config.
+
+
+Integrate with your codebase
+----------------------------
+
+Using an installed GauXC
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Add the following to your CMake project, ensuring that ``CMAKE_PREFIX_PATH`` contains
+``${CONDA_PREFIX}`` (activation scripts typically set this).
 
 .. code-block:: cmake
 
-   find_package(gauxc REQUIRED)
-   if(NOT ${GAUXC_HAS_ONEDFT})
-     message(FATAL_ERROR "GauXC found but without Skala support enabled")
-   endif()
-   target_link_libraries(${PROJECT_NAME} PRIVATE gauxc::gauxc)
+   find_package(gauxc CONFIG REQUIRED)
 
-To build GauXC as part of your own CMake project, you can use the following snippet to include it via FetchContent.
+   if(NOT gauxc_HAS_ONEDFT)
+     message(FATAL_ERROR "GauXC found but Skala/OneDFT was not enabled during the build")
+   endif()
+
+   target_link_libraries(my_dft_driver PRIVATE gauxc::gauxc)
+
+The imported target propagates include directories, compile definitions, and linkage against BLAS,
+Torch, and optional MPI/CUDA components.
+
+Embedding GauXC via FetchContent
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If you need to vend GauXC directly from your build, use ``FetchContent`` while mirroring the
+options chosen above.
 
 .. code-block:: cmake
 
    set(Skala_GauXC_URL "https://github.com/microsoft/skala/releases/download/v1.0.0/gauxc-skala.tar.gz")
-   set(Skala_GauXC_SHA "3368a4f8c968a295ad03363c5ccbee787f24f703df42c7b929a40e76f48bd324")
+   set(Skala_GauXC_SHA256 "3368a4f8c968a295ad03363c5ccbee787f24f703df42c7b929a40e76f48bd324")
+
    option(Skala_GauXC_ENABLE_OPENMP "Enable OpenMP support in GauXC" ON)
    option(Skala_GauXC_ENABLE_MPI "Enable MPI support in GauXC" OFF)
    option(Skala_GauXC_ENABLE_CUDA "Enable CUDA support in GauXC" OFF)
 
-   find_package(gauxc QUIET)
+   find_package(gauxc QUIET CONFIG)
    if(NOT gauxc_FOUND)
      include(FetchContent)
 
@@ -212,7 +301,7 @@ To build GauXC as part of your own CMake project, you can use the following snip
      FetchContent_Declare(
        gauxc
        URL ${Skala_GauXC_URL}
-       URL_HASH SHA256=${Skala_GauXC_SHA}
+       URL_HASH SHA256=${Skala_GauXC_SHA256}
        DOWNLOAD_EXTRACT_TIMESTAMP ON
      )
      FetchContent_MakeAvailable(gauxc)
@@ -231,3 +320,26 @@ To build GauXC as part of your own CMake project, you can use the following snip
        message(WARNING "GauXC Found with CUDA support but Skala_GauXC_ENABLE_CUDA is OFF")
      endif()
    endif()
+
+Troubleshooting
+---------------
+
+Torch not found
+  ensure ``Torch_DIR`` points to the libtorch CMake package inside the active environment,
+  or export ``Torch_DIR`` before running CMake.
+
+CUDA mismatch
+  the CUDA toolkit selected by conda must match the version baked into the
+  ``pytorch`` build; reinstall ``pytorch`` if necessary (e.g., ``pytorch ==2.3.* cuda118*``).
+
+Linker errors for BLAS/MPI
+  verify that the conda environment stayed active during the build and that ``cmake`` picked
+  the toolchain from ``${CONDA_PREFIX}`` via ``CMAKE_PREFIX_PATH``.
+
+Standalone driver cannot find densities
+  run it from ``gauxc/tests/ref_data`` since paths in density files are specified relative to the
+  current directory.
+
+.. note::
+
+   Need help? Open an issue on the `Skala repository <https://github.com/microsoft/skala/issues>`__.
