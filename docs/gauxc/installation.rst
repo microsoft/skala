@@ -123,6 +123,7 @@ For this, create a file named `environment.yml` with the following content:
            - ninja
            - nlohmann_json >=3.9
            # host/runtime requirements
+           - libxc >=7,<8
            - gau2grid >=2.0.6
            - hdf5
            - libblas
@@ -150,7 +151,7 @@ Download the pre-packaged source bundle from the Skala release page:
 
 .. code-block:: none
 
-   curl -L https://github.com/microsoft/skala/releases/download/v1.0.0/gauxc-skala.tar.gz | tar xzv
+   curl -L https://github.com/microsoft/skala/releases/download/v1.1.0/gauxc-skala.tar.gz | tar xzv
 
 .. tip::
 
@@ -158,8 +159,8 @@ Download the pre-packaged source bundle from the Skala release page:
 
    .. code-block:: none
 
-      curl -L https://github.com/microsoft/skala/releases/download/v1.0.0/gauxc-skala.tar.gz > gauxc-skala.tar.gz
-      curl -L https://github.com/microsoft/skala/releases/download/v1.0.0/gauxc-skala.tar.gz.sha256 | sha256sum -c
+      curl -L https://github.com/microsoft/skala/releases/download/v1.1.0/gauxc-skala.tar.gz > gauxc-skala.tar.gz
+      curl -L https://github.com/microsoft/skala/releases/download/v1.1.0/gauxc-skala.tar.gz.sha256 | sha256sum -c
       tar xzvf gauxc-skala.tar.gz
 
 The archive expands into a ``gauxc`` directory that already contains the Skala patches.
@@ -278,8 +279,8 @@ options chosen above.
 
 .. code-block:: cmake
 
-   set(Skala_GauXC_URL "https://github.com/microsoft/skala/releases/download/v1.0.0/gauxc-skala.tar.gz")
-   set(Skala_GauXC_SHA256 "3368a4f8c968a295ad03363c5ccbee787f24f703df42c7b929a40e76f48bd324")
+   set(Skala_GauXC_URL "https://github.com/microsoft/skala/releases/download/v1.1.0/gauxc-skala.tar.gz")
+   set(Skala_GauXC_SHA256 "ed3102485f6d838c8076a03162b11a1d7c3fd52b212ba6a048db2e9089c98f3c")
 
    option(Skala_GauXC_ENABLE_OPENMP "Enable OpenMP support in GauXC" ON)
    option(Skala_GauXC_ENABLE_MPI "Enable MPI support in GauXC" OFF)
