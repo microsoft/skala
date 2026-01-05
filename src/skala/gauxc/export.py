@@ -55,14 +55,14 @@ K_MINUS_1 = [
 ]
 
 
-def write_gauxc_h5_from_pyscf(filename: str, mol: gto.Mole, dm: np.ndarray) -> None:
-    data = pyscf_to_gauxc_h5(mol, dm)
+def write_gauxc_h5_from_pyscf(filename: str, mol: gto.Mole, dm: np.ndarray, exc: float | None = None, vxc: np.ndarray | None = None) -> None:
+    data = pyscf_to_gauxc_h5(mol, dm, exc, vxc)
     with h5py.File(filename, "w") as fd:
         for key, value in data.items():
             fd.create_dataset(key, data=value)
 
 
-def pyscf_to_gauxc_h5(mol: gto.Mole, dm: np.ndarray) -> dict[str, np.ndarray]:
+def pyscf_to_gauxc_h5(mol: gto.Mole, dm: np.ndarray, exc: float | None = None, vxc: np.ndarray | None = None) -> dict[str, np.ndarray]:
     molecule = np.array(
         [
             (number, *coords)
@@ -88,12 +88,22 @@ def pyscf_to_gauxc_h5(mol: gto.Mole, dm: np.ndarray) -> dict[str, np.ndarray]:
     dm_scalar = dm if dm.ndim == 2 else dm[0] + dm[1]
     dm_z = np.zeros_like(dm) if dm.ndim == 2 else dm[0] - dm[1]
 
-    return {
+    data = {
         "MOLECULE": molecule,
         "BASIS": basis,
         "DENSITY_SCALAR": dm_scalar,
         "DENSITY_Z": dm_z,
     }
+
+    if exc is not None:
+        data["EXC"] = exc
+    if vxc is not None:
+        vxc_scalar = vxc if vxc.ndim == 2 else vxc[0] + vxc[1]
+        vxc_z = np.zeros_like(vxc) if vxc.ndim == 2 else vxc[0] - vxc[1]
+        data["VXC_SCALAR"] = vxc_scalar
+        data["VXC_Z"] = vxc_z
+
+    return data
 
 
 def norm(coeff: list[float], alpha: list[float], l: int) -> list[float]:
