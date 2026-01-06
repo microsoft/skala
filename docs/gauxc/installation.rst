@@ -1,3 +1,5 @@
+.. _gauxc_install:
+
 Installing GauXC
 ================
 
