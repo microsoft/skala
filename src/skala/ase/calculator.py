@@ -44,6 +44,7 @@ class Skala(Calculator):  # type: ignore[misc]
         "with_dftd3": True,
         "charge": None,
         "multiplicity": None,
+        "auxbasis": None,
         "verbose": 0,
     }
 
@@ -85,6 +86,7 @@ class Skala(Calculator):  # type: ignore[misc]
             or "with_density_fit" in changed_parameters
             or "with_newton" in changed_parameters
             or "with_dftd3" in changed_parameters
+            or "auxbasis" in changed_parameters
         ):
             self._ks = None
             self.reset()
@@ -162,6 +164,7 @@ class Skala(Calculator):  # type: ignore[misc]
                 with_density_fit=bool(self.parameters.with_density_fit),
                 with_newton=bool(self.parameters.with_newton),
                 with_dftd3=bool(self.parameters.with_dftd3),
+                auxbasis=self.parameters.auxbasis,
             ).nuc_grad_method()
             self._ks = grad_method
         else:

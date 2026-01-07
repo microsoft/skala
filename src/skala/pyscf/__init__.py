@@ -69,7 +69,7 @@ def SkalaKS(
     >>>
     >>> mol = gto.M(atom="H 0 0 0; H 0 0 1", basis="def2-svp")
     >>> ks = SkalaKS(mol, xc=load_functional("skala"))
-    >>> ks = ks.density_fit()  # Optional: use density fitting
+    >>> ks = ks.density_fit(auxbasis="def2-svp-jkfit")  # Optional: use density fitting
     >>> ks = ks.set(verbose=0)
     >>> energy = ks.kernel()
     >>> print(energy)  # DOCTEST: Ellipsis
@@ -149,7 +149,7 @@ def SkalaRKS(
     >>> from skala.pyscf import SkalaRKS
     >>>
     >>> mol = gto.M(atom="H 0 0 0; H 0 0 1", basis="def2-svp")
-    >>> ks = SkalaRKS(mol, xc="skala", with_density_fit=True)(verbose=0)
+    >>> ks = SkalaRKS(mol, xc="skala", with_density_fit=True, auxbasis="def2-svp-jkfit")(verbose=0)
     >>> ks  # DOCTEST: Ellipsis
     <pyscf.df.df_jk.DFSkalaRKS object at ...>
     >>> energy = ks.kernel()
@@ -223,7 +223,7 @@ def SkalaUKS(
     >>> from skala.pyscf import SkalaUKS
     >>>
     >>> mol = gto.M(atom="H", basis="def2-svp", spin=1)
-    >>> ks = SkalaUKS(mol, xc="skala", with_density_fit=True)(verbose=0)
+    >>> ks = SkalaUKS(mol, xc="skala", with_density_fit=True, auxbasis="def2-svp-jkfit")(verbose=0)
     >>> ks  # DOCTEST: Ellipsis
     <pyscf.df.df_jk.DFSkalaUKS object at ...>
     >>> energy = ks.kernel()

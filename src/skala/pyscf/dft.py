@@ -54,7 +54,6 @@ from collections.abc import Callable
 from typing import Any, cast
 
 import numpy as np
-import torch
 from dftd3.pyscf import DFTD3Dispersion
 from pyscf import dft, gto
 from pyscf.df import df_jk
@@ -75,7 +74,7 @@ class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
     def __init__(self, mol: gto.Mole, xc: ExcFunctionalBase):
         super().__init__(mol, xc="custom")
         self._keys.add("with_dftd3")
-        self._numint = SkalaNumInt(xc, device=torch.device("cpu"))
+        self._numint = SkalaNumInt(xc)
 
         d3 = xc.get_d3_settings()
         self.with_dftd3 = DFTD3Dispersion(mol, d3) if d3 is not None else None
@@ -127,7 +126,7 @@ class SkalaUKS(dft.uks.UKS):  # type: ignore[misc]
     def __init__(self, mol: gto.Mole, xc: ExcFunctionalBase):
         super().__init__(mol, xc="custom")
         self._keys.add("with_dftd3")
-        self._numint = SkalaNumInt(xc, device=torch.device("cpu"))
+        self._numint = SkalaNumInt(xc)
 
         d3 = xc.get_d3_settings()
         self.with_dftd3 = DFTD3Dispersion(mol, d3) if d3 is not None else None

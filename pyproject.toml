@@ -24,7 +24,7 @@ dependencies = [
     "huggingface_hub",
     "numpy",
     "opt_einsum_fx",
-    "pyscf<2.10.0",
+    "pyscf",
     "qcelemental",
     "torch"
 ]
