@@ -4,9 +4,9 @@ GauXC standalone usage
 The GauXC package comes with a standalone driver for testing the evaluation of the exchange-correlation energy with different functionals.
 In this tutorial we will use the standalone driver to evaluate Skala based on density matrices computed with different packages.
 
-.. note::
+.. tip::
 
-   For building GauXC and running the standalone driver checkout :ref:`install_gauxc`.
+   For building GauXC and running the standalone driver checkout :ref:`gauxc_install`.
 
 Create GauXC compatible input
 -----------------------------
@@ -28,7 +28,7 @@ In this example we will use a single one atom system in a small basis set.
    from skala.pyscf import SkalaRKS
 
    mol = gto.M(atom="He 0 0 0", basis="def2-svp", unit="Bohr", spin=0)
-   ks = SkalaRKS(xc="pbe")
+   ks = SkalaRKS(mol, xc="pbe")
    ks.kernel()
 
    dm = ks.make_rdm1()
@@ -62,7 +62,7 @@ Furthermore, we have parameters like ``grid``, ``pruning_scheme``, etc. which de
    REDUCTION_KERNEL = Default
    MEMORY_SIZE = 0.1
 
-.. note::
+.. tip::
 
    Make sure the HDF5 file ``He_def2svp.h5`` is in the same directory as the one where we start the standalone driver.
 
@@ -123,7 +123,7 @@ For a successful run we will see the following output
 
 We find a reasonable difference between PySCF and GauXC computed exchange-correlation energy and potential.
 
-.. note::
+.. tip::
 
    We can converge this value further by choosing finer grid settings both in PySCF and GauXC.
 
@@ -160,7 +160,7 @@ For our Helium example we expect a single entry centered at the origin:
    Out[5]: np.void((2, 0.0, 0.0, 0.0), dtype={'names': ['Atomic Number', 'X Coordinate', 'Y Coordinate', 'Z Coordinate'], 'formats': ['<i4', '<f8', '<f8', '<f8'], 'offsets': [0, 8, 16, 24], 'itemsize': 32})
 
 The def2-SVP basis set for Helium has three functions (2s1p).
-Similar to the molecule format the basis set is represented as an array of structs and combines the information of the number of primitives, the angular momentum, whether the shell is spherical or cartesian with the Gaussian exponents, contraction coefficients and cartesian coordinates of the origin in Bohr.
+Similar to the molecule format the basis set is represented as an array of structs and combines the information of the number of primitives, the angular momentum, whether the shell is pure (spherical) or cartesian with the Gaussian exponents, contraction coefficients and cartesian coordinates of the origin in Bohr.
 Note that the length of exponents in each shell is padded to 16 elements for the exponents and contraction coefficients.
 
 .. code-block:: ipython
@@ -179,8 +179,8 @@ Note that the length of exponents in each shell is padded to 16 elements for the
 
 .. important::
 
-   The orbital ordering convention for the shells in GauXC is following the common component architecture (CCA) convention for pure / spherical shells and the row convention for cartesian ones.
-   The CCA ordering for spherical shells is defined as
+   The orbital ordering convention for the shells in GauXC is following the common component architecture (CCA) convention for pure (spherical) shells and the row convention for cartesian ones.
+   The CCA ordering for pure (spherical) shells is defined as
 
    - ``s`` (:math:`\ell = 0`): :math:`Y_0^0`
    - ``p`` (:math:`\ell = 1`): :math:`Y_1^{-1}`, :math:`Y_1^{0}`, :math:`Y_1^{+1}`,
@@ -193,15 +193,15 @@ Note that the length of exponents in each shell is padded to 16 elements for the
    - ``d`` (:math:`\ell = 2`): ``xx``, ``xy``, ``xz``, ``yy``, ``yz``, ``zz``
    - ``f`` (:math:`\ell = 3`): ``xxx``, ``xxy``, ``xxz``, ``xyy``, ``xyz``, ``xzz``, ``yyy``, ``yyz``, ``yzz``, ``zzz``
 
-   PySCF is using CCA ordering for all shells except for the p-shell where row ordering is used.
+   PySCF is using CCA ordering for all pure (spherical) shells except for the p-shell where row ordering is used.
    Our export accounts for this by exporting p-shells with setting the ``pure`` entry to zero to have GauXC use row ordering.
 
 Finally, we inspect the density matrix in our input data.
 Notably, the two spin channels are stored as scalar and z component.
-The scalar component contains the sum of the alpha / up and the beta / down spin channel, i.e. the total, while the z component contains their difference, i.e. the polarization.
+The scalar component contains the sum of the alpha (up) and the beta (down) spin channel, i.e. the total, while the z component contains their difference, i.e. the polarization.
 Similarly, GauXC will compute the exchange-correlation potential as scalar and z component.
 
-We can convert our from scalar and z component to alpha and beta channel by
+We can convert our from scalar and z component to alpha (up) and beta (down) channel by
 
 .. code-block:: ipython
 
