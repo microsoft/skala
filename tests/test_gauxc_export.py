@@ -3,8 +3,8 @@ from tempfile import NamedTemporaryFile
 import h5py
 import numpy as np
 import pytest
-
 from pyscf import dft, gto
+
 from skala.gauxc.export import write_gauxc_h5_from_pyscf
 
 
@@ -27,9 +27,13 @@ def cartesian(request) -> bool:
 def mol(mol_name: str, basis: str, cartesian: bool) -> gto.Mole:
     match mol_name:
         case "He":
-            return gto.M(atom="He 0 0 0", basis=basis, cart=cartesian, unit="Bohr", spin=0)
+            return gto.M(
+                atom="He 0 0 0", basis=basis, cart=cartesian, unit="Bohr", spin=0
+            )
         case "Li":
-            return gto.M(atom="Li 0 0 0", basis=basis, cart=cartesian, unit="Bohr", spin=1)
+            return gto.M(
+                atom="Li 0 0 0", basis=basis, cart=cartesian, unit="Bohr", spin=1
+            )
         case _:
             raise ValueError(f"Unknown molecule name: {mol_name}")
 
@@ -40,9 +44,11 @@ def ks(mol: gto.Mole) -> dft.rks.RKS:
     ks.kernel()
     return ks
 
+
 @pytest.fixture
 def dm(ks: dft.rks.RKS) -> np.ndarray:
     return ks.make_rdm1()
+
 
 @pytest.fixture
 def exc(ks: dft.rks.RKS) -> float:
@@ -58,8 +64,7 @@ def vxc(ks: dft.rks.RKS, dm: np.ndarray) -> np.ndarray:
     return vxc
 
 
-
-def test_write_pyscf(mol: gto.Mole, dm: np.ndarray, mol_name, basis, exc, vxc) -> None:
+def test_write_pyscf(mol: gto.Mole, dm: np.ndarray, exc, vxc) -> None:
     with NamedTemporaryFile(suffix=".h5") as tmp:
         write_gauxc_h5_from_pyscf(tmp.name, mol, dm, exc, vxc)
 
@@ -69,5 +74,9 @@ def test_write_pyscf(mol: gto.Mole, dm: np.ndarray, mol_name, basis, exc, vxc) -
             assert "DENSITY_SCALAR" in h5, "Density (a+b) is missing in h5 export"
             assert "DENSITY_Z" in h5, "Density (a-b) is missing in h5 export"
             assert "EXC" in h5, "Exchange-correlation energy is missing in h5 export"
-            assert "VXC_SCALAR" in h5, "Exchange-correlation potential (a+b) is missing in h5 export"
-            assert "VXC_Z" in h5, "Exchange-correlation potential (a-b) is missing in h5 export"
+            assert (
+                "VXC_SCALAR" in h5
+            ), "Exchange-correlation potential (a+b) is missing in h5 export"
+            assert (
+                "VXC_Z" in h5
+            ), "Exchange-correlation potential (a-b) is missing in h5 export"

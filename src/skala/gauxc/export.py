@@ -1,6 +1,5 @@
 import h5py
 import numpy as np
-
 from pyscf import gto
 
 MOLECULE_DTYPE = {
@@ -55,18 +54,31 @@ K_MINUS_1 = [
 ]
 
 
-def write_gauxc_h5_from_pyscf(filename: str, mol: gto.Mole, dm: np.ndarray, exc: float | None = None, vxc: np.ndarray | None = None) -> None:
+def write_gauxc_h5_from_pyscf(
+    filename: str,
+    mol: gto.Mole,
+    dm: np.ndarray,
+    exc: float | None = None,
+    vxc: np.ndarray | None = None,
+) -> None:
     data = pyscf_to_gauxc_h5(mol, dm, exc, vxc)
     with h5py.File(filename, "w") as fd:
         for key, value in data.items():
             fd.create_dataset(key, data=value)
 
 
-def pyscf_to_gauxc_h5(mol: gto.Mole, dm: np.ndarray, exc: float | None = None, vxc: np.ndarray | None = None) -> dict[str, np.ndarray]:
+def pyscf_to_gauxc_h5(
+    mol: gto.Mole,
+    dm: np.ndarray,
+    exc: float | None = None,
+    vxc: np.ndarray | None = None,
+) -> dict[str, np.ndarray]:
     molecule = np.array(
         [
             (number, *coords)
-            for number, coords in zip(mol.atom_charges(), mol.atom_coords(unit="Bohr"), strict=True)
+            for number, coords in zip(
+                mol.atom_charges(), mol.atom_coords(unit="Bohr"), strict=True
+            )
         ],
         dtype=MOLECULE_DTYPE,
     )
@@ -106,7 +118,9 @@ def pyscf_to_gauxc_h5(mol: gto.Mole, dm: np.ndarray, exc: float | None = None, v
     return data
 
 
-def norm(coeff: list[float], alpha: list[float], l: int) -> list[float]:
+def norm(
+    coeff: list[float] | np.ndarray, alpha: list[float] | np.ndarray, l: int
+) -> list[float]:
     """
     Normalize contraction coefficients for a given angular momentum and exponents
     using libint normalization conventions.
@@ -114,10 +128,12 @@ def norm(coeff: list[float], alpha: list[float], l: int) -> list[float]:
     alpha = np.asarray(alpha)
     two_alpha = 2 * alpha
     two_alpha_to_am32 = two_alpha ** (l + 1) * np.sqrt(two_alpha)
-    normalization_factor = np.sqrt(2**l * two_alpha_to_am32 / (SQRT_PI_CUBED * K_MINUS_1[2 * l]))
+    normalization_factor = np.sqrt(
+        2**l * two_alpha_to_am32 / (SQRT_PI_CUBED * K_MINUS_1[2 * l])
+    )
     gamma = alpha[:, np.newaxis] + alpha[np.newaxis, :]
     aa = K_MINUS_1[2 * l] * SQRT_PI_CUBED / (2**l * gamma ** (l + 1) * np.sqrt(gamma))
-    coeff = coeff * normalization_factor
+    coeff = np.asarray(coeff) * normalization_factor
     normalization_factor = 1.0 / np.sqrt(np.einsum("i,j,ij->", coeff, coeff, aa))
     return (coeff * normalization_factor).tolist()
 

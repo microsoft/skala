@@ -35,7 +35,7 @@ In this example we will use a single one atom system in a small basis set.
    exc = ks.scf_summary["exc"]
    _, _, vxc = ks._numint.nr_rks(ks.mol, ks.grids, ks.xc, dm)
 
-   write_gauxc_h5_from_pyscf("He_def2svp.h5", mol, dm=dm, exc=exc, vxc=vxc)
+   write_gauxc_h5_from_pyscf("He_def2-svp.h5", mol, dm=dm, exc=exc, vxc=vxc)
 
 Additionally to the inputs (molecule, basis set, and density matrix) we provide the exchange-correlation energy and potential to allow the standalone driver to compare against our reference calculation.
 
@@ -50,7 +50,7 @@ Furthermore, we have parameters like ``grid``, ``pruning_scheme``, etc. which de
    :caption: gauxc_input.inp
 
    [GAUXC]
-   ref_file = He_def2svp.h5
+   ref_file = He_def2-svp.h5
    ONEDFT_MODEL = PBE
    grid = Fine
    pruning_scheme = Robust
@@ -64,7 +64,7 @@ Furthermore, we have parameters like ``grid``, ``pruning_scheme``, etc. which de
 
 .. tip::
 
-   Make sure the HDF5 file ``He_def2svp.h5`` is in the same directory as the one where we start the standalone driver.
+   Make sure the HDF5 file ``He_def2-svp.h5`` is in the same directory as the one where we start the standalone driver.
 
 To run the standalone driver with this input we run it from the build directory with our input file:
 
@@ -77,7 +77,7 @@ For a successful run we will see the following output
 .. code-block:: text
 
    DRIVER SETTINGS: 
-     REF_FILE          = He_def2svp.h5
+     REF_FILE          = He_def2-svp.h5
      GRID              = FINE
      RAD_QUAD          = MURAKNOWLES
      PRUNING_SCHEME    = ROBUST
