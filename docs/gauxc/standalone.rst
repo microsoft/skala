@@ -20,22 +20,8 @@ In this example we will use a single one atom system in a small basis set.
    We will write the input data as HDF5 file since GauXC can read its objects directly from HDF5 datasets.
    The format in the HDF5 file does correpond to the internal structure of GauXC objects and therefore allows us to conveniently inspect the data.
 
-.. code-block:: python
-
-   from pyscf import gto
-
-   from skala.gauxc.export import write_gauxc_h5_from_pyscf
-   from skala.pyscf import SkalaRKS
-
-   mol = gto.M(atom="He 0 0 0", basis="def2-svp", unit="Bohr", spin=0)
-   ks = SkalaRKS(mol, xc="pbe")
-   ks.kernel()
-
-   dm = ks.make_rdm1()
-   exc = ks.scf_summary["exc"]
-   _, _, vxc = ks._numint.nr_rks(ks.mol, ks.grids, ks.xc, dm)
-
-   write_gauxc_h5_from_pyscf("He_def2-svp.h5", mol, dm=dm, exc=exc, vxc=vxc)
+.. literalinclude:: scripts/export-h5.py
+   :language: python
 
 Additionally to the inputs (molecule, basis set, and density matrix) we provide the exchange-correlation energy and potential to allow the standalone driver to compare against our reference calculation.
 

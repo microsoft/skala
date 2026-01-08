@@ -50,9 +50,9 @@ int main(int argc, char** argv) {
     std::string prune_spec         = "UNPRUNED";
     std::string lb_exec_space_str  = "Host";
     std::string int_exec_space_str = "Host";
-    std::string integrator_kernel  = "Default";
-    std::string lwd_kernel         = "Default";
-    std::string reduction_kernel   = "Default";
+    std::string integrator_kernel  = "default";
+    std::string lwd_kernel         = "default";
+    std::string reduction_kernel   = "default";
 
     size_t      batch_size = 512;
     double      basis_tol  = 1e-10;
