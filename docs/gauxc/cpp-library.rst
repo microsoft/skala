@@ -64,7 +64,7 @@ Since Eigen3 is a header-only library, we just need to reexport the include dire
    :language: cmake
    :caption: cmake/skala-eigen3.cmake
 
-For our command line driver, we will be using CLI11 to create the command line interface without.
+For our command line driver, we will be using CLI11 to create the command line interface.
 Similar to Eigen3, CLI11 is a header-only library and we will use the same approach for including its headers if the dependency can not be found in the environment.
 
 .. literalinclude:: ../../examples/cpp/gauxc_integration/cmake/skala-cli11.cmake
@@ -264,7 +264,8 @@ For the basis set we will use the same approach as for the molecule and use GauX
    Again, this allows to directly map the object's representation to an HDF5 dataset.
 
 With GauXC's ``GauXC::read_hdf5_record`` function we can read the basis set data conveniently from the HDF5 file.
-Additionally, we are setting the basis set tolerance on the loaded basis set data, which will be taken from our input variables.
+Additionally, we are setting the basis set tolerance on the loaded basis set data, which will be taken from our input variables, by default we use a tolerance of 1e-10.
+The basis set tolerance will be used for screening small contributions during the evaluation of the density on the grid points.
 
 .. literalinclude:: ../../examples/cpp/gauxc_integration/app/main.cxx
    :language: c++

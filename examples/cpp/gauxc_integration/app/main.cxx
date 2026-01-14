@@ -1,3 +1,4 @@
+// For GauXC core functionality
 #include <gauxc/exceptions.hpp>
 #include <gauxc/molecular_weights.hpp>
 #include <gauxc/molgrid/defaults.hpp>
@@ -13,11 +14,10 @@
 #define EIGEN_DONT_VECTORIZE
 #define EIGEN_NO_CUDA
 #include <Eigen/Core>
+using matrix = Eigen::MatrixXd;
 
 // For command line interface
 #include <CLI/CLI.hpp>
-
-using matrix = Eigen::MatrixXd;
 
 GauXC::RuntimeEnvironment
 get_runtime()
