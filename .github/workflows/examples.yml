@@ -75,3 +75,4 @@ jobs:
          Skala
          ./third_party/gauxc/tests/ref_data/onedft_he_def2qzvp_tpss_uks.hdf5
          --model TPSS
+      shell: micromamba-shell {0}
