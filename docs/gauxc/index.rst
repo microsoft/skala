@@ -7,7 +7,9 @@ The following sections provide instructions on how to install GauXC with Skala s
 
 
 .. toctree::
+   :maxdepth: 1
 
    installation
    standalone
    cpp-library
+   settings

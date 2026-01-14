@@ -109,6 +109,10 @@ Furthermore, we have the variables which define where GauXC is executing (host o
    :caption: app/main.cxx (initialization)
    :lines: 118-133
 
+.. note::
+
+   The settings for the molecular grid (``grid_spec``, ``rad_quad_spec``, ``prune_spec``) are defined in more detail in :ref:`gauxc_molecular_grid_settings` reference.
+
 Command line interface
 ----------------------
 
