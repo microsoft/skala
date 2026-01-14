@@ -1,0 +1,17 @@
+name: gauxc-dev
+channels:
+  - conda-forge
+dependencies:
+  # build requirements
+  - c-compiler
+  - cxx-compiler
+  - cuda-compiler
+  - cmake >=3.15,<4
+  - ninja
+  - nlohmann_json >=3.9
+  # host/runtime requirements
+  - libxc >=7,<8
+  - gau2grid >=2.0.6
+  - hdf5
+  - libblas
+  - pytorch >=2.0 cuda*

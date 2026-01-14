@@ -65,71 +65,21 @@ For this, create a file named `environment.yml` with the following content:
 
    .. tab-item:: OpenMP
 
-      .. code-block:: yaml
+      .. literalinclude:: ../../examples/cpp/gauxc_integration/environment-openmp.yml
          :caption: environment.yml
-
-         name: gauxc-dev
-         channels:
-           - conda-forge
-         dependencies:
-           # build requirements
-           - c-compiler
-           - cxx-compiler
-           - cmake >=3.15,<4
-           - ninja
-           - nlohmann_json >=3.9
-           # host/runtime requirements
-           - exchcxx >=1.0
-           - gau2grid >=2.0.6
-           - hdf5
-           - libblas
-           - pytorch >=2.0 cpu_*
+         :language: yaml
 
    .. tab-item:: MPI
 
-      .. code-block:: yaml
+      .. literalinclude:: ../../examples/cpp/gauxc_integration/environment-mpi.yml
          :caption: environment.yml
-
-         name: gauxc-dev
-         channels:
-           - conda-forge
-         dependencies:
-           # build requirements
-           - c-compiler
-           - cxx-compiler
-           - cmake >=3.15,<4
-           - ninja
-           - nlohmann_json >=3.9
-           # host/runtime requirements
-           - openmpi  # pick mpich if that matches your stack
-           - exchcxx >=1.0
-           - gau2grid >=2.0.6
-           - hdf5 * mpi_*
-           - libblas
-           - pytorch >=2.0 cpu_*
+         :language: yaml
 
    .. tab-item:: CUDA
 
-      .. code-block:: yaml
+      .. literalinclude:: ../../examples/cpp/gauxc_integration/environment-cuda.yml
          :caption: environment.yml
-
-         name: gauxc-dev
-         channels:
-           - conda-forge
-         dependencies:
-           # build requirements
-           - c-compiler
-           - cxx-compiler
-           - cuda-compiler
-           - cmake >=3.15,<4
-           - ninja
-           - nlohmann_json >=3.9
-           # host/runtime requirements
-           - libxc >=7,<8
-           - gau2grid >=2.0.6
-           - hdf5
-           - libblas
-           - pytorch >=2.0 cuda*
+         :language: yaml
 
 Create and activate the environment:
 
