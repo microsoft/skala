@@ -252,12 +252,12 @@ For the basis set we will use the same approach as for the molecule and use GauX
 
       template <typename F>
       class alignas(256) GauXC::Shell {
-        std::array<F, 32> alpha;
-        std::array<F, 32> coeff;
-        std::array<double, 3> O;
-        int32_t nprim;
-        int32_t l;
-        int32_t pure;
+        std::array<F, 32> alpha; ///< exponents of primitives
+        std::array<F, 32> coeff; ///< contraction coefficients
+        std::array<double, 3> O; ///< origin of the shell
+        int32_t nprim; ///< number of primitives
+        int32_t l; ///< angular moment of the shell
+        int32_t pure; ///< pure=1: spherical Gaussianss; pure=0: cartesian Gaussianss
       };
 
       template <typename F>
