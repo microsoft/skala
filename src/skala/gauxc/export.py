@@ -15,7 +15,7 @@ BASIS_DTYPE = {
     "itemsize": 552,
 }
 SQRT_PI_CUBED = 5.56832799683170784528481798212
-K_MINUS_1 = [
+K_MINUS_1 = [ # double factorial starting from (-1)!! = 1
     1,
     1,
     1,
