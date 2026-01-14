@@ -441,3 +441,16 @@ In this guide we covered how to use the GauXC library in C++.
 We created a minimal CMake project to setup the build environment and included GauXC.
 We created a command line driver which reads the molecule, basis set, and density matrix from an HDF5 input file and sets up the integration grid, load balancer, and exchange-correlation integrator.
 Finally, we performed the exchange-correlation evaluation and output the results.
+
+Troubleshooting
+---------------
+
+The link interface of target "gauxc::gauxc" contains "gau2grid::gg" but the target was not found
+    Explicitly find the gau2grid package together with GauXC by adding the following lines at the end of the GauXC CMake include file
+
+    .. code-block:: cmake
+       :caption: cmake/skala-gauxc.cmake (append)
+
+       if(GAUXC_HAS_GAU2GRID AND NOT TARGET gau2grid::gg)
+         find_package(gau2grid CONFIG REQUIRED)
+       endif()
