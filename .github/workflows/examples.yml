@@ -1,4 +1,4 @@
-name: Tests
+name: Examples
 
 on:
   push:
@@ -16,6 +16,7 @@ jobs:
       fail-fast: false
       matrix:
         toolchain: ["openmp", "mpi"]
+        gauxc: ["release", "main"]
 
     steps:
     - uses: actions/checkout@v4
@@ -29,6 +30,7 @@ jobs:
         cache-downloads: true
 
     - name: Configure GauXC
+      if: ${{ matrix.gauxc == 'release' }}
       run: >-
         cmake
         -B build_gauxc
@@ -43,10 +45,12 @@ jobs:
       shell: micromamba-shell {0}
 
     - name: Build GauXC
+      if: ${{ matrix.gauxc == 'release' }}
       run: cmake --build build_gauxc
       shell: micromamba-shell {0}
 
     - name: Install GauXC
+      if: ${{ matrix.gauxc == 'release' }}
       run: cmake --install build_gauxc
       shell: micromamba-shell {0}
 
