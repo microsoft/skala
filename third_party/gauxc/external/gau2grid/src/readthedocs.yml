@@ -1,4 +1,0 @@
-conda:
-    file: docs/requirements.yml
-python:
-    version: 3

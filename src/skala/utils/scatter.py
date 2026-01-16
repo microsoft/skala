@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # A copy of useful code from torch scatter
 # https://github.com/rusty1s/pytorch_scatter/blob/96aa2e3587123ba4ef31820899d5e62141e9a4c2/torch_scatter/scatter.py
 

@@ -1,9 +1,0 @@
-recursive-include gau2grid *.py
-
-include setup.py
-include README.md
-include LICENSE
-include MANIFEST.in
-
-include versioneer.py
-include gau2grid/_version.py
