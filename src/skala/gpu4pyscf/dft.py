@@ -38,7 +38,7 @@ The provided classes support the same transformations and methods as the origina
 >>> mol = gto.M(atom="H 0 0 0; H 0 0 1", basis="def2-svp")
 >>> ks = dft.SkalaRKS(mol, xc=load_functional("skala", device=torch.device("cuda:0")))
 >>> # Apply density fitting
->>> ks = ks.density_fit()
+>>> ks = ks.density_fit(auxbasis="def2-svp-jkfit")
 >>> ks  # DOCTEST: Ellipsis
 <gpu4pyscf.df.df_jk.DFSkalaRKS object at ...>
 >>> # Create gradient calculator
@@ -51,13 +51,16 @@ The provided classes support the same transformations and methods as the origina
 <pyscf.scf.hf.DFSkalaRKS_Scanner object at ...>
 """
 
+import warnings
 from collections.abc import Callable
+from typing import Any, cast
 
 import cupy as cp
 import torch
 from dftd3.pyscf import DFTD3Dispersion
 from gpu4pyscf import dft
 from gpu4pyscf.df import df_jk
+from pyscf import __version__ as pyscf_version
 from pyscf import gto
 
 # Set the default CuPy memory allocator to avoid memory leak issues
@@ -66,9 +69,10 @@ cp.cuda.set_allocator(cp.get_default_memory_pool().malloc)
 from skala.functional.base import ExcFunctionalBase
 from skala.gpu4pyscf.gradients import SkalaRKSGradient, SkalaUKSGradient
 from skala.pyscf.numint import SkalaNumInt
+from skala.pyscf.utils import pyscf_version_newer_than_2_10
 
 
-class SkalaRKS(dft.rks.RKS):
+class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
     """Restricted Kohn-Sham method with support for Skala functional."""
 
     with_dftd3: DFTD3Dispersion | None = None
@@ -83,7 +87,7 @@ class SkalaRKS(dft.rks.RKS):
         self.with_dftd3 = DFTD3Dispersion(mol, d3) if d3 is not None else None
 
     def energy_nuc(self) -> float:
-        enuc = super().energy_nuc()
+        enuc = float(super().energy_nuc())
         if self.with_dftd3:
             edisp = self.with_dftd3.kernel()[0]
             self.scf_summary["dispersion"] = edisp
@@ -96,20 +100,32 @@ class SkalaRKS(dft.rks.RKS):
     def nuc_grad_method(self) -> SkalaRKSGradient:
         return self.Gradients()
 
-    def gen_response(self, *args, **kwargs) -> Callable[[cp.ndarray], cp.ndarray]:
-        if hasattr(self, "_numint") and hasattr(self._numint, "gen_response"):
-            return self._numint.gen_response(*args, **kwargs, ks=self)
-        else:
-            return super().gen_response(*args, **kwargs)
+    def gen_response(
+        self,
+        mo_coeff: cp.ndarray | None = None,
+        mo_occ: cp.ndarray | None = None,
+        **kwargs: dict[str, Any],
+    ) -> Callable[[cp.ndarray], cp.ndarray]:
+        if mo_coeff is None:
+            mo_coeff = self.mo_coeff
+        if mo_occ is None:
+            mo_occ = self.mo_occ
 
-    def density_fit(self, auxbasis=None, with_df=None, only_dfj=True):
+        return self._numint.gen_response(mo_coeff, mo_occ, **kwargs, ks=self)
+
+    def density_fit(
+        self,
+        auxbasis: str | None = None,
+        with_df: bool | None = None,
+        only_dfj: bool | None = True,
+    ) -> "SkalaRKS":
         ks = df_jk.density_fit(self, auxbasis, with_df, only_dfj)
         ks.Gradients = lambda: SkalaRKSGradient(ks)
         ks.nuc_grad_method = ks.Gradients
-        return ks
+        return cast(SkalaRKS, ks)
 
 
-class SkalaUKS(dft.uks.UKS):
+class SkalaUKS(dft.uks.UKS):  # type: ignore[misc]
     """Unrestricted Kohn-Sham method with support for Skala functional."""
 
     with_dftd3: DFTD3Dispersion | None = None
@@ -124,7 +140,7 @@ class SkalaUKS(dft.uks.UKS):
         self.with_dftd3 = DFTD3Dispersion(mol, d3) if d3 is not None else None
 
     def energy_nuc(self) -> float:
-        enuc = super().energy_nuc()
+        enuc = float(super().energy_nuc())
         if self.with_dftd3:
             edisp = self.with_dftd3.kernel()[0]
             self.scf_summary["dispersion"] = edisp
@@ -137,14 +153,30 @@ class SkalaUKS(dft.uks.UKS):
     def nuc_grad_method(self) -> SkalaUKSGradient:
         return self.Gradients()
 
-    def gen_response(self, *args, **kwargs) -> Callable[[cp.ndarray], cp.ndarray]:
-        if hasattr(self, "_numint") and hasattr(self._numint, "gen_response"):
-            return self._numint.gen_response(*args, **kwargs, ks=self)
-        else:
-            return super().gen_response(*args, **kwargs)
+    def gen_response(
+        self,
+        mo_coeff: cp.ndarray | None = None,
+        mo_occ: cp.ndarray | None = None,
+        **kwargs: dict[str, Any],
+    ) -> Callable[[cp.ndarray], cp.ndarray]:
+        if mo_coeff is None:
+            mo_coeff = self.mo_coeff
+        if mo_occ is None:
+            mo_occ = self.mo_occ
 
-    def density_fit(self, auxbasis=None, with_df=None, only_dfj=True):
+        return self._numint.gen_response(mo_coeff, mo_occ, **kwargs, ks=self)
+
+    def density_fit(
+        self,
+        auxbasis: str | None = None,
+        with_df: bool | None = None,
+        only_dfj: bool | None = True,
+    ) -> "SkalaUKS":
+        if pyscf_version_newer_than_2_10() and auxbasis is None:
+            warnings.warn(
+                "Using density_fit without specifying auxbasis will lead to different behavior in PySCF >= 2.10.0 compared to PySCF 2.9.0, which was used for benchmarking skala. To reproduce benchmarks, please specify an auxbasis (def2-universal-jkfit for (ma-)def2 basis sets).",
+            )
         ks = df_jk.density_fit(self, auxbasis, with_df, only_dfj)
         ks.Gradients = lambda: SkalaUKSGradient(ks)
         ks.nuc_grad_method = ks.Gradients
-        return ks
+        return cast(SkalaUKS, ks)

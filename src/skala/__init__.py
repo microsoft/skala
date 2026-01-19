@@ -7,4 +7,4 @@ This package provides deep learning-based exchange-correlation functionals
 for density functional theory calculations, with integration to PySCF.
 """
 
-__version__ = "1.0.0"
+__version__ = "1.1.1"

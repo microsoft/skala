@@ -18,6 +18,7 @@ repos:
       - id: mypy
         exclude: '^(third_party|tests)/.*'
         args:
+          - --strict
           - --ignore-missing-imports
           - --no-namespace-packages
           - --python-version=3.11

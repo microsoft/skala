@@ -135,7 +135,7 @@ def norm(
     aa = K_MINUS_1[2 * l] * SQRT_PI_CUBED / (2**l * gamma ** (l + 1) * np.sqrt(gamma))
     coeff = np.asarray(coeff) * normalization_factor
     normalization_factor = 1.0 / np.sqrt(np.einsum("i,j,ij->", coeff, coeff, aa))
-    return (coeff * normalization_factor).tolist()
+    return (coeff * normalization_factor).tolist()  # type: ignore
 
 
 def format_basis(

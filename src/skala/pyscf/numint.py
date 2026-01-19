@@ -84,7 +84,7 @@ class PySCFNumInt(
         ...
 
 
-class SkalaNumInt(PySCFNumInt):
+class SkalaNumInt(PySCFNumInt[Array]):
     """PySCF-compatible reimplementation of `pyscf.dft.numint.NumInt`.
 
     Evaluation of atomic orbitals and one-electron integrals on a grid

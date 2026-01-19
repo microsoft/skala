@@ -10,7 +10,7 @@ dependencies:
   - h5py
   - numpy
   - opt_einsum_fx
-  - pyscf<2.10.0
+  - pyscf
   - python
   - pytorch * cpu_*
   - qcelemental

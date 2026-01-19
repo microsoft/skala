@@ -13,6 +13,7 @@ SCF_CONFIG = {
     "damp": 0.0,
     "diis_start_cycle": 1,
     "level_shift": 0.0,
+    "auxbasis": "def2-svp-jkfit",
 }
 
 

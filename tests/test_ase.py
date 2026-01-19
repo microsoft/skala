@@ -19,7 +19,9 @@ def xc(request) -> str:
 @pytest.mark.skipif(ase is None, reason="ASE is not installed")
 def test_calc(xc: str) -> None:
     atoms = molecule("H2O")
-    atoms.calc = Skala(xc=xc, basis="def2-svp", with_density_fit=True)
+    atoms.calc = Skala(
+        xc=xc, basis="def2-svp", with_density_fit=True, auxbasis="def2-svp-jkfit"
+    )
 
     energy = atoms.get_potential_energy()
 
@@ -45,7 +47,7 @@ def test_calc(xc: str) -> None:
 @pytest.mark.skipif(ase is None, reason="ASE is not installed")
 def test_missing_basis() -> None:
     atoms = molecule("H2O")
-    atoms.calc = Skala(xc="pbe", with_density_fit=True)
+    atoms.calc = Skala(xc="pbe", with_density_fit=True, auxbasis="def2-svp-jkfit")
 
     with pytest.raises(
         calculator.InputError, match="Basis set must be specified in the parameters."

@@ -37,7 +37,7 @@ The provided classes support the same transformations and methods as the origina
 >>> mol = gto.M(atom="H 0 0 0; H 0 0 1", basis="def2-svp")
 >>> ks = dft.SkalaRKS(mol, xc=load_functional("skala"))
 >>> # Apply density fitting
->>> ks = ks.density_fit()
+>>> ks = ks.density_fit(auxbasis="def2-svp-jkfit")
 >>> ks  # DOCTEST: Ellipsis
 <pyscf.df.df_jk.DFSkalaRKS object at ...>
 >>> # Create gradient calculator
@@ -50,6 +50,7 @@ The provided classes support the same transformations and methods as the origina
 <pyscf.scf.hf.DFSkalaRKS_Scanner object at ...>
 """
 
+import warnings
 from collections.abc import Callable
 from typing import Any, cast
 
@@ -62,6 +63,7 @@ from pyscf.df import df_jk
 from skala.functional.base import ExcFunctionalBase
 from skala.pyscf.gradients import SkalaRKSGradient, SkalaUKSGradient
 from skala.pyscf.numint import SkalaNumInt
+from skala.pyscf.utils import pyscf_version_newer_than_2_10
 
 
 class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
@@ -95,9 +97,16 @@ class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
         return self.Gradients()
 
     def gen_response(
-        self, *args: Any, **kwargs: Any
+        self,
+        mo_coeff: np.ndarray | None = None,
+        mo_occ: np.ndarray | None = None,
+        **kwargs: dict[str, bool | int | None],
     ) -> Callable[[np.ndarray], np.ndarray]:
-        return self._numint.gen_response(*args, **kwargs, ks=self)
+        if mo_coeff is None:
+            mo_coeff = self.mo_coeff
+        if mo_occ is None:
+            mo_occ = self.mo_occ
+        return self._numint.gen_response(mo_coeff, mo_occ, **kwargs, ks=self)
 
     def density_fit(
         self,
@@ -147,9 +156,16 @@ class SkalaUKS(dft.uks.UKS):  # type: ignore[misc]
         return self.Gradients()
 
     def gen_response(
-        self, *args: Any, **kwargs: Any
+        self,
+        mo_coeff: np.ndarray | None = None,
+        mo_occ: np.ndarray | None = None,
+        **kwargs: dict[str, bool | int | None],
     ) -> Callable[[np.ndarray], np.ndarray]:
-        return self._numint.gen_response(*args, **kwargs, ks=self)
+        if mo_coeff is None:
+            mo_coeff = self.mo_coeff
+        if mo_occ is None:
+            mo_occ = self.mo_occ
+        return self._numint.gen_response(mo_coeff, mo_occ, **kwargs, ks=self)
 
     def density_fit(
         self,
@@ -157,6 +173,11 @@ class SkalaUKS(dft.uks.UKS):  # type: ignore[misc]
         with_df: Any = None,
         only_dfj: bool = True,
     ) -> "SkalaUKS":
+        if pyscf_version_newer_than_2_10() and auxbasis is None:
+            warnings.warn(
+                "Using density_fit without specifying auxbasis will lead to different behavior in PySCF >= 2.10.0 compared to PySCF 2.9.0, which was used for benchmarking skala. To reproduce benchmarks, please specify an auxbasis (def2-universal-jkfit for (ma-)def2 basis sets).",
+            )
+
         xc, self.xc = (
             self.xc,
             "tpss",

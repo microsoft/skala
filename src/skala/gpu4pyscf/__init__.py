@@ -9,6 +9,7 @@ with neural network-based functionals.
 """
 
 from importlib.util import find_spec
+from typing import Any
 
 import torch
 
@@ -52,8 +53,8 @@ def SkalaKS(
     with_newton: bool = False,
     with_dftd3: bool = True,
     auxbasis: str | None = None,
-    ks_config: dict | None = None,
-    soscf_config: dict | None = None,
+    ks_config: dict[str, Any] | None = None,
+    soscf_config: dict[str, Any] | None = None,
 ) -> dft.SkalaRKS | dft.SkalaUKS:
     """
     Create a Kohn-Sham calculator for the Skala functional.
@@ -89,7 +90,7 @@ def SkalaKS(
     >>>
     >>> mol = gto.M(atom="H 0 0 0; H 0 0 1", basis="def2-svp")
     >>> ks = SkalaKS(mol, xc="skala")
-    >>> ks = ks.density_fit()  # Optional: use density fitting
+    >>> ks = ks.density_fit(auxbasis="def2-svp-jkfit")  # Optional: use density fitting
     >>> ks = ks.set(verbose=0)
     >>> energy = ks.kernel()
     >>> print(energy)  # DOCTEST: Ellipsis
@@ -133,8 +134,8 @@ def SkalaRKS(
     with_newton: bool = False,
     with_dftd3: bool = True,
     auxbasis: str | None = None,
-    ks_config: dict | None = None,
-    soscf_config: dict | None = None,
+    ks_config: dict[str, Any] | None = None,
+    soscf_config: dict[str, Any] | None = None,
 ) -> dft.SkalaRKS:
     """
     Create a restricted Kohn-Sham calculator for the Skala functional.
@@ -189,9 +190,12 @@ def SkalaRKS(
         ks.with_dftd3 = None
 
     if with_density_fit:
-        ks = ks.density_fit()
+        ks = ks.density_fit(auxbasis=auxbasis)
+    else:
         if auxbasis is not None:
-            ks.with_df.auxbasis = auxbasis
+            raise ValueError(
+                "Auxiliary basis can only be set when density fitting is enabled."
+            )
 
     if with_newton:
         ks = ks.newton()
@@ -209,8 +213,8 @@ def SkalaUKS(
     with_newton: bool = False,
     with_dftd3: bool = True,
     auxbasis: str | None = None,
-    ks_config: dict | None = None,
-    soscf_config: dict | None = None,
+    ks_config: dict[str, Any] | None = None,
+    soscf_config: dict[str, Any] | None = None,
 ) -> dft.SkalaUKS:
     """
     Create an unrestricted Kohn-Sham calculator for the Skala functional.
@@ -247,7 +251,7 @@ def SkalaUKS(
     >>> import torch
     >>>
     >>> mol = gto.M(atom="H", basis="def2-svp", spin=1)
-    >>> ks = SkalaUKS(mol, xc=load_functional("skala", device=torch.device("cuda:0")), with_density_fit=True)(verbose=0)
+    >>> ks = SkalaUKS(mol, xc=load_functional("skala", device=torch.device("cuda:0")), with_density_fit=True, auxbasis="def2-svp-jkfit")(verbose=0)
     >>> ks  # DOCTEST: Ellipsis
     <gpu4pyscf.df.df_jk.DFSkalaUKS object at ...>
     >>> energy = ks.kernel()
@@ -265,9 +269,12 @@ def SkalaUKS(
         ks.with_dftd3 = None
 
     if with_density_fit:
-        ks = ks.density_fit()
+        ks = ks.density_fit(auxbasis=auxbasis)
+    else:
         if auxbasis is not None:
-            ks.with_df.auxbasis = auxbasis
+            raise ValueError(
+                "Auxiliary basis can only be set when density fitting is enabled."
+            )
 
     if with_newton:
         ks = ks.newton()

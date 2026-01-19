@@ -62,32 +62,32 @@ def load_functional(name: str, device: torch.device | None = None) -> ExcFunctio
     >>> func.features
     ['density', 'grid_weights']
     """
-    if name.lower() == "skala":
+    func_name = name.lower()
+
+    if func_name == "skala":
         env_path = os.environ.get("SKALA_LOCAL_MODEL_PATH")
         if env_path is not None:
             path = env_path
         else:
-            filename = (
-                "skala-1.0.fun"
-                if device is None or device.type == "cpu"
-                else "skala-1.0-cuda.fun"
+            device_type = (
+                torch.get_default_device().type if device is None else device.type
             )
+            filename = "skala-1.0.fun" if device_type == "cpu" else "skala-1.0-cuda.fun"
             path = hf_hub_download(repo_id="microsoft/skala", filename=filename)
         with open(path, "rb") as fd:
             return TracedFunctional.load(fd, device=device)
-
-    if name.lower() == "lda":
-        return LDA().to(device=device)
-
-    if name.lower() == "spw92":
-        return SPW92().to(device=device)
-
-    if name.lower() == "pbe":
-        return PBE().to(device=device)
-
-    if name.lower() == "tpss":
-        return TPSS().to(device=device)
-
-    raise ValueError(
-        f"Unknown functional: {name}. Please provide a valid functional name or path to a traced functional file."
-    )
+    elif func_name == "lda":
+        func = LDA()
+    elif func_name == "spw92":
+        func = SPW92()
+    elif func_name == "pbe":
+        func = PBE()
+    elif func_name == "tpss":
+        func = TPSS()
+    else:
+        raise ValueError(
+            f"Unknown functional: {name}. Please provide a valid functional name or path to a traced functional file."
+        )
+    if device is not None:
+        func = func.to(device=device)
+    return func

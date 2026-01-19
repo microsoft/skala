@@ -40,6 +40,7 @@ class Skala(Calculator):  # type: ignore[misc]
         "xc": "skala",
         "basis": None,
         "with_density_fit": False,
+        "auxbasis": None,
         "with_newton": False,
         "with_dftd3": True,
         "charge": None,
@@ -83,6 +84,7 @@ class Skala(Calculator):  # type: ignore[misc]
         if (
             "xc" in changed_parameters
             or "with_density_fit" in changed_parameters
+            or "auxbasis" in changed_parameters
             or "with_newton" in changed_parameters
             or "with_dftd3" in changed_parameters
         ):
@@ -160,6 +162,7 @@ class Skala(Calculator):  # type: ignore[misc]
                 self._mol,
                 xc=xc_param,
                 with_density_fit=bool(self.parameters.with_density_fit),
+                auxbasis=self.parameters.auxbasis,
                 with_newton=bool(self.parameters.with_newton),
                 with_dftd3=bool(self.parameters.with_dftd3),
             ).nuc_grad_method()

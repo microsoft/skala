@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "microsoft-skala"
-version = "1.1.0"
+version = "1.1.1"
 description = "Skala Exchange Correlation Functional"
 authors = []
 license-files = ["LICENSE.txt"]
@@ -24,7 +24,7 @@ dependencies = [
     "huggingface_hub",
     "numpy",
     "opt_einsum_fx",
-    "pyscf<2.10.0",
+    "pyscf",
     "qcelemental",
     "torch"
 ]
