@@ -1,7 +1,7 @@
 GauXC settings
 ==============
 
-GauXC provides a different settings for defining the behavior of the library.
+GauXC provides different settings for defining the behavior of the library.
 Mainly these settings are used to define the molecular integration scheme and the parallelization strategy.
 
 .. _gauxc_molecular_grid_settings:

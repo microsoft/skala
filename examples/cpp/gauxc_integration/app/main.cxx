@@ -24,12 +24,12 @@ get_runtime()
 {
 #ifdef GAUXC_HAS_DEVICE
   auto rt = GauXC::DeviceRuntimeEnvironment( GAUXC_MPI_CODE(MPI_COMM_WORLD,) 0.9 );
-  // Caluclate GauXC Device buffer size
+  // Calculate GauXC Device buffer size
   size_t available_mem, total_mem;
   cudaMemGetInfo(&available_mem, &total_mem);
   int device_id;
   cudaGetDevice(&device_id);
-  size_t sz = mem_sz * available_mem;  
+  size_t sz = 0.9 * available_mem;  
   void* p;
   cudaMallocAsync(&p, sz, 0);
   cudaStreamSynchronize(0);

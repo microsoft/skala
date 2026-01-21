@@ -18,7 +18,7 @@ In this example we will use a single one atom system in a small basis set.
 .. note::
 
    We will write the input data as HDF5 file since GauXC can read its objects directly from HDF5 datasets.
-   The format in the HDF5 file does correpond to the internal structure of GauXC objects and therefore allows us to conveniently inspect the data.
+   The format in the HDF5 file does correspond to the internal structure of GauXC objects and therefore allows us to conveniently inspect the data.
 
 .. literalinclude:: scripts/export-h5.py
    :language: python
@@ -131,7 +131,7 @@ For this we will inspect our HDF5 input data more closely.
       ...:     dm_z = np.asarray(h5["DENSITY_Z"])
       ...:
 
-First, we inspect the molecule format which represents follows an array of structs format, combining the atomic number together with the cartesian coordinates in Bohr.
+First, we inspect the molecule format which follows an array of structs format, combining the atomic number together with the cartesian coordinates in Bohr.
 For our Helium example we expect a single entry centered at the origin:
 
 .. code-block:: ipython

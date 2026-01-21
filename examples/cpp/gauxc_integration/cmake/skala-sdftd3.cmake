@@ -1,4 +1,4 @@
-if(NOT ${Skala_SDFTD3_URL})
+if(NOT DEFINED Skala_SDFTD3_URL)
   include(skala-dep-versions)
 endif()
 find_package(PkgConfig QUIET)

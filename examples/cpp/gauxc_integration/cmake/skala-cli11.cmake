@@ -1,4 +1,4 @@
-if(NOT ${Skala_CLI11_URL})
+if(NOT DEFINED Skala_CLI11_URL)
   include(skala-dep-versions)
 endif()
 find_package(CLI11 QUIET CONFIG)

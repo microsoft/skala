@@ -1,4 +1,4 @@
-if(NOT ${Skala_Eigen3_URL})
+if(NOT DEFINED Skala_Eigen3_URL)
   include(skala-dep-versions)
 endif()
 find_package(Eigen3 CONFIG HINTS ${EIGEN3_ROOT_DIR})
