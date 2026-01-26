@@ -70,7 +70,7 @@ pip install --no-deps "gpu4pyscf-cuda${cu_version}x>=1.0,<2" "gpu4pyscf-libxc-cu
 The most recent pytorch version supports CUDA version 12.6, 12.8 or 13.0. You can find the most recent CUDA version that is supported on your system using `nvidia-smi`.
 ```bash
 cu_version=128 #or 126 or 130 depending on your CUDA version
-pip install torch "cu${cu_version:0:2}x>=1.0,<2" skala --extra-index-url "https://download.pytorch.org/whl/cu${cu_version}"
+pip install torch "cupy-cuda${cu_version:0:2}x" skala --extra-index-url "https://download.pytorch.org/whl/cu${cu_version}"
 pip install --no-deps "gpu4pyscf-cuda${cu_version:0:2}x>=1.0,<2" "gpu4pyscf-libxc-cuda${cu_version:0:2}x>=0.4,<1"
 ```
 Run an SCF calculation with Skala for a hydrogen molecule on GPU:
