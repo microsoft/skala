@@ -107,7 +107,7 @@ def SkalaKS(
 
 def SkalaRKS(
     mol: gto.Mole,
-    xc: ExcFunctionalBase,
+    xc: ExcFunctionalBase | str,
     *,
     with_density_fit: bool = False,
     with_newton: bool = False,
@@ -184,7 +184,7 @@ def SkalaRKS(
 
 def SkalaUKS(
     mol: gto.Mole,
-    xc: ExcFunctionalBase,
+    xc: ExcFunctionalBase | str,
     *,
     with_density_fit: bool = False,
     with_newton: bool = False,

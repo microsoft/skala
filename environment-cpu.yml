@@ -7,6 +7,7 @@ dependencies:
   - azure-identity
   - dftd3-python
   - e3nn
+  - h5py
   - numpy
   - opt_einsum_fx
   - pyscf

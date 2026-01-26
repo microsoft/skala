@@ -1,0 +1,90 @@
+name: Examples
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main, dev ]
+
+permissions:
+  contents: read
+
+jobs:
+  gauxc:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: ["openmp", "mpi"]
+        gauxc: ["release", "main"]
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        path: skala
+
+    - name: Setup micromamba
+      uses: mamba-org/setup-micromamba@v1
+      with:
+        environment-file: skala/examples/cpp/gauxc_integration/environment-${{ matrix.toolchain }}.yml
+        environment-name: gauxc-dev
+        cache-environment: true
+        cache-downloads: true
+
+    - uses: actions/checkout@v4
+      with:
+        repository: wavefunction91/gauxc
+        ref: skala
+        path: gauxc
+
+    - name: Configure GauXC
+      if: ${{ matrix.gauxc == 'release' }}
+      run: >-
+        cmake
+        -B build_gauxc
+        -S gauxc
+        -G Ninja
+        -DGAUXC_ENABLE_OPENMP=${{ matrix.toolchain == 'openmp' }}
+        -DGAUXC_ENABLE_MPI=${{ matrix.toolchain == 'mpi' }}
+        -DGAUXC_ENABLE_CUDA=${{ matrix.toolchain == 'cuda' }}
+        -DGAUXC_ENABLE_ONEDFT=ON
+        -DBUILD_SHARED_LIBS=ON
+        -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX
+      shell: micromamba-shell {0}
+
+    - name: Build GauXC
+      if: ${{ matrix.gauxc == 'release' }}
+      run: cmake --build build_gauxc
+      shell: micromamba-shell {0}
+
+    - name: Install GauXC
+      if: ${{ matrix.gauxc == 'release' }}
+      run: cmake --install build_gauxc
+      shell: micromamba-shell {0}
+
+    - name: Configure project
+      run: >-
+        cmake
+        -B build_example
+        -S skala/examples/cpp/gauxc_integration
+        -G Ninja
+        -DSkala_GauXC_ENABLE_OPENMP=${{ matrix.toolchain == 'openmp' }}
+        -DSkala_GauXC_ENABLE_MPI=${{ matrix.toolchain == 'mpi' }}
+        -DSkala_GauXC_ENABLE_CUDA=${{ matrix.toolchain == 'cuda' }}
+        -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX
+      shell: micromamba-shell {0}
+
+    - name: Build project
+      run: cmake --build build_example
+      shell: micromamba-shell {0}
+
+    - name: Install project
+      run: cmake --install build_example
+      shell: micromamba-shell {0}
+
+    - name: Run example
+      run: >-
+         Skala
+         ./gauxc/tests/ref_data/onedft_he_def2qzvp_tpss_uks.hdf5
+         --model TPSS
+      shell: micromamba-shell {0}

@@ -1,0 +1,74 @@
+name: Publish PyPI
+
+on: push
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [skala, microsoft-skala]
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install pypa/build
+      run: >-
+        python3 -m
+        pip install
+        build
+        --user
+
+    - name: Replace pyproject.toml
+      if: ${{ matrix.package == 'microsoft-skala' }}
+      run: |
+        VERSION=$(python3 -c "from tomllib import load; print(load(open('pyproject.toml', 'rb'))['project']['version'])")
+        rm -r src/skala
+        mkdir -p src/microsoft_skala
+        echo "from skala import *" > src/microsoft_skala/__init__.py
+        touch src/microsoft_skala/py.typed
+        sed -e "s/@VERSION@/$VERSION/g" .github/workflows/pypi/microsoft-skala.toml > pyproject.toml
+        cat pyproject.toml
+
+    - name: Build a binary wheel and a source tarball
+      run: python3 -m build
+
+    - name: Store the distribution packages
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.package }}-pkg
+        path: dist/
+
+  publish-to-pypi:
+    name: Publish to PyPI
+    if: startsWith(github.ref, 'refs/tags/')  # only publish to PyPI on tag pushes
+    needs:
+    - build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [skala, microsoft-skala]
+    environment:
+      name: pypi
+      url: https://pypi.org/p/${{ matrix.package }}
+    permissions:
+      id-token: write  # IMPORTANT: mandatory for trusted publishing
+
+    steps:
+    - name: Download all the dists
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ matrix.package }}-pkg
+        path: dist/
+    - name: Publish distribution to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1

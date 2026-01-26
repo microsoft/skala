@@ -1,0 +1,17 @@
+name: gauxc-dev
+channels:
+  - conda-forge
+dependencies:
+  # build requirements
+  - c-compiler
+  - cxx-compiler
+  - cmake >=3.15,<4
+  - ninja
+  - nlohmann_json >=3.9
+  # host/runtime requirements
+  - openmpi  # pick mpich if that matches your stack
+  - exchcxx >=1.0
+  - gau2grid >=2.0.6
+  - hdf5 * mpi_*
+  - libblas
+  - pytorch >=2.0 cpu_*
