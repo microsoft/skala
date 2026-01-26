@@ -30,6 +30,12 @@ pip install torch --index-url https://download.pytorch.org/whl/cpu  # unless you
 pip install skala
 ```
 
+Or using Conda (Mamba):
+
+```bash
+mamba install -c conda-forge skala
+```
+
 Run an SCF calculation with Skala for a hydrogen molecule:
 
 ```python
@@ -51,22 +57,21 @@ Go to [microsoft.github.io/skala](https://microsoft.github.io/skala) for a more 
 
 ### Conda (includes CUDA toolkit, Torch, CuPy)
 
-CUDA 12 vs 13: pick the one your driver supports (check `nvidia-smi`).
+Supports CUDA version 11, 12 or 13. You can find the most recent CUDA version that is supported on your system using `nvidia-smi`.
 
 ```bash
-cu_version=12 #or 13 depending on your CUDA version
-conda env create -n skala -f environment-gpu_cu${cu_version}.yml
-conda activate skala
-pip install --no-deps "gpu4pyscf-cuda${cu_version}x>=1.0,<2" "gpu4pyscf-libxc-cuda${cu_version}x>=0.4,<1" microsoft-skala
+cu_version=13 #or 11 or 12 depending on your CUDA version
+mamba env create -n skala -f environment-gpu.yml  "cuda_version==${cu_version}.*" skala
+mamba activate skala
+pip install --no-deps "gpu4pyscf-cuda${cu_version}x>=1.0,<2" "gpu4pyscf-libxc-cuda${cu_version}x>=0.4,<1"
 ```
 
 ### pip (bring your own CUDA runtime):
-CUDA 12.6, 12.8, or 13.0: pick the one your driver supports (check `nvidia-smi`).
+The most recent pytorch version supports CUDA version 12.6, 12.8 or 13.0. You can find the most recent CUDA version that is supported on your system using `nvidia-smi`.
 ```bash
 cu_version=128 #or 126 or 130 depending on your CUDA version
-pip install torch "cu${cu_version:0:2}x>=1.0,<2" --extra-index-url "https://download.pytorch.org/whl/cu${cu_version}"
+pip install torch "cu${cu_version:0:2}x>=1.0,<2" skala --extra-index-url "https://download.pytorch.org/whl/cu${cu_version}"
 pip install --no-deps "gpu4pyscf-cuda${cu_version:0:2}x>=1.0,<2" "gpu4pyscf-libxc-cuda${cu_version:0:2}x>=0.4,<1"
-pip install skala
 ```
 Run an SCF calculation with Skala for a hydrogen molecule on GPU:
 

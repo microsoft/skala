@@ -37,7 +37,7 @@ If you prefer to install Skala from the source code, you can clone the repositor
    mamba activate skala
    pip install -e .
 
-where `environment-cpu.yml` can be replaced for `environment-gpu_cu12.yml` (CUDA 12) or `environment-gpu_cu13.yml` (CUDA 13) for gpu support with gpu4pyscf, in which case gpu4pyscf needs to be separately installed *after creating the environment* via
+where `environment-cpu.yml` can be replaced with `environment-gpu.yml` for gpu support (specify CUDA version with `cuda_version=<version>`) with gpu4pyscf, in which case gpu4pyscf needs to be separately installed *after creating the environment* via (for CUDA 12)
 
 .. code-block:: bash
 

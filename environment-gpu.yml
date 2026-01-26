@@ -17,7 +17,7 @@ dependencies:
   - cuda-toolkit
   - cupy
   - cutensor
-  - cuda-version ==12.*
+  - cuda-version
   # Testing and development
   - pre-commit
   - pytest
