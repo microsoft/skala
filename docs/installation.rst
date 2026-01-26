@@ -1,11 +1,18 @@
 Installation
 ============
 
+Install from PyPI
+-----------------
+
+.. image:: https://img.shields.io/pypi/v/skala?logo=pypi&logoColor=white
+   :alt: PyPI
+   :target: https://pypi.org/project/skala/
+
 To install *skala*, you can use pip:
 
 .. code-block:: bash
 
-   pip install microsoft-skala
+   pip install skala
 
 This will install the *skala* packages and all its dependencies, including
 
@@ -23,6 +30,34 @@ The default Pytorch installation is the GPU version, which the *skala* package i
 .. code-block:: bash
 
    pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+
+Install from conda-forge
+------------------------
+
+.. image:: https://img.shields.io/conda/vn/conda-forge/skala
+   :alt: conda-forge
+   :target: https://github.com/conda-forge/skala-feedstock
+
+The *skala* package is available on conda-forge, to install it use
+
+.. code-block:: bash
+
+   mamba install -c conda-forge skala
+
+You can select between GPU and CPU version of pytorch by requesting the ``cuda*`` build or the ``cpu*`` build.
+For the CPU version use
+
+.. code-block:: bash
+
+   mamba install -c conda-forge skala "pytorch=*=cpu*"
+
+For the GPU version use (e.g. with Cuda 12)
+
+.. code-block:: bash
+
+   mamba install -c conda-forge skala "pytorch=*=cuda12*"
+
 
 Installing from source
 ----------------------
