@@ -49,22 +49,22 @@ Go to [microsoft.github.io/skala](https://microsoft.github.io/skala) for a more 
 
 
 
-### Conda(includes CUDA toolkit, Torch, CuPy)
+### Conda (includes CUDA toolkit, Torch, CuPy)
 
 CUDA 12 vs 13: pick the one your driver supports (check `nvidia-smi`).
 
 ```bash
 cu_version=12 #or 13 depending on your CUDA version
-conda create -n skala -f environment-gpu_cu${cu_version}.yml
+conda env create -n skala -f environment-gpu_cu${cu_version}.yml
 conda activate skala
-pip install --nodeps "gpu4pyscf-cuda${cu_version}x>=1.0,<2" "gpu4pyscf-libxc-cuda${cu_version}x>=0.4,<1" microsoft-skala
+pip install --no-deps "gpu4pyscf-cuda${cu_version}x>=1.0,<2" "gpu4pyscf-libxc-cuda${cu_version}x>=0.4,<1" microsoft-skala
 ```
 
 ### pip (bring your own CUDA runtime):
 CUDA 12.6, 12.8, or 13.0: pick the one your driver supports (check `nvidia-smi`).
 ```bash
 cu_version=128 #or 126 or 130 depending on your CUDA version
-pip install torch cu${cu_version:0:2}x>=1.0,<2" --extra-index-url "https://download.pytorch.org/whl/cu${cu_version}"
+pip install torch "cu${cu_version:0:2}x>=1.0,<2" --extra-index-url "https://download.pytorch.org/whl/cu${cu_version}"
 pip install --no-deps "gpu4pyscf-cuda${cu_version:0:2}x>=1.0,<2" "gpu4pyscf-libxc-cuda${cu_version:0:2}x>=0.4,<1"
 pip install microsoft-skala
 ```
