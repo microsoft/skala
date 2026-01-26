@@ -33,7 +33,7 @@ pip install skala
 Or using Conda (Mamba):
 
 ```bash
-mamba install -c conda-forge skala
+mamba install -c conda-forge skala "pytorch=*=cpu*"
 ```
 
 Run an SCF calculation with Skala for a hydrogen molecule:
@@ -55,7 +55,7 @@ Go to [microsoft.github.io/skala](https://microsoft.github.io/skala) for a more 
 
 
 
-### Conda (includes CUDA toolkit, Torch, CuPy)
+### Conda (via Mamba,includes CUDA toolkit, Torch, CuPy)
 
 Supports CUDA version 11, 12 or 13. You can find the most recent CUDA version that is supported on your system using `nvidia-smi`.
 
