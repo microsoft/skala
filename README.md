@@ -60,8 +60,8 @@ Go to [microsoft.github.io/skala](https://microsoft.github.io/skala) for a more 
 Supports CUDA version 11, 12 or 13. You can find the most recent CUDA version that is supported on your system using `nvidia-smi`.
 
 ```bash
-cu_version=13 #or 11 or 12 depending on your CUDA version
-mamba env create -n skala -f environment-gpu.yml  "cuda_version==${cu_version}.*" skala
+cu_version=12 #or 11 or 13 depending on your CUDA version
+mamba env create -n skala -f environment-gpu.yml  "cuda-version==${cu_version}.*" skala
 mamba activate skala
 pip install --no-deps "gpu4pyscf-cuda${cu_version}x>=1.0,<2" "gpu4pyscf-libxc-cuda${cu_version}x>=0.4,<1"
 ```
