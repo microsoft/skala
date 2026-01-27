@@ -17,6 +17,7 @@ jobs:
       matrix:
         toolchain: ["openmp", "mpi"]
         gauxc: ["release", "main"]
+        example: ["cpp/gauxc_integration", "c/gauxc_integration"]
 
     steps:
     - uses: actions/checkout@v4
@@ -48,6 +49,7 @@ jobs:
         -DGAUXC_ENABLE_MPI=${{ matrix.toolchain == 'mpi' }}
         -DGAUXC_ENABLE_CUDA=${{ matrix.toolchain == 'cuda' }}
         -DGAUXC_ENABLE_ONEDFT=ON
+        -DGAUXC_ENABLE_C=ON
         -DBUILD_SHARED_LIBS=ON
         -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX
       shell: micromamba-shell {0}
@@ -66,7 +68,7 @@ jobs:
       run: >-
         cmake
         -B build_example
-        -S skala/examples/cpp/gauxc_integration
+        -S skala/examples/${{ matrix.example }}
         -G Ninja
         -DSkala_GauXC_ENABLE_OPENMP=${{ matrix.toolchain == 'openmp' }}
         -DSkala_GauXC_ENABLE_MPI=${{ matrix.toolchain == 'mpi' }}

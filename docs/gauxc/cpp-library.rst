@@ -420,7 +420,7 @@ In the output we can see the results for the Skala functional
 
    Configuration
    -> Input file        : He_def2-svp.h5
-   -> Model             : ./skala-v1.0.fun
+   -> Model             : ./skala-1.0.fun
    -> Grid              : fine
    -> Radial quadrature : muraknowles
    -> Pruning scheme    : robust
