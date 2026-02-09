@@ -13,20 +13,29 @@ Learn more about Skala in our [ArXiv paper](https://arxiv.org/abs/2506.14665).
 
 ## What's in here
 
-This repository contains three main components:
+This repository contains two main components:
 
-1. The Python package `skala`, which is also distributed [on PyPI](https://pypi.org/project/skala/) and contains a Pytorch implementation of the Skala model, its hookups to quantum chemistry packages [PySCF](https://pyscf.org/) and [ASE](https://ase-lib.org/), and an independent client library for the Skala model served [in Azure AI Foundry](https://ai.azure.com/catalog/models/Skala).
-2. A development version of the CPU/GPU C++ library for XC functionals [GauXC](https://github.com/wavefunction91/GauXC/tree/skala) with an add-on supporting Pytorch-based functionals like Skala. GauXC is part of the stack that serves Skala in Azure AI Foundry and can be used to integrate Skala into other third-party DFT codes.
-3. An example of using Skala in C++ CPU applications through LibTorch, see [`examples/cpp/cpp_integration`](examples/cpp/cpp_integration).
+1. The Python package `skala`, which is also distributed [on PyPI](https://pypi.org/project/skala/) and contains a PyTorch implementation of the Skala model, its hookups to quantum chemistry packages [PySCF](https://pyscf.org/), [GPU4PySCF](https://pyscf.org/user/gpu.html) and [ASE](https://ase-lib.org/).
+2. An example of using Skala in C++ CPU applications through LibTorch, see [`examples/cpp/cpp_integration`](examples/cpp/cpp_integration).
 
-All information below relates to the Python package, the development version of GauXC including its license and other information can be found in the [`skala` branch of the GauXC repository](https://github.com/wavefunction91/GauXC/tree/skala).
 
-## Getting started
+### Skala in Azure AI Foundry
+
+The Skala model is also served on [Azure AI Foundry](https://ai.azure.com/catalog/models/Skala).
+
+### GauXC development version for PyTorch-based functionals like Skala
+
+[GauXC](https://github.com/wavefunction91/GauXC) is a CPU/GPU C++ library for XC functionals. A development version with an add-on supporting PyTorch-based functionals like Skala is available in the [`skala` branch of the GauXC repository](https://github.com/wavefunction91/GauXC/tree/skala). GauXC is part of the stack that serves Skala in [Azure AI Foundry](https://ai.azure.com/catalog/models/Skala) and can be used to integrate Skala into other third-party DFT codes.
+
+## Getting started: PySCF (CPU)
+
+All information below relates to the Python package `skala`.
 
 Install using Pip:
 
 ```bash
-pip install torch --index-url https://download.pytorch.org/whl/cpu  # unless you already have GPU Pytorch for something else
+# Install CPU-only PyTorch (skip if you already have CPU or GPU-enabled PyTorch installed)
+pip install torch --index-url https://download.pytorch.org/whl/cpu
 pip install skala
 ```
 
@@ -49,11 +58,10 @@ mol = gto.M(
 ks = SkalaKS(mol, xc="skala")
 ks.kernel()
 ```
-Go to [microsoft.github.io/skala](https://microsoft.github.io/skala) for a more detailed installation guide and further examples of how to use Skala functional with PySCF and ASE and in [Azure Foundry](https://ai.azure.com/catalog/models/Skala).
 
-## Getting started (GPU support via Mamba, includes CUDA toolkit, Torch, CuPy)
+## Getting started: GPU4PySCF (GPU) 
 
-Supports CUDA version 11, 12 or 13. You can find the most recent CUDA version that is supported on your system using `nvidia-smi`.
+These instructions use Mamba and pip to install CUDA toolkit, Torch, and CuPy. Supports CUDA version 11, 12 or 13. You can find the most recent CUDA version that is supported on your system using `nvidia-smi`.
 
 ```bash
 cu_version=12 #or 11 or 13 depending on your CUDA version
@@ -75,6 +83,11 @@ mol = gto.M(
 ks = SkalaKS(mol, xc="skala")
 ks.kernel()
 ```
+The current header "## Further documentation" is generic. I'd suggest:
+
+## Documentation and examples
+
+Go to [microsoft.github.io/skala](https://microsoft.github.io/skala) for a more detailed installation guide and further examples of how to use Skala functional with PySCF, GPU4PySCF and ASE and in [Azure AI Foundry](https://ai.azure.com/catalog/models/Skala).
 
 ## Project information
 
