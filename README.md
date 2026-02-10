@@ -61,7 +61,7 @@ ks.kernel()
 
 ## Getting started: GPU4PySCF (GPU) 
 
-These instructions use Mamba and pip to install CUDA toolkit, Torch, and CuPy. Supports CUDA version 11, 12 or 13. You can find the most recent CUDA version that is supported on your system using `nvidia-smi`.
+These instructions use Mamba and pip to install CUDA toolkit, Torch, and CuPy. It supports CUDA version 11, 12 or 13. You can find the most recent CUDA version that is supported on your system using `nvidia-smi`.
 
 ```bash
 cu_version=12 #or 11 or 13 depending on your CUDA version
@@ -83,11 +83,10 @@ mol = gto.M(
 ks = SkalaKS(mol, xc="skala")
 ks.kernel()
 ```
-The current header "## Further documentation" is generic. I'd suggest:
 
 ## Documentation and examples
 
-Go to [microsoft.github.io/skala](https://microsoft.github.io/skala) for a more detailed installation guide and further examples of how to use Skala functional with PySCF, GPU4PySCF and ASE and in [Azure AI Foundry](https://ai.azure.com/catalog/models/Skala).
+Go to [microsoft.github.io/skala](https://microsoft.github.io/skala) for a more detailed installation guide and further examples of how to use the Skala functional with PySCF, GPU4PySCF and ASE and in [Azure AI Foundry](https://ai.azure.com/catalog/models/Skala).
 
 ## Project information
 
