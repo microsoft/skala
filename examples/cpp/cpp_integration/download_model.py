@@ -11,6 +11,7 @@ import shutil
 
 from huggingface_hub import hf_hub_download
 
+from skala.functional._hashes import KNOWN_HASHES
 from skala.functional.load import TracedFunctional
 
 GRID_SIZE = "grid_size"
@@ -48,7 +49,8 @@ def download_model(huggingface_repo_id: str, filename: str, output_path: str) ->
 
     print(f"Downloaded the {filename} functional to {output_path}")
 
-    fun = TracedFunctional.load(output_path)
+    expected_hash = KNOWN_HASHES.get((huggingface_repo_id, filename))
+    fun = TracedFunctional.load(output_path, expected_hash=expected_hash)
 
     print("\nExpected inputs:")
     for feature in fun.features:

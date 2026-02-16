@@ -8,11 +8,13 @@ exchange-correlation functionals, including traditional functionals
 (LDA, PBE, TPSS) and the Skala neural functional.
 """
 
+import logging
 import os
 
 import torch
 from huggingface_hub import hf_hub_download
 
+from skala.functional._hashes import KNOWN_HASHES
 from skala.functional.base import ExcFunctionalBase
 from skala.functional.load import TracedFunctional
 from skala.functional.traditional import LDA, PBE, SPW92, TPSS
@@ -67,15 +69,22 @@ def load_functional(name: str, device: torch.device | None = None) -> ExcFunctio
     if func_name == "skala":
         env_path = os.environ.get("SKALA_LOCAL_MODEL_PATH")
         if env_path is not None:
+            logging.getLogger(__name__).warning(
+                "Loading model from SKALA_LOCAL_MODEL_PATH; "
+                "SHA-256 hash verification is disabled."
+            )
             path = env_path
+            expected_hash = None
         else:
             device_type = (
                 torch.get_default_device().type if device is None else device.type
             )
+            repo_id = "microsoft/skala"
             filename = "skala-1.0.fun" if device_type == "cpu" else "skala-1.0-cuda.fun"
-            path = hf_hub_download(repo_id="microsoft/skala", filename=filename)
+            path = hf_hub_download(repo_id=repo_id, filename=filename)
+            expected_hash = KNOWN_HASHES.get((repo_id, filename))
         with open(path, "rb") as fd:
-            return TracedFunctional.load(fd, device=device)
+            return TracedFunctional.load(fd, device=device, expected_hash=expected_hash)
     elif func_name == "lda":
         func = LDA()
     elif func_name == "spw92":

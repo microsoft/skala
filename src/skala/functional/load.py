@@ -4,6 +4,8 @@
 Tools to load functionals from serialized torchscript checkpoints.
 """
 
+import hashlib
+import io
 import json
 import os
 from collections.abc import Iterable, Mapping
@@ -77,7 +79,17 @@ class TracedFunctional(ExcFunctionalBase):
         cls,
         fp: str | bytes | os.PathLike[str] | IO[bytes],
         device: torch.device | None = None,
+        *,
+        expected_hash: str | None = None,
     ) -> "TracedFunctional":
+        """Load a traced functional from a file.
+
+        Args:
+            fp: File path or readable binary stream.
+            device: Target device for the loaded model.
+            expected_hash: If provided, the SHA-256 hex digest that the file
+                content must match. A ``ValueError`` is raised on mismatch.
+        """
         extra_files = {
             "metadata": b"",
             "features": b"",
@@ -87,6 +99,23 @@ class TracedFunctional(ExcFunctionalBase):
 
         if device is None:
             device = torch.get_default_device()
+
+        if expected_hash is not None:
+            # Read the whole file into memory so we can hash it before
+            # passing it to the unsafe torch.jit.load deserializer.
+            if isinstance(fp, (str, bytes, os.PathLike)):
+                with open(fp, "rb") as f:
+                    data = f.read()
+            else:
+                data = fp.read()
+            actual_hash = hashlib.sha256(data).hexdigest()
+            if actual_hash != expected_hash:
+                raise ValueError(
+                    f"Hash mismatch for functional file: "
+                    f"expected {expected_hash}, got {actual_hash}. "
+                    f"The file may have been tampered with."
+                )
+            fp = io.BytesIO(data)
 
         traced_model = torch.jit.load(fp, _extra_files=extra_files, map_location=device)
 
