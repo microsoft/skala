@@ -91,6 +91,16 @@ ks.kernel()
 
 Go to [microsoft.github.io/skala](https://microsoft.github.io/skala) for a more detailed installation guide and further examples of how to use the Skala functional with PySCF, GPU4PySCF and ASE and in [Azure AI Foundry](https://ai.azure.com/catalog/models/Skala).
 
+## Security: loading `.fun` files
+
+Skala model files (`.fun`) use TorchScript serialization, which can execute arbitrary code when loaded. **Never load `.fun` files from untrusted sources.**
+
+When loading the official Skala model via `load_functional("skala")`, file integrity is automatically verified against pinned SHA-256 hashes before deserialization. If you load `.fun` files directly with `TracedFunctional.load()`, pass the `expected_hash` parameter to enable verification:
+
+```python
+TracedFunctional.load("model.fun", expected_hash="<sha256-hex-digest>")
+```
+
 ## Project information
 
 See the following files for more information about contributing, reporting issues, and the code of conduct:
