@@ -8,7 +8,6 @@ dependencies:
   - cxx-compiler
   - cmake >=3.20,<4
   - ninja
-   # host/runtime requirements
-  - jonquil
+  # host/runtime requirements
   - pytorch >=2.0 cpu_*
 

@@ -1,10 +1,10 @@
 program main
+  use iso_c_binding, only : c_double
   use ftorch, only : torch_tensor
   use skala_ftorch, only : skala_model, skala_model_load, skala_feature, skala_tensor_load, &
     & skala_tensor_sum, skala_tensor_mean, skala_tensor_mul, skala_tensor_item_double, &
-    & skala_tensor_to_array, &
-    & skala_dict, skala_dict_new
-  use iso_c_binding, only : c_double
+    & skala_tensor_to_array, skala_dict, skala_dict_new
+
   implicit none
 
   type(skala_model) :: model
@@ -24,7 +24,7 @@ program main
   end block cli_input
   if (.not. allocated(path) .or. .not.allocated(feature_dir)) then
     call get_argument(0, path)
-    print '(a)', "Usage: ", path, " <model_path> <feature_dir>"
+    print '(a)', "Usage: "//path//" <model_path> <feature_dir>"
     stop 1
   end if
 
@@ -142,12 +142,12 @@ program main
   print '(a)', "[8] Accessing tensor data as Fortran arrays"
   array_access: block
   real(c_double), pointer :: arr1d(:), arr2d(:,:), arr3d(:,:,:)
-  integer :: i
 
   ! exc is 1-D (npts)
   call skala_tensor_to_array(exc, arr1d)
   print '(a, i0, a)', " -> exc: shape = (", size(arr1d), ")"
-  print '(a, 3es22.14, a)', "      [", arr1d(:3), " ...]"
+  print '(a, 3es22.14, a)', &
+    "      [", arr1d(:3), " ...]"
 
   ! density is 2-D (nspin, npts)
   if (model%needs_feature(skala_feature%density)) then
