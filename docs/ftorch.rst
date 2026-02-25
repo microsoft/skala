@@ -10,7 +10,7 @@ Setting up development environment
 
 For this example, we will be using mamba to manage our environment and dependencies.
 
-.. literalinclude:: ../examples/fortran/ftorch_integration/environment-cpu.yml
+.. literalinclude:: ../examples/fortran/ftorch_integration/environment.yml
    :language: yaml
    :caption: environment.yml
 
@@ -183,6 +183,21 @@ To evaluate Skala, we download the model checkpoint from HuggingFace using the `
 .. code-block:: shell
 
    hf download microsoft/skala skala-1.0.fun --local-dir .
+
+.. note::
+
+   To create the features directory run the ``prepare_inputs.py`` script from the ``examples/cpp/cpp_integration/`` directory.
+   This will generate the necessary input features for the H2 molecule with the def2-QZVP basis set.
+
+   .. code-block:: bash
+
+      python prepare_inputs.py --output_dir features --molecule H2 --basis def2-QZVP
+
+   The script needs the ``skala`` package installed in your Python environment, which can be done via pip:
+
+   .. code-block:: bash
+
+      pip install skala
 
 And run the application, passing the path to the Skala model and the feature directory as command line arguments.
 

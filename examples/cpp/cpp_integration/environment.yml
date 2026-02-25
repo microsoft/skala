@@ -8,5 +8,4 @@ dependencies:
 - nlohmann_json
 - libtorch
 - pytorch  # Only required to produce example features.
-- pip:
-  - microsoft-skala
+- skala

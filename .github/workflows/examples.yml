@@ -10,7 +10,59 @@ permissions:
   contents: read
 
 jobs:
+  skala-checkpoint:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Setup Python
+      uses: actions/setup-python@v6
+      with:
+        version: "3.x"
+
+    - name: Install huggingface_hub CLI
+      run: pip install huggingface_hub
+
+    - name: Download checkpoint
+      run: >-
+         hf download microsoft/skala skala-1.0.fun --local-dir .
+
+    - name: Upload checkpoint
+      uses: actions/upload-artifact@v4
+      with:
+        name: skala-checkpoint
+        path: skala-1.0.fun
+
+  pt-features:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup micromamba
+      uses: mamba-org/setup-micromamba@v1
+      with:
+        environment-file: environment-cpu.yml
+        environment-name: skala-dev
+        cache-environment: true
+        cache-downloads: true
+
+    - name: Install Skala
+      run: pip install -e .
+      shell: micromamba-shell {0}
+
+    - name: Generate features
+      run: >-
+        python examples/cpp/cpp_integration/prepare_inputs.py
+        --output-dir features
+      shell: micromamba-shell {0}
+
+    - name: Upload features
+      uses: actions/upload-artifact@v4
+      with:
+        name: pt-features
+        path: features
+
   gauxc:
+    needs:
+      - skala-checkpoint
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -90,4 +142,69 @@ jobs:
          Skala
          ./gauxc/tests/ref_data/onedft_he_def2qzvp_tpss_uks.hdf5
          --model TPSS
+      shell: micromamba-shell {0}
+
+    - name: Download checkpoint
+      uses: actions/download-artifact@v5
+      with:
+        name: skala-checkpoint
+
+    - name: Run example
+      run: >-
+         Skala
+         ./gauxc/tests/ref_data/onedft_he_def2qzvp_tpss_uks.hdf5
+         --model ./skala-1.0.fun
+      shell: micromamba-shell {0}
+
+  ftorch:
+    runs-on: ubuntu-latest
+    needs:
+      - pt-features
+      - skala-checkpoint
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup micromamba
+      uses: mamba-org/setup-micromamba@v1
+      with:
+        environment-file: examples/fortran/ftorch_integration/environment.yml
+        environment-name: ftorch-dev
+        cache-environment: true
+        cache-downloads: true
+
+    - name: Configure project
+      run: >-
+        cmake
+        -B build_example
+        -S examples/fortran/ftorch_integration
+        -G Ninja
+        -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX
+      shell: micromamba-shell {0}
+
+    - name: Build project
+      run: cmake --build build_example
+      shell: micromamba-shell {0}
+
+    - name: Install project
+      run: cmake --install build_example
+      shell: micromamba-shell {0}
+
+    - name: Download features
+      uses: actions/download-artifact@v5
+      with:
+        name: pt-features
+        path: features
+
+    - name: Download checkpoint
+      uses: actions/download-artifact@v5
+      with:
+        name: skala-checkpoint
+        path: .
+
+    - name: Run example
+      run: >-
+         Skala
+         ./skala-1.0.fun
+         ./features
       shell: micromamba-shell {0}

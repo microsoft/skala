@@ -9,5 +9,6 @@ dependencies:
   - cmake >=3.20,<4
   - ninja
   # host/runtime requirements
+  - huggingface_hub
   - pytorch >=2.0 cpu_*
 
