@@ -10,7 +10,6 @@ list(PREPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 
 include(skala-dep-versions)
 include(skala-ftorch)
-include(skala-flap)
 find_package(Torch REQUIRED)
 
 add_executable(
@@ -22,7 +21,6 @@ add_executable(
 target_link_libraries(
   ${PROJECT_NAME}
   FTorch::ftorch
-  FLAP::FLAP
   ${TORCH_LIBRARIES}
 )
 

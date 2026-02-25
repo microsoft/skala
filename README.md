@@ -16,7 +16,12 @@ Learn more about Skala in our [ArXiv paper](https://arxiv.org/abs/2506.14665).
 This repository contains two main components:
 
 1. The Python package `skala`, which is also distributed [on PyPI](https://pypi.org/project/skala/) and contains a PyTorch implementation of the Skala model, its hookups to quantum chemistry packages [PySCF](https://pyscf.org/), [GPU4PySCF](https://pyscf.org/user/gpu.html) and [ASE](https://ase-lib.org/).
-2. An example of using Skala in C++ CPU applications through LibTorch, see [`examples/cpp/cpp_integration`](examples/cpp/cpp_integration).
+2. Example of using Skala applications through LibTorch and GauXC, the following examples are available
+   - [Skala in C++ with libtorch](examples/cpp/cpp_integration)
+   - [Skala in Fortran with FTorch](https://microsoft.github.io/skala/ftorch)
+   - [Skala in C++ with GauXC](https://microsoft.github.io/skala/gauxc/cpp-library)
+   - [Skala in C with GauXC](https://microsoft.github.io/skala/gauxc/c-library)
+   - [Skala in Fortran with GauXC](https://microsoft.github.io/skala/gauxc/fortran-library)
 
 
 ### Skala in Azure AI Foundry

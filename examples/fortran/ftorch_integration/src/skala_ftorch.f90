@@ -1,11 +1,21 @@
 module skala_ftorch
-  use iso_c_binding, only : c_ptr, c_char, c_int, c_size_t, c_bool, c_null_ptr, c_null_char, c_double
+  use iso_c_binding, only : c_ptr, c_char, c_int, c_int64_t, c_size_t, c_bool, &
+    & c_null_ptr, c_null_char, c_double, c_f_pointer
   use ftorch, only : torch_model, torch_model_delete, torch_tensor
   implicit none
   private
 
   public :: skala_model, skala_model_load, skala_feature, skala_tensor_load, &
-    & skala_tensor_sum, skala_tensor_item_double, skala_dict, skala_dict_new
+    & skala_tensor_sum, skala_tensor_mean, skala_tensor_mul, skala_tensor_item_double, &
+    & skala_tensor_to_array, &
+    & skala_tensor_numel, skala_tensor_ndim, skala_tensor_size, &
+    & skala_dict, skala_dict_new
+
+  interface skala_tensor_to_array
+    module procedure skala_tensor_to_array_1d
+    module procedure skala_tensor_to_array_2d
+    module procedure skala_tensor_to_array_3d
+  end interface skala_tensor_to_array
 
   type :: skala_feature_enum
     integer :: density = 1
@@ -112,6 +122,148 @@ contains
 
     value = skala_tensor_item_double_c(tensor%p)
   end function skala_tensor_item_double
+
+  subroutine skala_tensor_mul(a, b, result)
+    type(torch_tensor), intent(in) :: a, b
+    type(torch_tensor), intent(out) :: result
+
+    interface
+      function skala_tensor_mul_c(a, b) result(r) bind(c, name="skala_tensor_mul")
+        import :: c_ptr
+        type(c_ptr), value :: a, b
+        type(c_ptr) :: r
+      end function skala_tensor_mul_c
+    end interface
+
+    result%p = skala_tensor_mul_c(a%p, b%p)
+  end subroutine skala_tensor_mul
+
+  subroutine skala_tensor_mean(tensor, mean)
+    type(torch_tensor), intent(in) :: tensor
+    type(torch_tensor), intent(out) :: mean
+
+    interface
+      function skala_tensor_mean_c(tensor) result(mean) bind(c, name="skala_tensor_mean")
+        import :: c_ptr
+        type(c_ptr), value :: tensor
+        type(c_ptr) :: mean
+      end function skala_tensor_mean_c
+    end interface
+
+    mean%p = skala_tensor_mean_c(tensor%p)
+  end subroutine skala_tensor_mean
+
+  function skala_tensor_numel(tensor) result(n)
+    type(torch_tensor), intent(in) :: tensor
+    integer(c_int64_t) :: n
+
+    interface
+      function skala_tensor_numel_c(tensor) result(n) bind(c, name="skala_tensor_numel")
+        import :: c_ptr, c_int64_t
+        type(c_ptr), value :: tensor
+        integer(c_int64_t) :: n
+      end function skala_tensor_numel_c
+    end interface
+
+    n = skala_tensor_numel_c(tensor%p)
+  end function skala_tensor_numel
+
+  function skala_tensor_ndim(tensor) result(n)
+    type(torch_tensor), intent(in) :: tensor
+    integer(c_int64_t) :: n
+
+    interface
+      function skala_tensor_ndim_c(tensor) result(n) bind(c, name="skala_tensor_ndim")
+        import :: c_ptr, c_int64_t
+        type(c_ptr), value :: tensor
+        integer(c_int64_t) :: n
+      end function skala_tensor_ndim_c
+    end interface
+
+    n = skala_tensor_ndim_c(tensor%p)
+  end function skala_tensor_ndim
+
+  function skala_tensor_size(tensor, dim) result(n)
+    type(torch_tensor), intent(in) :: tensor
+    integer, intent(in) :: dim
+    integer(c_int64_t) :: n
+
+    interface
+      function skala_tensor_size_c(tensor, dim) result(n) bind(c, name="skala_tensor_size")
+        import :: c_ptr, c_int64_t
+        type(c_ptr), value :: tensor
+        integer(c_int64_t), value :: dim
+        integer(c_int64_t) :: n
+      end function skala_tensor_size_c
+    end interface
+
+    n = skala_tensor_size_c(tensor%p, int(dim, c_int64_t))
+  end function skala_tensor_size
+
+  subroutine skala_tensor_to_array_1d(tensor, array)
+    type(torch_tensor), intent(in) :: tensor
+    real(c_double), pointer, intent(out) :: array(:)
+
+    interface
+      function skala_tensor_data_ptr_c(tensor) result(ptr) bind(c, name="skala_tensor_data_ptr")
+        import :: c_ptr
+        type(c_ptr), value :: tensor
+        type(c_ptr) :: ptr
+      end function skala_tensor_data_ptr_c
+    end interface
+
+    type(c_ptr) :: data_ptr
+    integer(c_int64_t) :: n
+
+    n = skala_tensor_numel(tensor)
+    data_ptr = skala_tensor_data_ptr_c(tensor%p)
+    call c_f_pointer(data_ptr, array, [n])
+  end subroutine skala_tensor_to_array_1d
+
+  subroutine skala_tensor_to_array_2d(tensor, array)
+    type(torch_tensor), intent(in) :: tensor
+    real(c_double), pointer, intent(out) :: array(:,:)
+
+    interface
+      function skala_tensor_data_ptr_c(tensor) result(ptr) bind(c, name="skala_tensor_data_ptr")
+        import :: c_ptr
+        type(c_ptr), value :: tensor
+        type(c_ptr) :: ptr
+      end function skala_tensor_data_ptr_c
+    end interface
+
+    type(c_ptr) :: data_ptr
+    integer(c_int64_t) :: nrow, ncol
+
+    ! C is row-major, Fortran is column-major: swap dimensions
+    nrow = skala_tensor_size(tensor, 1)
+    ncol = skala_tensor_size(tensor, 0)
+    data_ptr = skala_tensor_data_ptr_c(tensor%p)
+    call c_f_pointer(data_ptr, array, [nrow, ncol])
+  end subroutine skala_tensor_to_array_2d
+
+  subroutine skala_tensor_to_array_3d(tensor, array)
+    type(torch_tensor), intent(in) :: tensor
+    real(c_double), pointer, intent(out) :: array(:,:,:)
+
+    interface
+      function skala_tensor_data_ptr_c(tensor) result(ptr) bind(c, name="skala_tensor_data_ptr")
+        import :: c_ptr
+        type(c_ptr), value :: tensor
+        type(c_ptr) :: ptr
+      end function skala_tensor_data_ptr_c
+    end interface
+
+    type(c_ptr) :: data_ptr
+    integer(c_int64_t) :: n0, n1, n2
+
+    ! C is row-major, Fortran is column-major: reverse dimension order
+    n0 = skala_tensor_size(tensor, 2)
+    n1 = skala_tensor_size(tensor, 1)
+    n2 = skala_tensor_size(tensor, 0)
+    data_ptr = skala_tensor_data_ptr_c(tensor%p)
+    call c_f_pointer(data_ptr, array, [n0, n1, n2])
+  end subroutine skala_tensor_to_array_3d
 
   subroutine skala_model_get_exc(model, input, exc)
     class(skala_model), intent(inout) :: model

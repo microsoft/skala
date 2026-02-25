@@ -259,6 +259,60 @@ skala_list_at(skala_list_t input, size_t index)
 }
 
 extern "C"
+torch_tensor_t
+skala_tensor_mul(const torch_tensor_t a, const torch_tensor_t b)
+{
+  auto ta = reinterpret_cast<torch::Tensor *>(a);
+  auto tb = reinterpret_cast<torch::Tensor *>(b);
+  auto result = (*ta) * (*tb);
+  return new torch::Tensor(std::move(result));
+}
+
+extern "C"
+torch_tensor_t
+skala_tensor_mean(const torch_tensor_t tensor)
+{
+  auto t = reinterpret_cast<torch::Tensor *>(tensor);
+  auto m = t->mean();
+  return new torch::Tensor(std::move(m));
+}
+
+extern "C"
+void*
+skala_tensor_data_ptr(const torch_tensor_t tensor)
+{
+  auto t = reinterpret_cast<torch::Tensor *>(tensor);
+  auto contiguous = t->contiguous().to(torch::kFloat64);
+  // Replace the tensor in-place so the pointer stays valid
+  *t = contiguous;
+  return t->data_ptr();
+}
+
+extern "C"
+int64_t
+skala_tensor_ndim(const torch_tensor_t tensor)
+{
+  auto t = reinterpret_cast<torch::Tensor *>(tensor);
+  return t->ndimension();
+}
+
+extern "C"
+int64_t
+skala_tensor_size(const torch_tensor_t tensor, int64_t dim)
+{
+  auto t = reinterpret_cast<torch::Tensor *>(tensor);
+  return t->size(dim);
+}
+
+extern "C"
+int64_t
+skala_tensor_numel(const torch_tensor_t tensor)
+{
+  auto t = reinterpret_cast<torch::Tensor *>(tensor);
+  return t->numel();
+}
+
+extern "C"
 void
 skala_dict_delete(skala_dict_t input)
 {

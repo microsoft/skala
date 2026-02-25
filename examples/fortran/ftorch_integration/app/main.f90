@@ -1,40 +1,30 @@
 program main
-  use ftorch, only : torch_tensor, torch_tensor_print, operator(*)
+  use ftorch, only : torch_tensor
   use skala_ftorch, only : skala_model, skala_model_load, skala_feature, skala_tensor_load, &
-    & skala_tensor_sum, skala_tensor_item_double, skala_dict, skala_dict_new
-  use flap, only : command_line_interface
+    & skala_tensor_sum, skala_tensor_mean, skala_tensor_mul, skala_tensor_item_double, &
+    & skala_tensor_to_array, &
+    & skala_dict, skala_dict_new
+  use iso_c_binding, only : c_double
   implicit none
 
   type(skala_model) :: model
   type(skala_dict) :: input, vxc
-  type(torch_tensor) :: exc, exc_sum
+  type(torch_tensor) :: exc
   type(torch_tensor) :: density, grad, kin, grid_coords, grid_weights, coarse_0_atomic_coords
   type(torch_tensor) :: dexc_ddensity, dexc_dgrad, dexc_dkin, dexc_dgrid_coords, &
     & dexc_dgrid_weights, dexc_dcoarse_0_atomic_coords, vxc_norm
 
-  type(command_line_interface) :: cli
-
   character(len=:), allocatable :: path, feature_dir
-  integer :: error
 
   cli_input: block
-  character(len=512) :: dummy
-  call cli%init(description="Test Skala model inference from Fortran")
-  call cli%add(position=1, required=.true., act="store", error=error, positional=.true.)
-  if (error /= 0) exit cli_input
-  call cli%add(position=2, required=.true., act="store", error=error, positional=.true.)
-  if (error /= 0) exit cli_input
-  call cli%parse(error=error)
-  if (error /= 0) exit cli_input
-  call cli%get(position=1, val=dummy, error=error)
-  if (error /= 0) exit cli_input
-  path = trim(dummy)
-  call cli%get(position=2, val=dummy, error=error)
-  if (error /= 0) exit cli_input
-  feature_dir = trim(dummy)
+  call get_argument(1, path)
+  if (.not. allocated(path)) exit cli_input
+  call get_argument(2, feature_dir)
+  if (.not. allocated(feature_dir)) exit cli_input
   end block cli_input
-  if (error /= 0) then
-    print '(a)', cli%error_message
+  if (.not. allocated(path) .or. .not.allocated(feature_dir)) then
+    call get_argument(0, path)
+    print '(a)', "Usage: ", path, " <model_path> <feature_dir>"
     stop 1
   end if
 
@@ -89,7 +79,16 @@ program main
   print '(a)', "[4] Running model inference"
   call model%get_exc_and_vxc(input, exc, vxc)
 
-  print '(a)', "[5] Extracting vxc components"
+  ! Print the exchange-correlation energy
+  print '(a)', "[5] Computing XC energy = sum(exc * grid_weights)"
+  exc_weighted: block
+  type(torch_tensor) :: weighted, weighted_sum
+  call skala_tensor_mul(exc, grid_weights, weighted)
+  call skala_tensor_sum(weighted, weighted_sum)
+  print '(a, es22.14)', " -> E_xc = ", skala_tensor_item_double(weighted_sum)
+  end block exc_weighted
+
+  print '(a)', "[6] Extracting vxc components"
   if (model%needs_feature(skala_feature%density)) &
     call vxc%at(skala_feature%density, dexc_ddensity)
   if (model%needs_feature(skala_feature%grad)) &
@@ -102,4 +101,132 @@ program main
     call vxc%at(skala_feature%grid_weights, dexc_dgrid_weights)
   if (model%needs_feature(skala_feature%coarse_0_atomic_coords)) &
     call vxc%at(skala_feature%coarse_0_atomic_coords, dexc_dcoarse_0_atomic_coords)
+
+  ! Print mean of each gradient component
+  print '(a)', "[7] Gradient means (dexc/dx)"
+  print_gradients: block
+  type(torch_tensor) :: grad_mean
+  if (model%needs_feature(skala_feature%density)) then
+    call skala_tensor_mean(dexc_ddensity, grad_mean)
+    print '(a, es22.14)', " -> mean(dexc/d_density)                = ", &
+      skala_tensor_item_double(grad_mean)
+  end if
+  if (model%needs_feature(skala_feature%grad)) then
+    call skala_tensor_mean(dexc_dgrad, grad_mean)
+    print '(a, es22.14)', " -> mean(dexc/d_grad)                   = ", &
+      skala_tensor_item_double(grad_mean)
+  end if
+  if (model%needs_feature(skala_feature%kin)) then
+    call skala_tensor_mean(dexc_dkin, grad_mean)
+    print '(a, es22.14)', " -> mean(dexc/d_kin)                    = ", &
+      skala_tensor_item_double(grad_mean)
+  end if
+  if (model%needs_feature(skala_feature%grid_coords)) then
+    call skala_tensor_mean(dexc_dgrid_coords, grad_mean)
+    print '(a, es22.14)', " -> mean(dexc/d_grid_coords)            = ", &
+      skala_tensor_item_double(grad_mean)
+  end if
+  if (model%needs_feature(skala_feature%grid_weights)) then
+    call skala_tensor_mean(dexc_dgrid_weights, grad_mean)
+    print '(a, es22.14)', " -> mean(dexc/d_grid_weights)           = ", &
+      skala_tensor_item_double(grad_mean)
+  end if
+  if (model%needs_feature(skala_feature%coarse_0_atomic_coords)) then
+    call skala_tensor_mean(dexc_dcoarse_0_atomic_coords, grad_mean)
+    print '(a, es22.14)', " -> mean(dexc/d_coarse_0_atomic_coords) = ", &
+      skala_tensor_item_double(grad_mean)
+  end if
+  end block print_gradients
+
+  ! Demonstrate direct Fortran array access to tensor data
+  print '(a)', "[8] Accessing tensor data as Fortran arrays"
+  array_access: block
+  real(c_double), pointer :: arr1d(:), arr2d(:,:), arr3d(:,:,:)
+  integer :: i
+
+  ! exc is 1-D (npts)
+  call skala_tensor_to_array(exc, arr1d)
+  print '(a, i0, a)', " -> exc: shape = (", size(arr1d), ")"
+  print '(a, 3es22.14, a)', "      [", arr1d(:3), " ...]"
+
+  ! density is 2-D (nspin, npts)
+  if (model%needs_feature(skala_feature%density)) then
+    call skala_tensor_to_array(dexc_ddensity, arr2d)
+    print '(a, i0, a, i0, a)', " -> dexc/d_density: shape = (", &
+      size(arr2d, 1), ", ", size(arr2d, 2), ")"
+    print '(a, 3es22.14, a)', &
+      "     [[", arr2d(:3, 1), " ...]", &
+      "      [", arr2d(:3, 2), " ...]]"
+  end if
+
+  ! grad is 3-D (nspin, 3, npts)
+  if (model%needs_feature(skala_feature%grad)) then
+    call skala_tensor_to_array(dexc_dgrad, arr3d)
+    print '(a, i0, a, i0, a, i0, a)', " -> dexc/d_grad: shape = (", &
+      size(arr3d, 1), ", ", size(arr3d, 2), ", ", size(arr3d, 3), ")"
+    print '(a, 3es22.14, a)', &
+      "    [[[", arr3d(:3, 1, 1), " ...]", &
+      "      [", arr3d(:3, 2, 1), " ...]]", &
+      "     [[  ...                    ]]]"
+  end if
+
+  ! kin is 2-D (nspin, npts)
+  if (model%needs_feature(skala_feature%kin)) then
+    call skala_tensor_to_array(dexc_dkin, arr2d)
+    print '(a, i0, a, i0, a)', " -> dexc/d_kin: shape = (", &
+      size(arr2d, 1), ", ", size(arr2d, 2), ")"
+    print '(a, 3es22.14, a)', &
+      "     [[", arr2d(:3, 1), " ...]", &
+      "      [", arr2d(:3, 2), " ...]]"
+  end if
+
+  ! grid_coords is 2-D (npts, 3)
+  if (model%needs_feature(skala_feature%grid_coords)) then
+    call skala_tensor_to_array(dexc_dgrid_coords, arr2d)
+    print '(a, i0, a, i0, a)', " -> dexc/d_grid_coords: shape = (", &
+      size(arr2d, 1), ", ", size(arr2d, 2), ")"
+    print '(a, 3es22.14, a)', &
+      "     [[", arr2d(:3, 1), " ...]", &
+      "      [", arr2d(:3, 2), " ...]]"
+  end if
+
+  ! grid_weights is 1-D (npts)
+  if (model%needs_feature(skala_feature%grid_weights)) then
+    call skala_tensor_to_array(dexc_dgrid_weights, arr1d)
+    print '(a, i0, a)', " -> dexc/d_grid_weights: shape = (", size(arr1d), ")"
+    print '(a, 3es22.14, a)', &
+      "      [", arr1d(:3), " ...]"
+  end if
+
+  ! coarse_0_atomic_coords is 2-D (natoms, 3)
+  if (model%needs_feature(skala_feature%coarse_0_atomic_coords)) then
+    call skala_tensor_to_array(dexc_dcoarse_0_atomic_coords, arr2d)
+    print '(a, i0, a, i0, a)', " -> dexc/d_coarse_0_atomic_coords: shape = (", &
+      size(arr2d, 1), ", ", size(arr2d, 2), ")"
+    print '(a, 3es22.14, a)', &
+      "     [[", arr2d(:3, 1), "]", "      [  ...]]"
+  end if
+  end block array_access
+
+contains
+  subroutine get_argument(idx, arg)
+    integer, intent(in) :: idx
+    character(len=:), allocatable, intent(out) :: arg
+
+    integer :: length, stat
+
+    call get_command_argument(idx, length=length, status=stat)
+    if (stat /= 0) return
+
+    allocate(character(len=length) :: arg, stat=stat)
+    if (stat /= 0) return
+
+    if (length > 0) then
+      call get_command_argument(idx, arg, status=stat)
+      if (stat /= 0) then
+        deallocate(arg)
+        return
+      end if
+    end if
+  end subroutine get_argument
 end program main

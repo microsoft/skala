@@ -26,6 +26,7 @@ Please stay tuned for updates and new releases.
    pyscf/singlepoint
    pyscf/scf_settings
    ase
+   ftorch
    foundry
    gauxc/index
 
