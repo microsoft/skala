@@ -10,4 +10,5 @@ The API includes C++ class definitions, C bindings, and Fortran bindings for var
    macros
    molecule
    basis
+   molgrid
    cmake
