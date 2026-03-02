@@ -1,6 +1,133 @@
 Exchange-correlation integrator
 ===============================
 
+C++ definitions
+---------------
+
+.. cpp:class:: template <typename MatrixType> GauXC::XCIntegrator
+
+   .. cpp:type:: matrix_type = MatrixType
+
+      The type of matrix data expected by the integrator kernels.
+
+   .. cpp:type:: value_type = matrix_type::value_type
+
+      The scalar value type corresponding to the matrix type.
+
+   .. cpp:function:: value_type integrate_den(const MatrixType& density_matrix) const
+
+      Compute the total density to get the number of electrons.
+
+      :param density_matrix: The input density matrix data.
+      :returns: The computed total density.
+
+   .. cpp:function:: value_type eval_exc(const MatrixType& density_matrix) const
+
+      Compute the exchange-correlation energy for a given density matrix.
+
+      :param density_matrix: The input density matrix data.
+      :returns: The computed exchange-correlation energy.
+
+   .. cpp:function:: value_type eval_exc(const MatrixType& density_matrix_s, const MatrixType& density_matrix_z) const
+
+      Compute the exchange-correlation energy for a given density matrix.
+
+      :param density_matrix_s: The input density matrix data for the spin-up component.
+      :param density_matrix_z: The input density matrix data for the spin-down component.
+      :returns: The computed exchange-correlation energy.
+
+   .. cpp:function:: value_type eval_exc(const MatrixType& density_matrix_s, const MatrixType& density_matrix_z, const MatrixType& density_matrix_y, const MatrixType& density_matrix_x) const
+
+      Compute the exchange-correlation energy for a given density matrix.
+
+      :param density_matrix_s: The input density matrix data for the spin-up component.
+      :param density_matrix_z: The input density matrix data for the spin-down component.
+      :param density_matrix_y: The input density matrix data for the spin-y component.
+      :param density_matrix_x: The input density matrix data for the spin-x component.
+      :returns: The computed exchange-correlation energy.
+
+   .. cpp:function:: std::tuple<value_type, matrix_type> eval_exc_vxc(const MatrixType& density_matrix)
+
+      Compute the exchange-correlation energy and potential for a given density matrix.
+
+      :param density_matrix: The input density matrix data.
+      :returns: The computed exchange-correlation energy and the computed exchange-correlation potential matrix.
+
+   .. cpp:function:: std::tuple<value_type, matrix_type, matrix_type> eval_exc_vxc(const MatrixType& density_matrix_s, const MatrixType& density_matrix_z)
+
+      Compute the exchange-correlation energy and potential for a given density matrix.
+
+      :param density_matrix_s: The input density matrix data for the spin-up component.
+      :param density_matrix_z: The input density matrix data for the spin-down component.
+      :returns: The computed exchange-correlation energy and the computed exchange-correlation potential matrices for the total and spin-polarization components.
+
+   .. cpp:function:: std::tuple<value_type, matrix_type, matrix_type> eval_exc_vxc_onedft(const MatrixType& density_matrix_s, const MatrixType& density_matrix_z, const OneDFTSettings settings)
+
+       Compute the exchange-correlation energy and potential for a given density matrix.
+
+       .. important::
+
+          This function is available if :c:macro:`GAUXC_HAS_ONEDFT` is defined or the CMake option :cmake:variable:`GAUXC_ENABLE_ONEDFT` is enabled.
+          It requires a compatible checkpoint for the Skala implementation of the functional, which can be specified with the ``settings`` parameter.
+
+       :param density_matrix_s: The input density matrix data for the spin-up component.
+       :param density_matrix_z: The input density matrix data for the spin-down component.
+       :param settings: The OneDFTSettings struct containing parameters for the Skala evaluation.
+       :returns: The computed exchange-correlation energy and the computed exchange-correlation potential matrices for the total and spin-polarization components.
+
+   .. cpp:function:: std::tuple<value_type, matrix_type, matrix_type, matrix_type, matrix_type> eval_exc_vxc(const MatrixType& density_matrix_s, const MatrixType& density_matrix_z, const MatrixType& density_matrix_y, const MatrixType& density_matrix_x)
+
+      Compute the exchange-correlation energy and potential for a given density matrix.
+
+      :param density_matrix_s: The input density matrix data for the spin-up component.
+      :param density_matrix_z: The input density matrix data for the spin-down component.
+      :param density_matrix_y: The input density matrix data for the spin-y component.
+      :param density_matrix_x: The input density matrix data for the spin-x component.
+      :returns: The computed exchange-correlation energy and the computed exchange-correlation potential matrices for the total and spin-polarization components.
+
+.. cpp:class:: GauXC::XCIntegratorFactory
+
+   A factory class for creating instances of the XCIntegrator class based on specified parameters.
+
+   .. cpp:function:: XCIntegratorFactory(ExecutionSpace ex, std::string integrator_input_type, std::string integrator_kernel_name, std::string local_work_kernel_name, std::string reduction_kernel_name)
+
+      Create a new XCIntegratorFactory instance with the specified execution space and kernel names.
+
+      :param ex: The execution space for which to create integrators.
+      :param integrator_input_type: The type of input data expected by the integrator kernels.
+      :param integrator_kernel_name: The name of the kernel to use for the main integration step.
+      :param local_work_kernel_name: The name of the kernel to use for computing local work sizes.
+      :param reduction_kernel_name: The name of the kernel to use for reduction operations.
+
+   .. cpp:function:: XCIntegrator get_instance(const ExchCXX::Functional& func, const LoadBalancer& lb)
+
+      Get an instance of the XCIntegrator class for the specified functional and load balancer.
+
+      :param func: The exchange-correlation functional for which to get the integrator instance.
+      :param lb: The load balancer to use for the integrator instance.
+      :returns: An instance of the XCIntegrator class initialized with the specified parameters.
+
+   .. cpp:function:: std::shared_ptr<XCIntegrator> get_shared_instance(const ExchCXX::Functional& func, const LoadBalancer& lb)
+
+      Get a shared pointer to an instance of the XCIntegrator class for the specified functional and load balancer.
+
+      :param func: The exchange-correlation functional for which to get the integrator instance.
+      :param lb: The load balancer to use for the integrator instance.
+      :returns: A shared pointer to an instance of the XCIntegrator class initialized with the specified parameters.
+
+.. cpp:struct:: GauXC::OneDFTSettings
+
+   A struct containing settings for the Skala implementation of the exchange-correlation functional.
+
+   .. cpp:member:: model
+
+      The model checkpoint to use for evaluating the exchange-correlation energy and potential with the Skala implementation.
+
+.. cpp:class:: ExchCXX::Functional
+
+   A class representing an exchange-correlation functional in the ExchCXX library, which can be used with GauXC integrators.
+
+
 C bindings
 ----------
 
@@ -168,6 +295,10 @@ C bindings
       :param status: Pointer to a GauXCStatus struct where the status of the operation will be stored.
       :param integrator: Pointer to the GauXCIntegrator instance to be deleted.
 
+.. c:struct:: GauXCFunctional
+
+   Opaque type representing an exchange-correlation functional in the GauXC C API, which can be used with GauXC integrators.
+
 
 Fortran bindings
 ----------------
@@ -300,3 +431,8 @@ Fortran bindings
       :param real(c_double) vxc_matrix_y [dimension(:,:)]: Output array where the computed exchange-correlation potential matrix for the spin-y component will be stored.
       :param real(c_double) vxc_matrix_x [dimension(:,:)]: Output array where the computed exchange-correlation potential matrix for the spin-x component will be stored.
 
+.. f:currentmodule:: gauxc_xc_functional
+
+.. f:type:: gauxc_functional_type
+
+   Opaque type representing an exchange-correlation functional in the GauXC Fortran API, which can be used with GauXC integrators.
