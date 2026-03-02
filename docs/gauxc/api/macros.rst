@@ -3,6 +3,11 @@ Macro definitions
 
 GauXC provides a number of compile-time macros to indicate available features and configuration options.
 
+.. c:macro:: GAUXC_HAS_ONEDFT
+
+   Defines whether Skala support is available in this build of GauXC.
+   Enabled with :cmake:variable:`GAUXC_ENABLE_ONEDFT` CMake option.
+
 .. c:macro:: GAUXC_HAS_C
 
    Defines whether C bindings are available in this build of GauXC.

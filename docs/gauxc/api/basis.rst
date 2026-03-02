@@ -319,6 +319,14 @@ Fortran bindings
       :param logical(c_bool) normalize: Whether to normalize the primitives in the shells when creating the basis set.
       :returns type(gauxc_basisset_type): A new gauxc_basisset_type object initialized with the given shells.
 
+   .. f:function:: gauxc_basisset_delete(status, basis)
+
+      Delete a gauxc_basisset_type object and free its associated memory.
+      Part of the :f:func:`gauxc_delete` interface.
+
+      :param type(gauxc_status_type) status: A variable to store the status of the operation.
+      :param type(gauxc_basisset_type) basis: The gauxc_basisset_type object to be deleted.
+
 .. f:currentmodule:: gauxc_shell
 
 .. f:type:: gauxc_shell_type

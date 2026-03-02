@@ -248,6 +248,14 @@ Fortran bindings
       :param integer(c_int) grid_size: The default atomic grid size to use for the atomic grids.
       :returns type(gauxc_molgrid_type): A new gauxc_molgrid_type object initialized with the specified parameters for the given molecule.
 
+   .. f:function:: subroutine gauxc_molgrid_delete(status, molgrid)
+
+      Delete a gauxc_molgrid_type object and free its resources.
+      Part of the :f:func:`gauxc_delete` interface.
+
+      :param type(gauxc_status_type) status: Output parameter to store the status of the operation.
+      :param type(gauxc_molgrid_type) molgrid: The gauxc_molgrid_type object to delete.
+
 .. f:currentmodule:: gauxc_enums
 
 .. f:type:: gauxc_radialquad

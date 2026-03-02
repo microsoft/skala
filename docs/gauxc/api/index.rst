@@ -7,8 +7,13 @@ The API includes C++ class definitions, C bindings, and Fortran bindings for var
 .. toctree::
    :maxdepth: 2
 
-   macros
    molecule
    basis
    molgrid
+   runtime_environment
+   load_balancer
+   molecular_weights
+   xc_integrator
+   macros
+   exceptions
    cmake

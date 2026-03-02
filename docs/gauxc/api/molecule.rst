@@ -150,6 +150,14 @@ Fortran bindings
       :param integer(c_int64_t) natoms: The number of atoms in the molecule.
       :returns type(gauxc_molecule_type): A new gauxc_molecule_type object initialized with the given atoms.
 
+   .. f:function:: gauxc_molecule_delete(status, molecule)
+
+      Delete a gauxc_molecule_type object.
+      Part of the :f:func:`gauxc_delete` interface.
+
+      :param type(gauxc_status_type) status: A variable to store the status of the operation.
+      :param type(gauxc_molecule_type) molecule: The gauxc_molecule_type object to be deleted.
+
 .. f:currentmodule:: gauxc_atom
 
 .. f:type:: gauxc_atom_type
