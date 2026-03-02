@@ -1,3 +1,5 @@
+.. _gauxc-cpp-library:
+
 GauXC in C++
 ============
 
@@ -224,7 +226,7 @@ For reading the molecule we will use GauXC's built-in functionality to read from
 
    This allows to directly map the object's representation to an HDF5 dataset.
 
-We use ``GauXC::read_hdf5_record`` function which implements the reading of the molecule data.
+We use :cpp:func:`void GauXC::read_hdf5_record(Molecule&,string,string)` function which implements the reading of the molecule data.
 
 .. literalinclude:: ../../examples/cpp/gauxc_integration/app/main.cxx
    :language: c++
@@ -267,7 +269,7 @@ For the basis set we will use the same approach as for the molecule and use GauX
 
    Again, this allows to directly map the object's representation to an HDF5 dataset.
 
-With GauXC's ``GauXC::read_hdf5_record`` function we can read the basis set data conveniently from the HDF5 file.
+With GauXC's :cpp:func:`void GauXC::read_hdf5_record(BasisSet&,string,string)` function we can read the basis set data conveniently from the HDF5 file.
 Additionally, we are setting the basis set tolerance on the loaded basis set data, which will be taken from our input variables, by default we use a tolerance of 1e-10.
 The basis set tolerance will be used for screening small contributions during the evaluation of the density on the grid points.
 

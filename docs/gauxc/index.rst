@@ -15,3 +15,4 @@ The following sections provide instructions on how to install GauXC with Skala s
    c-library
    fortran-library
    settings
+   api/index

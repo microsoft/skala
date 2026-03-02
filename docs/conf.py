@@ -10,6 +10,8 @@ extensions = [
     "sphinx_design",
     "sphinx.ext.autodoc",
     "sphinxcontrib.bibtex",
+    "sphinxcontrib.moderncmakedomain",
+    "sphinxfortran.fortran_domain",
 ]
 
 nb_execution_timeout = 300  # 5 minutes, set to -1 for no timeout
