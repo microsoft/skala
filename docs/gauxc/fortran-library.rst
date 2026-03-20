@@ -10,6 +10,31 @@ By the end of this tutorial, you will:
 * Configure the integration grid, load balancer, and XC integrator
 * Evaluate the exchange-correlation energy and potential
 
+.. _gauxc_fortran_api:
+
+Before you start
+----------------
+
+This example assumes that you already have access to a GauXC source tree with Skala support, either because you followed :ref:`gauxc_install` first or because you let this example download GauXC automatically through CMake.
+The example CMake files are written to accept either workflow.
+
+Before configuring the project, make sure you have the following available:
+
+- a Fortran compiler together with C and C++ compilers
+- CMake and Ninja
+- HDF5 development libraries
+- an installed GauXC with both the C and Fortran APIs enabled, or network access so the example can build GauXC with those APIs enabled for you
+
+If you want to reproduce the sample ``He_def2-svp.h5`` input file from this guide, you also need the Python ``skala`` package installed.
+
+For a minimal OpenMP-capable environment for this guide, use the example environment file:
+
+.. literalinclude:: ../../examples/fortran/gauxc_integration/environment-openmp.yml
+   :language: yaml
+   :caption: environment-openmp.yml
+
+For MPI builds, switch to ``examples/fortran/gauxc_integration/environment-mpi.yml`` so that both MPI and the matching HDF5 variant are available.
+
 Setting up CMake
 ----------------
 
@@ -46,7 +71,8 @@ Each dependency gets its own CMake include file.
 First, we define how to include GauXC, our main dependency.
 CMake will first attempt to discover an installed GauXC via its config file; if that fails, it will download and build GauXC from source.
 The options defined in the main CMake file are passed through to GauXC to ensure the library provides the requested features.
-After GauXC is available, we verify that our requirements are satisfied—this is especially important for the Skala implementation, which requires the ``GAUXC_HAS_ONEDFT`` feature flag.
+After GauXC is available, we verify that our requirements are satisfied.
+For the Fortran driver this includes the Skala implementation as well as the C and Fortran APIs, which are checked via ``GAUXC_HAS_ONEDFT``, ``GAUXC_HAS_C``, and ``GAUXC_HAS_FORTRAN``.
 
 .. literalinclude:: ../../examples/fortran/gauxc_integration/cmake/skala-gauxc.cmake
    :language: cmake
@@ -58,11 +84,14 @@ For the command-line interface, we use the `FLAP library <https://github.com/sza
    :language: cmake
    :caption: cmake/skala-flap.cmake
 
-Finally, we will use the HDF5 C library for reading our input data from an HDF5 file.
+Finally, we will use the HDF5 Fortran interface for reading our input data from an HDF5 file.
 
-.. literalinclude:: ../../examples/c/gauxc_integration/cmake/skala-hdf5.cmake
+.. literalinclude:: ../../examples/fortran/gauxc_integration/cmake/skala-hdf5.cmake
    :language: cmake
    :caption: cmake/skala-hdf5.cmake
+
+The Fortran example links against the HDF5 Fortran interface and the high-level HDF5 libraries.
+If HDF5 is missing or only a partial HDF5 installation is visible to CMake, configuration or link-time failures are expected.
 
 This completes the CMake setup required for our command-line driver.
 
@@ -159,7 +188,8 @@ The main command-line arguments are:
   The pruning scheme, which controls how atomic grids are combined into a molecular grid.
 
 We use the ``command_line_interface`` type from the FLAP library to define the CLI.
-First, we initialize variables with their default values:
+First, we initialize variables with their default values.
+These assignments appear immediately above the named ``input`` block in ``main.F90``:
 
 .. literalinclude:: ../../examples/fortran/gauxc_integration/app/main.F90
    :language: fortran
@@ -167,7 +197,8 @@ First, we initialize variables with their default values:
    :lines: 59-64
 
 Next, we initialize the CLI and define the available arguments.
-A named ``block`` statement provides convenient error handling:
+A named ``input`` block provides convenient error handling.
+Add the following inside that block, right after ``input: block`` and before the call to ``cli%parse``:
 
 .. literalinclude:: ../../examples/fortran/gauxc_integration/app/main.F90
    :language: fortran
@@ -179,6 +210,9 @@ A named ``block`` statement provides convenient error handling:
    The molecular grid settings (``grid_spec``, ``rad_quad_spec``, ``prune_spec``) are documented in detail in the :ref:`gauxc_molecular_grid_settings` reference.
 
 After defining the CLI, we parse it within the ``input`` block and retrieve the values:
+
+This is still part of the same ``input`` block.
+The block ends after the argument values are read, at ``end block input``.
 
 .. literalinclude:: ../../examples/fortran/gauxc_integration/app/main.F90
    :language: fortran
@@ -247,7 +281,8 @@ Initializing GauXC
 ------------------
 
 We begin by initializing the GauXC runtime environment.
-All GauXC-related calls are placed inside a named ``block`` for streamlined error handling:
+All GauXC-related calls are placed inside the named ``main`` block for streamlined error handling.
+This block starts after the command-line parsing section and contains the remainder of the GauXC workflow:
 
 .. literalinclude:: ../../examples/fortran/gauxc_integration/app/main.F90
    :language: fortran
@@ -262,7 +297,7 @@ At the end of the block, we check the status and clean up the runtime environmen
    :lines: 245-250
 
 The runtime environment provides the MPI world rank and size (for both MPI and non-MPI builds).
-We print the configuration obtained from the command line:
+Still inside the ``main`` block, we print the configuration obtained from the command line:
 
 .. literalinclude:: ../../examples/fortran/gauxc_integration/app/main.F90
    :language: fortran
@@ -276,6 +311,7 @@ Molecule data
 -------------
 
 We use GauXC's built-in HDF5 reader to load the molecule data.
+Add this immediately after the runtime configuration printout in the ``main`` block.
 
 .. note::
 
@@ -314,6 +350,7 @@ Basis set data
 --------------
 
 We load the basis set using the same HDF5 approach as for the molecule.
+Place this directly after the molecule-loading code in the ``main`` block.
 
 .. note::
 
@@ -374,6 +411,8 @@ We create the molecular grid from our input parameters.
 The batch size controls how many grid points are processed together; larger values (up to ~10000)
 improve performance, though the default is 512:
 
+These lines follow the molecule and basis-set setup in the ``main`` block.
+
 .. literalinclude:: ../../examples/fortran/gauxc_integration/app/main.F90
    :language: fortran
    :caption: app/main.F90 (grid setup)
@@ -399,6 +438,8 @@ A helper function converts the execution-space CLI string to an enumerator:
 
 The load balancer manages access to the molecule, basis, and grid data for all subsequent GauXC operations.
 We create it from our input parameters:
+
+Add this in the ``main`` block right after the grid has been constructed.
 
 .. literalinclude:: ../../examples/fortran/gauxc_integration/app/main.F90
    :language: fortran
@@ -426,6 +467,8 @@ Density matrix
 The density matrix is the final input for GauXC.
 Unlike the molecule and basis set, we read the density matrix using our own HDF5 helper subroutine ``read_matrix_from_hdf5_record``.
 This subroutine opens the HDF5 file, reads a 2D dataset into an allocatable array, and performs error handling for each HDF5 operation.
+
+The helper subroutine lives in the ``contains`` section at the end of the file, while the call site shown below remains in the ``main`` block after the integrator has been created.
 
 .. literalinclude:: ../../examples/fortran/gauxc_integration/app/main.F90
    :language: fortran

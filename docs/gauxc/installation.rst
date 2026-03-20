@@ -8,7 +8,7 @@ As part of this tutorial we will be
 
 * installing dependencies for building GauXC
 * configuring GauXC with different options
-* testing our the Skala implementation in GauXC
+* testing the Skala implementation in GauXC
 * installing the GauXC library
 * reusing GauXC from the CMake build system
 
@@ -17,9 +17,7 @@ Prerequisites
 -------------
 
 For this tutorial, we will use the `mamba <https://mamba.readthedocs.io/en/latest/>`__ package manager for setting up the environment and installing dependencies.
-If you do not have mamba installed, you can download the `miniforge <https://conda-forge.org/download/>`__ installer.
-
-First, we will create a new environment with all the required dependencies for building GauXC with Skala support.
+If you do not have mamba installed, you can download the `miniforge <https://conda-forge.org/download/>`__ installer.First, we will create a new environment with all the required dependencies for building GauXC with Skala support.
 We provide three different configurations depending on whether you want to build GauXC with OpenMP, MPI, or CUDA support.
 
 .. dropdown:: GauXC dependencies
@@ -27,6 +25,7 @@ We provide three different configurations depending on whether you want to build
    The following dependencies are required for building GauXC with Skala support:
 
    - C/C++ compiler (with C++17 support)
+   - Fortran compiler (if Fortran API is enabled via ``-DGAUXC_ENABLE_FORTRAN=on``)
    - CMake (version 3.15 or higher)
    - `exchcxx <https://github.com/wavefunction91/exchcxx>`__\ * (version 1 or higher)
    - `libxc <https://libxc.gitlab.io/>`__\ * (version 7 or higher)
@@ -116,6 +115,13 @@ Download the pre-packaged source bundle from the Skala release page:
       tar xzvf gauxc-skala.tar.gz
 
 The archive expands into a ``gauxc`` directory that already contains the Skala patches.
+One convenient layout is
+
+.. code-block:: text
+
+   work/
+   ├── gauxc/
+   └── build/
 
 
 Configure and build

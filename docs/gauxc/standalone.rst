@@ -14,6 +14,7 @@ Create GauXC compatible input
 We will use the ``skala`` package to write a GauXC compatible input for our calculation.
 For this we will run a PySCF calculation and write the molecule, basis set and density matrix in the format expected by GauXC.
 In this example we will use a single one atom system in a small basis set.
+Before running the export script, install the Python ``skala`` package together with its dependencies.
 
 .. note::
 
