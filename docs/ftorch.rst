@@ -191,7 +191,7 @@ To evaluate Skala, we download the model checkpoint from HuggingFace using the `
 
    .. code-block:: bash
 
-      python prepare_inputs.py --output_dir features --molecule H2 --basis def2-QZVP
+      python prepare_inputs.py --output-dir features --basis def2-QZVP
 
    The script needs the ``skala`` package installed in your Python environment, which can be done via pip:
 
@@ -210,7 +210,7 @@ The output for the H2 molecule with the def2-QZVP basis set should look like thi
 .. code-block:: text
 
    [1] Loading model from skala-1.0.fun
-   [2] Loading features from H2-def2qzvp
+   [2] Loading features from features
     -> Loading coarse_0_atomic_coords
     -> Loading grad
     -> Loading grid_coords
@@ -260,8 +260,8 @@ In the output we can see the computed exchange-correlation energy as well as the
 
 .. code-block:: text
 
-   [1] Loading model from ../../cpp/gauxc_integration/skala-1.0.fun
-   [2] Loading features from H2-def2qzvp
+   [1] Loading model from skala-1.0.fun
+   [2] Loading features from features
     -> Loading coarse_0_atomic_coords
     -> Loading grad
     -> Loading grid_coords
