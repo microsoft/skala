@@ -14,16 +14,10 @@ from skala.pyscf.features import generate_features
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--output_dir",
+        "--output-dir",
         default=".",
         type=Path,
         help="Output directory for generated feature files.",
-    )
-    parser.add_argument(
-        "--molecule",
-        default="H2",
-        type=str,
-        help="Molecule name (currently only H2 supported).",
     )
     parser.add_argument(
         "--basis",
@@ -35,11 +29,11 @@ def main() -> None:
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
-    molecule = gto.Mole(
+    molecule = gto.M(
         atom="H 0 0 0; H 0 0 1",
-        basis="def2-qzvp",
+        basis=args.basis,
         verbose=0,
-    ).build()
+    )
 
     # Create a set of meta-GGA features for this molecule.
     dm = get_density_matrix(molecule)
