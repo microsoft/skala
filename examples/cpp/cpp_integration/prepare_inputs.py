@@ -14,10 +14,22 @@ from skala.pyscf.features import generate_features
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--output-dir",
+        "--output_dir",
         default=".",
         type=Path,
         help="Output directory for generated feature files.",
+    )
+    parser.add_argument(
+        "--molecule",
+        default="H2",
+        type=str,
+        help="Molecule name (currently only H2 supported).",
+    )
+    parser.add_argument(
+        "--basis",
+        default="def2-qzvp",
+        type=str,
+        help="Basis set.",
     )
     args = parser.parse_args()
 
