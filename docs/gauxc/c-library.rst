@@ -311,7 +311,7 @@ For reading the molecule we will use GauXC's built-in functionality to read from
 
    The HDF5 wrapper directly maps this struct representation to an HDF5 dataset.
 
-We use ``gauxc_molecule_read_hdf5_record`` function which implements the reading of the molecule data.
+We use :c:func:`gauxc_molecule_read_hdf5_record` function which implements the reading of the molecule data.
 
 .. literalinclude:: ../../examples/c/gauxc_integration/app/main.c
    :language: c
@@ -350,7 +350,7 @@ For the basis set we will use the same approach as for the molecule and use GauX
 
    Again, this allows to directly map the object's representation to an HDF5 dataset.
 
-With GauXC's ``gauxc_basisset_read_hdf5_record`` function we can read the basis set data conveniently from the HDF5 file.
+With GauXC's :c:func:`gauxc_basisset_read_hdf5_record` function we can read the basis set data conveniently from the HDF5 file.
 
 .. literalinclude:: ../../examples/c/gauxc_integration/app/main.c
    :language: c

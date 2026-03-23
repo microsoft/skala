@@ -40,6 +40,8 @@ optional-dependencies.doc = [
     "sphinx-book-theme",
     "sphinx-design",
     "sphinxcontrib-bibtex",
+    "sphinxcontrib-moderncmakedomain",
+    "sphinx-fortran",
 ]
 
 urls.repository = "https://github.com/microsoft/skala"

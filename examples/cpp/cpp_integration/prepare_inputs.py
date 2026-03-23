@@ -19,15 +19,21 @@ def main() -> None:
         type=Path,
         help="Output directory for generated feature files.",
     )
+    parser.add_argument(
+        "--basis",
+        default="def2-qzvp",
+        type=str,
+        help="Basis set.",
+    )
     args = parser.parse_args()
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
-    molecule = gto.Mole(
+    molecule = gto.M(
         atom="H 0 0 0; H 0 0 1",
-        basis="def2-qzvp",
+        basis=args.basis,
         verbose=0,
-    ).build()
+    )
 
     # Create a set of meta-GGA features for this molecule.
     dm = get_density_matrix(molecule)

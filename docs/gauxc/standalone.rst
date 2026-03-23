@@ -167,18 +167,7 @@ Note that the length of exponents in each shell is padded to 16 elements for the
 .. important::
 
    The orbital ordering convention for the shells in GauXC is following the common component architecture (CCA) convention for pure (spherical) shells and the row convention for cartesian ones.
-   The CCA ordering for pure (spherical) shells is defined as
-
-   - ``s`` (:math:`\ell = 0`): :math:`Y_0^0`
-   - ``p`` (:math:`\ell = 1`): :math:`Y_1^{-1}`, :math:`Y_1^{0}`, :math:`Y_1^{+1}`,
-   - ``d`` (:math:`\ell = 2`): :math:`Y_2^{-2}`, :math:`Y_2^{-1}`, :math:`Y_2^{0}`, :math:`Y_2^{+1}`, :math:`Y_2^{+2}`
-
-   The row ordering for cartesian shells is defined as
-
-   - ``s`` (:math:`\ell = 0`): `1`
-   - ``p`` (:math:`\ell = 1`): ``x``, ``y``, ``z``
-   - ``d`` (:math:`\ell = 2`): ``xx``, ``xy``, ``xz``, ``yy``, ``yz``, ``zz``
-   - ``f`` (:math:`\ell = 3`): ``xxx``, ``xxy``, ``xxz``, ``xyy``, ``xyz``, ``xzz``, ``yyy``, ``yyz``, ``yzz``, ``zzz``
+   For more details on the orbital ordering convention check :ref:`gauxc-orbital-ordering`.
 
    PySCF is using CCA ordering for all pure (spherical) shells except for the p-shell where row ordering is used.
    Our export accounts for this by exporting p-shells with setting the ``pure`` entry to zero to have GauXC use row ordering.

@@ -331,7 +331,7 @@ Add this immediately after the runtime configuration printout in the ``main`` bl
 
    The HDF5 wrapper maps this struct representation directly to the HDF5 dataset.
 
-The ``gauxc_read_hdf5_record`` subroutine loads the molecule data:
+The :f:func:`gauxc_read_hdf5_record` interface (see :f:func:`gauxc_molecule_read_hdf5_record`) loads the molecule data:
 
 .. literalinclude:: ../../examples/fortran/gauxc_integration/app/main.F90
    :language: fortran
@@ -376,7 +376,7 @@ Place this directly after the molecule-loading code in the ``main`` block.
 
    Again, this allows the object's representation to map directly to an HDF5 dataset.
 
-We read the basis set using ``gauxc_read_hdf5_record``:
+We read the basis set using :f:func:`gauxc_read_hdf5_record` (see :f:func:`gauxc_basisset_read_hdf5_record`):
 
 .. literalinclude:: ../../examples/fortran/gauxc_integration/app/main.F90
    :language: fortran

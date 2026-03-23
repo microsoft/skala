@@ -20,42 +20,9 @@ For this tutorial, we will use the `mamba <https://mamba.readthedocs.io/en/lates
 If you do not have mamba installed, you can download the `miniforge <https://conda-forge.org/download/>`__ installer.First, we will create a new environment with all the required dependencies for building GauXC with Skala support.
 We provide three different configurations depending on whether you want to build GauXC with OpenMP, MPI, or CUDA support.
 
-.. dropdown:: GauXC dependencies
+.. note::
 
-   The following dependencies are required for building GauXC with Skala support:
-
-   - C/C++ compiler (with C++17 support)
-   - Fortran compiler (if Fortran API is enabled via ``-DGAUXC_ENABLE_FORTRAN=on``)
-   - CMake (version 3.15 or higher)
-   - `exchcxx <https://github.com/wavefunction91/exchcxx>`__\ * (version 1 or higher)
-   - `libxc <https://libxc.gitlab.io/>`__\ * (version 7 or higher)
-   - `integratorxx <https://github.com/wavefunction91/integratorxx>`__\ * (version 1 or higher)
-   - `gau2grid <https://github.com/psi4/gau2grid>`__\ * (version 2.0.6 or higher)
-   - `libtorch <https://docs.pytorch.org/cppdocs/installing.html>`__ (CPU or CUDA version depending on your configuration)
-   - `nlohmann_json <https://github.com/nlohmann/json>`__\ * (version 3.9.1 or higher)
-   - BLAS library (like OpenBLAS, MKL, etc.)
-
-   When building with MPI support via ``-DGAUXC_ENABLE_MPI=on`` (default ``off``),
-   the following dependencies are also required:
-
-   - MPI implementation (like OpenMPI, MPICH, etc.)
-
-   When building with Cuda support via ``-DGAUXC_ENABLE_CUDA=on`` (default ``off``),
-   the following dependencies are also required:
-
-   - CUDA toolkit
-   - `cuBLAS library <https://developer.nvidia.com/cublas>`__
-   - `Cutlass library <https://github.com/NVIDIA/cutlass>`__\ *
-   - `CUB library <https://github.com/NVIDIA/cccl/tree/main/cub>`__\ *
-
-   When building with HDF5 support via ``-DGAUXC_ENABLE_HDF5=on`` (default ``on``),
-   the following dependencies are also required:
-
-   - `HDF5 <https://support.hdfgroup.org/documentation>`__
-   - `HighFive <https://github.com/highfive-dev/highfive>`__\ * (version 2.4.0 or higher)
-
-   All libraries marked with a * can be automatically fetched by the GauXC build system
-   and do not need to be installed manually.
+   A full list of dependencies can be found at :ref:`gauxc-cmake-deps` in the CMake configuration documentation.
 
 For this, create a file named `environment.yml` with the following content:
 
@@ -102,7 +69,7 @@ Download the pre-packaged source bundle from the Skala release page:
 
 .. code-block:: none
 
-   curl -L https://github.com/microsoft/skala/releases/download/v1.1.0/gauxc-skala.tar.gz | tar xzv
+   curl -L https://github.com/microsoft/skala/releases/download/v1.1.1/gauxc-skala-r1.tar.gz | tar xzv
 
 .. tip::
 
@@ -110,9 +77,9 @@ Download the pre-packaged source bundle from the Skala release page:
 
    .. code-block:: none
 
-      curl -L https://github.com/microsoft/skala/releases/download/v1.1.0/gauxc-skala.tar.gz > gauxc-skala.tar.gz
-      curl -L https://github.com/microsoft/skala/releases/download/v1.1.0/gauxc-skala.tar.gz.sha256 | sha256sum -c
-      tar xzvf gauxc-skala.tar.gz
+      curl -L https://github.com/microsoft/skala/releases/download/v1.1.1/gauxc-skala-r1.tar.gz > gauxc-skala-r1.tar.gz
+      curl -L https://github.com/microsoft/skala/releases/download/v1.1.1/gauxc-skala-r1.tar.gz.sha256 | sha256sum -c
+      tar xzvf gauxc-skala-r1.tar.gz
 
 The archive expands into a ``gauxc`` directory that already contains the Skala patches.
 One convenient layout is
@@ -122,6 +89,14 @@ One convenient layout is
    work/
    ├── gauxc/
    └── build/
+
+.. note::
+
+   You can also obtain the latest version of GauXC with Skala support by downloading the `skala branch of GauXC <https://github.com/wavefunction91/gauxc/tree/skala>`__.
+
+   .. code-block:: none
+
+      curl -L https://github.com/wavefunction91/GauXC/archive/refs/heads/skala.tar.gz | tar xzv
 
 
 Configure and build
@@ -165,6 +140,11 @@ Create an out-of-tree build directory and pick the configuration that matches yo
            -DCMAKE_INSTALL_PREFIX=${CONDA_PREFIX}
          cmake --build build
 
+.. note::
+
+   To enable the C or Fortran bindings, set :cmake:variable:`GAUXC_ENABLE_C` or :cmake:variable:`GAUXC_ENABLE_FORTRAN` in your CMake configuration step.
+   For a full list of available CMake options, see :ref:`gauxc-cmake-options` in the CMake configuration documentation.
+
 .. tip::
 
    If CMake cannot find libtorch, the ``Torch_DIR`` variable can be set to help discover the package.
@@ -206,79 +186,11 @@ Install into the active conda environment so downstream projects can pick up the
 
 This installs headers, libraries, and CMake config.
 
+.. note::
 
-Integrate with your codebase
-----------------------------
+   For using GauXC in your own CMake project, check out :ref:`gauxc-cmake-integration` in the CMake configuration documentation.
+   Alternatively, you can follow the instructions in the :ref:`gauxc-cpp-library` tutorial for a full standalone example.
 
-Using an installed GauXC
-~~~~~~~~~~~~~~~~~~~~~~~~
-
-Add the following to your CMake project, ensuring that ``CMAKE_PREFIX_PATH`` contains
-``${CONDA_PREFIX}`` (activation scripts typically set this).
-
-.. code-block:: cmake
-
-   find_package(gauxc CONFIG REQUIRED)
-
-   if(NOT gauxc_HAS_ONEDFT)
-     message(FATAL_ERROR "GauXC found but Skala/OneDFT was not enabled during the build")
-   endif()
-
-   target_link_libraries(my_dft_driver PRIVATE gauxc::gauxc)
-
-The imported target propagates include directories, compile definitions, and linkage against BLAS,
-Torch, and optional MPI/CUDA components.
-
-Embedding GauXC via FetchContent
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-If you need to vend GauXC directly from your build, use ``FetchContent`` while mirroring the
-options chosen above.
-
-.. code-block:: cmake
-
-   set(Skala_GauXC_URL "https://github.com/microsoft/skala/releases/download/v1.1.1/gauxc-skala.tar.gz")
-   set(Skala_GauXC_SHA256 "0a64b2623be99894d3c61bd78aec1759abf3f476656695fab76c5e3fbb372616")
-
-   option(Skala_GauXC_ENABLE_OPENMP "Enable OpenMP support in GauXC" ON)
-   option(Skala_GauXC_ENABLE_MPI "Enable MPI support in GauXC" OFF)
-   option(Skala_GauXC_ENABLE_CUDA "Enable CUDA support in GauXC" OFF)
-
-   find_package(gauxc QUIET CONFIG)
-   if(NOT gauxc_FOUND)
-     include(FetchContent)
-
-     message(STATUS "Could not find GauXC... Building GauXC from source")
-     message(STATUS "GAUXC URL: ${Skala_GauXC_URL}")
-
-     set(GAUXC_ENABLE_ONEDFT ON CACHE BOOL "" FORCE)
-     set(GAUXC_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
-     set(GAUXC_ENABLE_OPENMP ${Skala_GauXC_ENABLE_OPENMP} CACHE BOOL "" FORCE)
-     set(GAUXC_ENABLE_MPI ${Skala_GauXC_ENABLE_MPI} CACHE BOOL "" FORCE)
-     set(GAUXC_ENABLE_CUDA ${Skala_GauXC_ENABLE_CUDA} CACHE BOOL "" FORCE)
-
-     FetchContent_Declare(
-       gauxc
-       URL ${Skala_GauXC_URL}
-       URL_HASH SHA256=${Skala_GauXC_SHA256}
-       DOWNLOAD_EXTRACT_TIMESTAMP ON
-     )
-     FetchContent_MakeAvailable(gauxc)
-
-   else()
-     if(NOT ${GAUXC_HAS_ONEDFT})
-       message(FATAL_ERROR "GauXC found but without Skala support enabled")
-     endif()
-     if(${Skala_GauXC_ENABLE_OPENMP} AND NOT ${GAUXC_HAS_OPENMP})
-       message(WARNING "GauXC Found without OpenMP support but Skala_GauXC_ENABLE_OPENMP is ON")
-     endif()
-     if(${Skala_GauXC_ENABLE_MPI} AND NOT ${GAUXC_HAS_MPI})
-       message(WARNING "GauXC Found without MPI support but Skala_GauXC_ENABLE_MPI is ON")
-     endif()
-     if(${Skala_GauXC_ENABLE_CUDA} AND NOT ${GAUXC_HAS_CUDA})
-       message(WARNING "GauXC Found without CUDA support but Skala_GauXC_ENABLE_CUDA is ON")
-     endif()
-   endif()
 
 Troubleshooting
 ---------------
