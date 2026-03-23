@@ -72,7 +72,7 @@ First, we define how to include GauXC, our main dependency.
 CMake will first attempt to discover an installed GauXC via its config file; if that fails, it will download and build GauXC from source.
 The options defined in the main CMake file are passed through to GauXC to ensure the library provides the requested features.
 After GauXC is available, we verify that our requirements are satisfied.
-For the Fortran driver this includes the Skala implementation as well as the C and Fortran APIs, which are checked via ``GAUXC_HAS_ONEDFT``, ``GAUXC_HAS_C``, and ``GAUXC_HAS_FORTRAN``.
+For the Fortran driver this includes the Skala implementation as well as the C and Fortran APIs, which are checked via :c:macro:`GAUXC_HAS_ONEDFT`, :c:macro:`GAUXC_HAS_C`, and :c:macro:`GAUXC_HAS_FORTRAN`.
 
 .. literalinclude:: ../../examples/fortran/gauxc_integration/cmake/skala-gauxc.cmake
    :language: cmake
@@ -150,7 +150,7 @@ We also declare variables for input parameters and intermediate values:
    :lines: 45-53
 
 When compiled with MPI support, we initialize MPI at program startup.
-The ``gauxc/gauxc_config.f`` header provides the ``GAUXC_HAS_MPI`` preprocessor macro for guarding MPI-specific calls.
+The ``gauxc/gauxc_config.f`` header provides the :c:macro:`GAUXC_HAS_MPI` preprocessor macro for guarding MPI-specific calls.
 
 .. literalinclude:: ../../examples/fortran/gauxc_integration/app/main.F90
    :language: fortran
