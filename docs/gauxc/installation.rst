@@ -17,7 +17,9 @@ Prerequisites
 -------------
 
 For this tutorial, we will use the `mamba <https://mamba.readthedocs.io/en/latest/>`__ package manager for setting up the environment and installing dependencies.
-If you do not have mamba installed, you can download the `miniforge <https://conda-forge.org/download/>`__ installer.First, we will create a new environment with all the required dependencies for building GauXC with Skala support.
+If you do not have mamba installed, you can download the `miniforge <https://conda-forge.org/download/>`__ installer.
+
+First, we will create a new environment with all the required dependencies for building GauXC with Skala support.
 We provide three different configurations depending on whether you want to build GauXC with OpenMP, MPI, or CUDA support.
 
 .. note::
