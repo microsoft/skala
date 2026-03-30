@@ -107,4 +107,4 @@ To test your installation, you can run the tests:
 Model checkpoints
 -----------------
 
-The pre-trained Skala model checkpoints are hosted [on Hugging Face](https://huggingface.co/microsoft/skala) and downloaded automatically by the Python package in this repository from there for running calculations.
+The pre-trained Skala model checkpoints are hosted `on Hugging Face <https://huggingface.co/microsoft/skala>`__ and downloaded automatically by the Python package in this repository from there for running calculations.
