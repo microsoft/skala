@@ -19,6 +19,7 @@ nb_merge_streams = True  # Merge multiple outputs from the same cell into one bo
 
 bibtex_bibfiles = [
     "_static/bib/gauxc.bib",
+    "_static/bib/data.bib",
 ]
 
 html_theme = "sphinx_book_theme"
