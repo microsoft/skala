@@ -406,3 +406,6 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+# Sphinx documentation build output
+docs/_build/

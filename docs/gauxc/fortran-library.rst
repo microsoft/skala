@@ -451,6 +451,7 @@ The functional and load balancer are passed directly to the integrator construct
 
 .. literalinclude:: ../../examples/fortran/gauxc_integration/app/main.F90
    :language: fortran
+   :force:
    :caption: app/main.F90 (integrator setup)
    :lines: 209-212
 
@@ -586,6 +587,7 @@ Full source code
 
    .. literalinclude:: ../../examples/fortran/gauxc_integration/app/main.F90
       :language: fortran
+      :force:
       :caption: app/main.F90
 
 Summary

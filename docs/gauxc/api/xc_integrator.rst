@@ -119,7 +119,7 @@ C++ definitions
 
    A struct containing settings for the Skala implementation of the exchange-correlation functional.
 
-   .. cpp:member:: model
+   .. cpp:member:: std::string model
 
       The model checkpoint to use for evaluating the exchange-correlation energy and potential with the Skala implementation.
 

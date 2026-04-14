@@ -27,3 +27,4 @@ html_title = project
 html_logo = "_static/img/density.png"
 html_favicon = "_static/img/density.png"
 master_doc = "index"
+exclude_patterns = ["_build", "jupyter_execute"]
