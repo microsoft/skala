@@ -35,6 +35,6 @@ Please stay tuned for updates and new releases.
    :caption: References
    :hidden:
 
-   model-card/skala
+   model-card/skala-1.0
    Skala preprint <https://aka.ms/skaladft/preprint>
    Breaking bonds, breaking ground <https://aka.ms/skaladft/blog>
