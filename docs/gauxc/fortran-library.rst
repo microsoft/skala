@@ -560,7 +560,7 @@ from the ``huggingface_hub`` package:
 
 .. code-block:: shell
 
-   hf download microsoft/skala skala-1.0.fun --local-dir .
+   hf download microsoft/skala-1.0 skala-1.0.fun --local-dir .
    ./build/Skala He_def2-svp.h5 --model ./skala-1.0.fun
 
 The output shows results for the Skala functional:

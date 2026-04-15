@@ -182,7 +182,7 @@ To evaluate Skala, we download the model checkpoint from HuggingFace using the `
 
 .. code-block:: shell
 
-   hf download microsoft/skala skala-1.0.fun --local-dir .
+   hf download microsoft/skala-1.0 skala-1.0.fun --local-dir .
 
 .. note::
 

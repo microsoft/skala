@@ -37,8 +37,10 @@ feature_labels = {
 
 
 def main() -> None:
-    huggingface_repo_id = "microsoft/skala"
-    for filename in ("skala-1.0.fun", "baselines/ldax.fun"):
+    for huggingface_repo_id, filename in (
+        ("microsoft/skala-1.0", "skala-1.0.fun"),
+        ("microsoft/skala-baselines", "ldax.fun"),
+    ):
         output_path = filename.split("/")[-1]
         download_model(huggingface_repo_id, filename, output_path)
 

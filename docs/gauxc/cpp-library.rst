@@ -413,7 +413,7 @@ After downloading the model checkpoint we can run our driver again with the new 
 
 .. code-block:: shell
 
-   hf download microsoft/skala skala-1.0.fun --local-dir .
+   hf download microsoft/skala-1.0 skala-1.0.fun --local-dir .
    ./build/Skala He_def2-svp.h5 --model ./skala-1.0.fun
 
 In the output we can see the results for the Skala functional

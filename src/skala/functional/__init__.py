@@ -79,7 +79,7 @@ def load_functional(name: str, device: torch.device | None = None) -> ExcFunctio
             device_type = (
                 torch.get_default_device().type if device is None else device.type
             )
-            repo_id = "microsoft/skala"
+            repo_id = "microsoft/skala-1.0"
             filename = "skala-1.0.fun" if device_type == "cpu" else "skala-1.0-cuda.fun"
             path = hf_hub_download(repo_id=repo_id, filename=filename)
             expected_hash = KNOWN_HASHES.get((repo_id, filename))
