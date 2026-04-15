@@ -1,5 +1,5 @@
-set(Skala_GauXC_URL "https://github.com/microsoft/skala/releases/download/v1.1.1/gauxc-skala-r1.tar.gz")
-set(Skala_GauXC_SHA256 "01f8856502e136281b0837f5d19973f02e32e2f0c97561a5bb42962344e0f944")
+set(Skala_GauXC_URL "https://github.com/microsoft/skala/releases/download/v1.1.1/gauxc-skala-r2.tar.gz")
+set(Skala_GauXC_SHA256 "6659d00522b443f2557a960a9ba0217449d2ee25df809634d6becca23eb0f1ff")
 
 set(Skala_CLI11_URL "https://github.com/CLIUtils/CLI11/archive/refs/tags/v2.6.1.tar.gz")
 set(Skala_CLI11_SHA256 "377691f3fac2b340f12a2f79f523c780564578ba3d6eaf5238e9f35895d5ba95")

@@ -10,7 +10,8 @@ dependencies:
   - nlohmann_json >=3.9
   # host/runtime requirements
   - openmpi  # pick mpich if that matches your stack
-  - exchcxx >=1.0
+  - exchcxx >=1.0 cpu_*
+  - integratorxx >=1.0
   - gau2grid >=2.0.6
   - hdf5 * mpi_*
   - libblas

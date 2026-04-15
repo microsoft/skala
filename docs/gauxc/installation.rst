@@ -71,7 +71,7 @@ Download the pre-packaged source bundle from the Skala release page:
 
 .. code-block:: none
 
-   curl -L https://github.com/microsoft/skala/releases/download/v1.1.1/gauxc-skala-r1.tar.gz | tar xzv
+   curl -L https://github.com/microsoft/skala/releases/download/v1.1.1/gauxc-skala-r2.tar.gz | tar xzv
 
 .. tip::
 
@@ -79,9 +79,9 @@ Download the pre-packaged source bundle from the Skala release page:
 
    .. code-block:: none
 
-      curl -L https://github.com/microsoft/skala/releases/download/v1.1.1/gauxc-skala-r1.tar.gz > gauxc-skala-r1.tar.gz
-      curl -L https://github.com/microsoft/skala/releases/download/v1.1.1/gauxc-skala-r1.tar.gz.sha256 | sha256sum -c
-      tar xzvf gauxc-skala-r1.tar.gz
+      curl -L https://github.com/microsoft/skala/releases/download/v1.1.1/gauxc-skala-r2.tar.gz > gauxc-skala-r2.tar.gz
+      curl -L https://github.com/microsoft/skala/releases/download/v1.1.1/gauxc-skala-r2.tar.gz.sha256 | sha256sum -c
+      tar xzvf gauxc-skala-r2.tar.gz
 
 The archive expands into a ``gauxc`` directory that already contains the Skala patches.
 One convenient layout is
