@@ -14,5 +14,10 @@ if(NOT Argtable3_FOUND)
     URL_HASH SHA256=${Skala_Argtable3_SHA256}
     DOWNLOAD_EXTRACT_TIMESTAMP ON
   )
-  FetchContent_MakeAvailable(Argtable3)
+
+  # The example only needs the library target. Disabling upstream tests/examples
+  # avoids extra tooling requirements in CI (e.g., dos2unix).
+  set(ARGTABLE3_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
+  set(ARGTABLE3_ENABLE_EXAMPLES OFF CACHE BOOL "" FORCE)
+  FetchContent_MakeAvailable(argtable3)
 endif()

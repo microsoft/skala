@@ -21,6 +21,17 @@ add_executable(
   "${PROJECT_NAME}"
   "app/main.c"
 )
+
+# Keep the C frontend feature macros aligned with the features validated in
+# skala-gauxc.cmake. Some GauXC releases may not emit these values correctly
+# in gauxc/c/gauxc_config.h even when the imported target reports them.
+target_compile_definitions(
+  "${PROJECT_NAME}"
+  PRIVATE
+  GAUXC_HAS_C=1
+  GAUXC_HAS_HDF5=1
+)
+
 target_link_libraries(
   "${PROJECT_NAME}"
   PRIVATE
