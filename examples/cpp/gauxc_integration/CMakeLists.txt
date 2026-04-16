@@ -13,6 +13,7 @@ option(Skala_GauXC_ENABLE_MPI "Enable MPI support in GauXC" OFF)
 option(Skala_GauXC_ENABLE_CUDA "Enable CUDA support in GauXC" OFF)
 
 include(skala-dep-versions)
+include(skala-hdf5)
 include(skala-gauxc)
 include(skala-cli11)
 include(skala-eigen3)
