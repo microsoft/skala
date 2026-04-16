@@ -46,6 +46,8 @@ class Skala(Calculator):  # type: ignore[misc]
         "charge": None,
         "multiplicity": None,
         "verbose": 0,
+        "conv_tol": None,
+        "max_cycle": None,
     }
 
     _mol: gto.Mole | None = None
@@ -87,6 +89,8 @@ class Skala(Calculator):  # type: ignore[misc]
             or "auxbasis" in changed_parameters
             or "with_newton" in changed_parameters
             or "with_dftd3" in changed_parameters
+            or "conv_tol" in changed_parameters
+            or "max_cycle" in changed_parameters
         ):
             self._ks = None
             self.reset()
@@ -158,6 +162,14 @@ class Skala(Calculator):  # type: ignore[misc]
         if self._ks is None:
             if not isinstance(xc_param := self.parameters.xc, (ExcFunctionalBase, str)):
                 raise InputError("XC functional must be a string or ExcFunctionalBase.")
+
+            # Build ks_config for SCF settings
+            ks_config = {}
+            if self.parameters.conv_tol is not None:
+                ks_config["conv_tol"] = self.parameters.conv_tol
+            if self.parameters.max_cycle is not None:
+                ks_config["max_cycle"] = self.parameters.max_cycle
+
             grad_method = SkalaKS(
                 self._mol,
                 xc=xc_param,
@@ -165,6 +177,7 @@ class Skala(Calculator):  # type: ignore[misc]
                 auxbasis=self.parameters.auxbasis,
                 with_newton=bool(self.parameters.with_newton),
                 with_dftd3=bool(self.parameters.with_dftd3),
+                ks_config=ks_config if ks_config else None,
             ).nuc_grad_method()
             self._ks = grad_method
         else:
