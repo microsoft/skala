@@ -16,6 +16,7 @@ from pyscf import grad, gto
 
 from skala.functional.base import ExcFunctionalBase
 from skala.pyscf import SkalaKS
+from skala.pyscf.retry import retry_scf
 
 
 class Skala(Calculator):  # type: ignore[misc]
@@ -43,9 +44,11 @@ class Skala(Calculator):  # type: ignore[misc]
         "auxbasis": None,
         "with_newton": False,
         "with_dftd3": True,
+        "with_retry": True,
         "charge": None,
         "multiplicity": None,
         "verbose": 0,
+        "ks_config": None,
     }
 
     _mol: gto.Mole | None = None
@@ -170,7 +173,14 @@ class Skala(Calculator):  # type: ignore[misc]
         else:
             self._ks.reset(self._mol)
 
-        energy = self._ks.base.kernel()
+        if self.parameters.ks_config is not None:
+            self._ks.base(**self.parameters.ks_config)
+
+        if self.parameters.with_retry:
+            self._ks.base, _ = retry_scf(self._ks.base)
+            energy = self._ks.base.e_tot
+        else:
+            energy = self._ks.base.kernel()
         gradient = self._ks.kernel()
 
         self.results["energy"] = float(energy) * Hartree

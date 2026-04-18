@@ -53,3 +53,26 @@ def test_missing_basis() -> None:
         calculator.InputError, match="Basis set must be specified in the parameters."
     ):
         atoms.get_potential_energy()
+
+
+@pytest.mark.skipif(ase is None, reason="ASE is not installed")
+def test_ks_config() -> None:
+    atoms = molecule("H2O")
+    atoms.calc = Skala(
+        xc="pbe",
+        basis="def2-svp",
+        with_density_fit=True,
+        auxbasis="def2-svp-jkfit",
+        ks_config={"conv_tol": 1e-6},
+    )
+
+    energy = atoms.get_potential_energy()
+
+    assert (
+        atoms.calc._ks.base.conv_tol == 1e-6
+    ), "KS solver convergence tolerance not set correctly"
+
+    reference_energy = -2075.4896490374904
+    assert (
+        pytest.approx(energy, rel=1e-3) == reference_energy
+    ), f"Energy mismatch with custom KS config: {energy} vs {reference_energy}"
