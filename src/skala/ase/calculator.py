@@ -75,6 +75,10 @@ class Skala(Calculator):  # type: ignore[misc]
                 self._ks.verbose = verbose
                 self._ks.base.verbose = verbose
 
+        if "ks_config" in changed_parameters and self.parameters.ks_config is not None:
+            if self._ks is not None:
+                self._ks.base(**self.parameters.ks_config)
+
         if (
             "charge" in changed_parameters
             or "multiplicity" in changed_parameters
@@ -168,13 +172,11 @@ class Skala(Calculator):  # type: ignore[misc]
                 auxbasis=self.parameters.auxbasis,
                 with_newton=bool(self.parameters.with_newton),
                 with_dftd3=bool(self.parameters.with_dftd3),
+                ks_config=self.parameters.ks_config,
             ).nuc_grad_method()
             self._ks = grad_method
         else:
             self._ks.reset(self._mol)
-
-        if self.parameters.ks_config is not None:
-            self._ks.base(**self.parameters.ks_config)
 
         if self.parameters.with_retry:
             self._ks.base, _ = retry_scf(self._ks.base)
