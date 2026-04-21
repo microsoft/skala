@@ -9,7 +9,7 @@ from skala.gauxc.export import write_gauxc_h5_from_pyscf
 
 
 @pytest.fixture(params=["He", "Li"])
-def mol_name(request) -> str:
+def mol_name(request: pytest.FixtureRequest) -> str:
     return request.param
 
 
@@ -19,7 +19,7 @@ def basis() -> str:
 
 
 @pytest.fixture(params=["cart", "sph"])
-def cartesian(request) -> bool:
+def cartesian(request: pytest.FixtureRequest) -> bool:
     return request.param == "cart"
 
 
@@ -64,7 +64,9 @@ def vxc(ks: dft.rks.RKS, dm: np.ndarray) -> np.ndarray:
     return vxc
 
 
-def test_write_pyscf(mol: gto.Mole, dm: np.ndarray, exc, vxc) -> None:
+def test_write_pyscf(
+    mol: gto.Mole, dm: np.ndarray, exc: float, vxc: np.ndarray
+) -> None:
     with NamedTemporaryFile(suffix=".h5") as tmp:
         write_gauxc_h5_from_pyscf(tmp.name, mol, dm, exc, vxc)
 
@@ -74,9 +76,9 @@ def test_write_pyscf(mol: gto.Mole, dm: np.ndarray, exc, vxc) -> None:
             assert "DENSITY_SCALAR" in h5, "Density (a+b) is missing in h5 export"
             assert "DENSITY_Z" in h5, "Density (a-b) is missing in h5 export"
             assert "EXC" in h5, "Exchange-correlation energy is missing in h5 export"
-            assert (
-                "VXC_SCALAR" in h5
-            ), "Exchange-correlation potential (a+b) is missing in h5 export"
-            assert (
-                "VXC_Z" in h5
-            ), "Exchange-correlation potential (a-b) is missing in h5 export"
+            assert "VXC_SCALAR" in h5, (
+                "Exchange-correlation potential (a+b) is missing in h5 export"
+            )
+            assert "VXC_Z" in h5, (
+                "Exchange-correlation potential (a-b) is missing in h5 export"
+            )

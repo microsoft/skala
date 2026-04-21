@@ -409,3 +409,6 @@ FodyWeavers.xsd
 
 # Sphinx documentation build output
 docs/_build/
+
+# Checkpoint files
+*.fun

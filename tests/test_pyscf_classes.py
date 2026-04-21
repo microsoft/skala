@@ -1,13 +1,23 @@
 import pytest
 from pyscf import gto
 
+from skala.functional import load_functional
+from skala.functional.base import ExcFunctionalBase
 from skala.pyscf import SkalaKS
 from skala.pyscf.dft import SkalaRKS, SkalaUKS
 from skala.pyscf.gradients import SkalaRKSGradient, SkalaUKSGradient
 
 
+@pytest.fixture(params=["skala-1.0", "skala-1.1"])
+def skala_xc(request: pytest.FixtureRequest) -> ExcFunctionalBase:
+    """Load the Skala functional under test."""
+    func = load_functional(request.param)
+    assert isinstance(func, ExcFunctionalBase)
+    return func
+
+
 @pytest.fixture(params=["H", "H2"])
-def mol(request) -> gto.Mole:
+def mol(request: pytest.FixtureRequest) -> gto.Mole:
     if request.param == "H":
         return gto.M(atom="H", basis="sto-3g", spin=1)
     if request.param == "H2":
@@ -16,28 +26,33 @@ def mol(request) -> gto.Mole:
 
 
 @pytest.fixture(params=["dfj", "no df"])
-def with_density_fit(request) -> bool:
+def with_density_fit(request: pytest.FixtureRequest) -> bool:
     return request.param == "dfj"
 
 
 @pytest.fixture(params=["soscf", "scf"])
-def with_newton(request) -> bool:
+def with_newton(request: pytest.FixtureRequest) -> bool:
     return request.param == "soscf"
 
 
 @pytest.fixture(params=["d3", "no d3"])
-def with_dftd3(request) -> bool:
+def with_dftd3(request: pytest.FixtureRequest) -> bool:
     return request.param == "d3"
 
 
 def test_skala_class(
-    mol: gto.Mole, with_density_fit: bool, with_newton: bool, with_dftd3: bool
-):
+    mol: gto.Mole,
+    skala_xc: ExcFunctionalBase,
+    with_density_fit: bool,
+    with_newton: bool,
+    with_dftd3: bool,
+) -> None:
     """Test whether classes get correctly preserved."""
     ks = SkalaKS(
         mol,
-        xc="skala",
+        xc=skala_xc,
         with_density_fit=with_density_fit,
+        auxbasis="def2-universal-jkfit" if with_density_fit else None,
         with_newton=with_newton,
         with_dftd3=with_dftd3,
     )

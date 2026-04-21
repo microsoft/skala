@@ -22,23 +22,19 @@ The Skala functional can also be used in GPU4PySCF with an appropriate PyTorch C
 Installation
 ------------
 
-Install the latest version of the ``skala`` package from PyPI or conda-forge together with a compatible PyTorch CUDA version.
-For pip the default PyTorch installation will be used, which is typically the latest version with CUDA support.
+The recommended way to set up a GPU environment is the provided
+``environment-gpu.yml``, which pins ``pytorch-gpu``, ``cuda-toolkit 12``,
+``cuda-version 12``, ``cutensor``, and installs ``gpu4pyscf-cuda12x 1.5`` from
+PyPI as part of the environment file:
 
 .. code-block:: bash
 
-   pip install skala cupy-cuda12x cutensor-cuda12x
+   mamba env create -n skala -f environment-gpu.yml
+   mamba activate skala
+   pip install skala
 
-For conda-forge, select the pytorch CUDA version that matches your system and CUDA installation. For example, for CUDA 12.8:
+For CUDA 11 or 13, adjust ``cuda-toolkit``, ``cuda-version``, and the
+``gpu4pyscf-cuda{11,13}x`` pin in ``environment-gpu.yml`` accordingly.
 
-.. code-block:: bash
-
-   mamba install -c conda-forge skala 'cuda-version=12.*' 'pytorch=*=cuda*' cupy cutensor
-
-In both cases you need to install GPU4PySCF separately from PyPI.
-
-.. code-block:: bash
-
-   pip install --no-deps "gpu4pyscf-cuda12x>=1.0,<2" "gpu4pyscf-libxc-cuda12x>=0.4,<1"
-
-We are using ``--no-deps`` to avoid overriding the already installed cupy and cutensor packages in the previous step.
+See the :doc:`installation guide </installation>` for more details, including
+how to install from conda-forge or inside a container without a GPU attached.

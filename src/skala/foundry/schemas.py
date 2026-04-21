@@ -18,13 +18,13 @@ BasisOptions: TypeAlias = Literal["def2-svp", "def2-tzvp", "def2-qzvp", "ma-def2
 TaskState: TypeAlias = Literal["succeeded", "failed", "running", "queued", "canceled"]
 
 
-class SkalaConfig(BaseModel):  # type: ignore[misc]
+class SkalaConfig(BaseModel):
     basis: BasisOptions = "def2-qzvp"
     grid_level: GridLevelOptions = "ultrafine"
     max_num_scf_steps: int = 100
 
 
-class Molecule(BaseModel):  # type: ignore[misc]
+class Molecule(BaseModel):
     """Molecule representation based on qcelemental's Molecule model."""
 
     geometry: list[float] = Field(
@@ -45,11 +45,15 @@ class Molecule(BaseModel):  # type: ignore[misc]
         geometry = molecule.geometry
         if isinstance(geometry, np.ndarray):
             geometry = geometry.flatten().tolist()
+
+        molecular_multiplicity = molecule.molecular_multiplicity
+        assert isinstance(molecular_multiplicity, int)
+
         return cls(
             geometry=geometry,
             symbols=molecule.symbols,
             molecular_charge=molecule.molecular_charge,
-            molecular_multiplicity=molecule.molecular_multiplicity,
+            molecular_multiplicity=molecular_multiplicity,
         )
 
     def to_qcel(self) -> qcel.models.Molecule:
@@ -61,12 +65,12 @@ class Molecule(BaseModel):  # type: ignore[misc]
         )
 
 
-class SkalaInput(BaseModel):  # type: ignore[misc]
+class SkalaInput(BaseModel):
     molecule: Molecule
     input_config: SkalaConfig = Field(default_factory=SkalaConfig)
 
 
-class SkalaOutput(BaseModel):  # type: ignore[misc]
+class SkalaOutput(BaseModel):
     total_energy: float
     energy_breakdown: dict[str, float] = Field(
         default_factory=dict,
@@ -78,7 +82,7 @@ class SkalaOutput(BaseModel):  # type: ignore[misc]
     )
 
 
-class TaskStatus(BaseModel):  # type: ignore[misc]
+class TaskStatus(BaseModel):
     status: TaskState
     num_tasks_ahead: int
     exception: str | None = None

@@ -34,7 +34,7 @@ def _make_dummy_fun_bytes() -> bytes:
         "protocol_version": json.dumps(2).encode(),
     }
     buf = io.BytesIO()
-    torch.jit.save(scripted, buf, _extra_files=extra_files)
+    torch.jit.save(scripted, buf, _extra_files=extra_files)  # type: ignore[no-untyped-call]
     return buf.getvalue()
 
 

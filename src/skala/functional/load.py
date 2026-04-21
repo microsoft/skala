@@ -56,11 +56,11 @@ class TracedFunctional(ExcFunctionalBase):
         """
         return self.expected_d3_settings
 
-    def get_exc_density(self, data: dict[str, torch.Tensor]) -> torch.FloatTensor:
-        return self._traced_model.get_exc_density(data)
+    def get_exc_density(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
+        return self._traced_model.get_exc_density(mol)
 
-    def get_exc(self, data: dict[str, torch.Tensor]) -> torch.FloatTensor:
-        return self._traced_model.get_exc(data)
+    def get_exc(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
+        return self._traced_model.get_exc(mol)
 
     @property
     def original_name(self) -> str:
@@ -77,7 +77,7 @@ class TracedFunctional(ExcFunctionalBase):
     @classmethod
     def load(
         cls,
-        fp: str | bytes | os.PathLike[str] | IO[bytes],
+        fp: str | os.PathLike[str] | IO[bytes],
         device: torch.device | None = None,
         *,
         expected_hash: str | None = None,
@@ -103,10 +103,11 @@ class TracedFunctional(ExcFunctionalBase):
         if expected_hash is not None:
             # Read the whole file into memory so we can hash it before
             # passing it to the unsafe torch.jit.load deserializer.
-            if isinstance(fp, (str, bytes, os.PathLike)):
-                with open(fp, "rb") as f:
+            if isinstance(fp, (str, os.PathLike)):
+                with open(fp, mode="rb") as f:
                     data = f.read()
             else:
+                # Assume a file-like object
                 data = fp.read()
             actual_hash = hashlib.sha256(data).hexdigest()
             if actual_hash != expected_hash:
@@ -117,7 +118,7 @@ class TracedFunctional(ExcFunctionalBase):
                 )
             fp = io.BytesIO(data)
 
-        traced_model = torch.jit.load(fp, _extra_files=extra_files, map_location=device)
+        traced_model = torch.jit.load(fp, _extra_files=extra_files, map_location=device)  # type: ignore[no-untyped-call]
 
         _metadata = json.loads(extra_files["metadata"].decode("utf-8"))
         if not isinstance(_metadata, dict):

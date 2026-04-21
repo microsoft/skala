@@ -76,7 +76,7 @@ def from_numpy_or_cupy(
     if isinstance(x, np.ndarray):
         x_torch = torch.from_numpy(x)
     else:
-        x_torch = torch.from_dlpack(x)
+        x_torch = torch.from_dlpack(x)  # type: ignore[attr-defined]
     x_torch = x_torch.to(device=device, dtype=dtype)
     if transpose:
         return x_torch.transpose(-1, -2)

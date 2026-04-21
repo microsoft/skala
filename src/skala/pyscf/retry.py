@@ -85,7 +85,12 @@ class SCFState:
         self.gradient_norm_per_cycle.append(norm_gorb)
         if "norm_ddm" not in envs:
             envs["norm_ddm"] = np.linalg.norm(envs["dm"] - envs["dm_last"])
-        self.dm_change_per_cycle.append(envs["norm_ddm"])
+
+        norm_ddm = envs["norm_ddm"]
+        assert isinstance(norm_ddm, (float, int)), (
+            f"Expected norm_ddm to be a float, got {type(norm_ddm)}"
+        )
+        self.dm_change_per_cycle.append(norm_ddm)
 
         if not isinstance(mo_energy, list) and len(mo_energy.shape) == 1:
             self.homo_lumo_gap_up_per_cycle.append(

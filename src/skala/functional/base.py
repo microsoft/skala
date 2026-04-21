@@ -16,7 +16,7 @@ from torch import nn
 VxcType = tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
 
 
-class ExcFunctionalBase(nn.Module):  # type: ignore[misc]
+class ExcFunctionalBase(nn.Module):
     """
     Abstract base class for exchange-correlation functionals.
 
@@ -35,7 +35,7 @@ class ExcFunctionalBase(nn.Module):  # type: ignore[misc]
         """
         return None
 
-    def get_exc_density(self, mol: dict[str, torch.Tensor]) -> torch.FloatTensor:
+    def get_exc_density(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
         """
         Returns the exchange-correlation density for the given molecule.
         It should return a tensor of shape (G,) where G is the number of grid points
@@ -46,7 +46,7 @@ class ExcFunctionalBase(nn.Module):  # type: ignore[misc]
             "get_exc_density not implemented for this functional."
         )
 
-    def get_exc(self, mol: dict[str, torch.Tensor]) -> torch.FloatTensor:
+    def get_exc(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
         """
         Compute the exchange-correlation energy.
 
@@ -58,7 +58,7 @@ class ExcFunctionalBase(nn.Module):  # type: ignore[misc]
 
         Returns
         -------
-        torch.FloatTensor
+        torch.Tensor
             The total exchange-correlation energy.
         """
         exc_density = self.get_exc_density(mol).double()

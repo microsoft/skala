@@ -14,7 +14,7 @@ import torch
 from torch import nn
 
 
-class Squasher(nn.Module):  # type: ignore[misc]
+class Squasher(nn.Module):
     """
     Elementwise squashing function log(|x| + eta).
 
@@ -34,7 +34,7 @@ class Squasher(nn.Module):  # type: ignore[misc]
         return (x.abs() + self.eta).log()
 
 
-class LinearSkip(nn.Linear):  # type: ignore[misc]
+class LinearSkip(nn.Linear):
     """
     Linear layer with skip connection, used to initialize close to identity.
 
@@ -56,9 +56,9 @@ class LinearSkip(nn.Linear):  # type: ignore[misc]
             Additional arguments passed to nn.Linear.
         """
         super().__init__(in_features=in_features, out_features=out_features, **kwargs)
-        assert (
-            in_features == out_features
-        ), f"Expecting args in_features == out_features, got {in_features} != {out_features}."
+        assert in_features == out_features, (
+            f"Expecting args in_features == out_features, got {in_features} != {out_features}."
+        )
         self._init_weights()
 
     def _init_weights(self) -> None:
@@ -72,7 +72,7 @@ class LinearSkip(nn.Linear):  # type: ignore[misc]
         return input + nn.functional.linear(input, self.weight, self.bias)
 
 
-class ScaledSigmoid(nn.Sigmoid):  # type: ignore[misc]
+class ScaledSigmoid(nn.Sigmoid):
     """
     Sigmoid activation function with learnable scaling.
 

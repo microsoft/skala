@@ -17,10 +17,12 @@ from huggingface_hub import hf_hub_download
 from skala.functional._hashes import KNOWN_HASHES
 from skala.functional.base import ExcFunctionalBase
 from skala.functional.load import TracedFunctional
-from skala.functional.traditional import LDA, PBE, SPW92, TPSS
+from skala.functional.model import SkalaFunctional
+from skala.functional.traditional import LDA, PBE, SPW92, TPSS, SpinScaledXCFunctional
 
 __all__ = [
     "ExcFunctionalBase",
+    "SkalaFunctional",
     "TracedFunctional",
     "LDA",
     "PBE",
@@ -29,44 +31,55 @@ __all__ = [
     "load_functional",
 ]
 
+_SKALA_VERSIONS = {
+    "skala-1.0": ("skala-1.0.fun", "skala-1.0-cuda.fun"),
+    "skala-1.1": ("skala-1.1.fun", "skala-1.1-cuda.fun"),
+}
 
-def load_functional(name: str, device: torch.device | None = None) -> ExcFunctionalBase:
-    """
-    Load an exchange-correlation functional by name.
 
-    Parameters
-    ----------
-    name : str
-        Name of the functional. Supported values:
+def load_functional(
+    name: str, device: torch.device | None = None
+) -> ExcFunctionalBase | str:
+    """Load an exchange-correlation functional by name.
 
-        - "skala": The Skala neural functional
-        - "lda": Local Density Approximation
-        - "spw92": SPW92 (LDA with PW92 correlation)
-        - "pbe": Perdew-Burke-Ernzerhof functional
-        - "tpss": Tao-Perdew-Staroverov-Scuseria meta-GGA
+    Args:
+        name: Name of the functional. Skala-native values:
 
-    Returns
-    -------
-    ExcFunctionalBase
-        The loaded functional instance.
+            - ``"skala-1.1"``: Skala 1.1 neural functional (recommended).
+            - ``"skala-1.0"``: Skala 1.0 neural functional (legacy, traced only).
+            - ``"lda"``: Local Density Approximation.
+            - ``"spw92"``: SPW92 (LDA with PW92 correlation).
+            - ``"pbe"``: Perdew-Burke-Ernzerhof functional.
+            - ``"tpss"``: Tao-Perdew-Staroverov-Scuseria meta-GGA.
 
-    Raises
-    ------
-    ValueError
-        If the functional name is not recognized.
+            Any other string is returned as-is for native PySCF/gpu4pyscf evaluation.
 
-    Example
-    -------
-    >>> func = load_functional("skala")
-    >>> func.features
-    ['density', 'kin', 'grad', 'grid_coords', 'grid_weights', 'coarse_0_atomic_coords']
-    >>> func = load_functional("lda")
-    >>> func.features
-    ['density', 'grid_weights']
+        device: Device to load the functional onto.
+
+    Returns:
+        An ``ExcFunctionalBase`` instance for Skala-native functionals, or the
+        name string for PySCF-native functionals.
+
+    Example:
+        >>> func = load_functional("skala-1.1")
+        >>> func.features
+        ['density', 'kin', 'grad', 'grid_coords', 'grid_weights', ...
+        >>> func = load_functional("lda")
+        >>> func.features
+        ['density', 'grid_weights']
+        >>> load_functional("b3lyp")
+        'b3lyp'
     """
     func_name = name.lower()
 
     if func_name == "skala":
+        raise ValueError(
+            'The generic functional name "skala" is no longer supported. '
+            'Please use "skala-1.0" or "skala-1.1".'
+        )
+
+    func: SpinScaledXCFunctional
+    if func_name in _SKALA_VERSIONS:
         env_path = os.environ.get("SKALA_LOCAL_MODEL_PATH")
         if env_path is not None:
             logging.getLogger(__name__).warning(
@@ -79,12 +92,14 @@ def load_functional(name: str, device: torch.device | None = None) -> ExcFunctio
             device_type = (
                 torch.get_default_device().type if device is None else device.type
             )
-            repo_id = "microsoft/skala-1.0"
-            filename = "skala-1.0.fun" if device_type == "cpu" else "skala-1.0-cuda.fun"
+            repo_id = f"microsoft/{func_name}"
+            cpu_file, cuda_file = _SKALA_VERSIONS[func_name]
+            filename = cpu_file if device_type == "cpu" else cuda_file
             path = hf_hub_download(repo_id=repo_id, filename=filename)
             expected_hash = KNOWN_HASHES.get((repo_id, filename))
-        with open(path, "rb") as fd:
-            return TracedFunctional.load(fd, device=device, expected_hash=expected_hash)
+
+        return TracedFunctional.load(path, device=device, expected_hash=expected_hash)
+
     elif func_name == "lda":
         func = LDA()
     elif func_name == "spw92":
@@ -94,9 +109,9 @@ def load_functional(name: str, device: torch.device | None = None) -> ExcFunctio
     elif func_name == "tpss":
         func = TPSS()
     else:
-        raise ValueError(
-            f"Unknown functional: {name}. Please provide a valid functional name or path to a traced functional file."
-        )
+        return name
+
     if device is not None:
         func = func.to(device=device)
+
     return func

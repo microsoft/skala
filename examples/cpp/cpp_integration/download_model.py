@@ -38,7 +38,7 @@ feature_labels = {
 
 def main() -> None:
     for huggingface_repo_id, filename in (
-        ("microsoft/skala-1.0", "skala-1.0.fun"),
+        ("microsoft/skala-1.1", "skala-1.1.fun"),
         ("microsoft/skala-baselines", "ldax.fun"),
     ):
         output_path = filename.split("/")[-1]

@@ -72,18 +72,29 @@ If you prefer to install Skala from the source code, you can clone the repositor
    mamba activate skala
    pip install -e .
 
-where `environment-cpu.yml` can be replaced with `environment-gpu.yml` for gpu support (specify CUDA version with `cuda_version=<version>`) with gpu4pyscf, in which case gpu4pyscf needs to be separately installed *after creating the environment* via (for CUDA 12)
+where ``environment-cpu.yml`` can be replaced with ``environment-gpu.yml`` for
+GPU support via `GPU4PySCF <https://github.com/pyscf/gpu4pyscf>`__. The GPU
+environment pins ``cuda-toolkit 12``, ``cuda-version 12``, ``cutensor``, and
+installs ``gpu4pyscf-cuda12x 1.5`` from PyPI as part of the environment file —
+no separate install step is required:
 
 .. code-block:: bash
 
-   pip install --no-deps 'gpu4pyscf-cuda12x>=1.0,<2' 'gpu4pyscf-libxc-cuda12x>=0.4,<1'
+   mamba env create -n skala -f environment-gpu.yml
+   mamba activate skala
+   pip install -e .
 
-
-or (for CUDA 13) 
+If you are building inside a container without a GPU attached (for example CI,
+or a Docker image built on a CPU-only host), set ``CONDA_OVERRIDE_CUDA`` so the
+solver proceeds without a device:
 
 .. code-block:: bash
 
-   pip install --no-deps 'gpu4pyscf-cuda13x>=1.0,<2' 'gpu4pyscf-libxc-cuda13x>=0.4,<1'
+   CONDA_OVERRIDE_CUDA=12.0 mamba env create -n skala -f environment-gpu.yml
+
+For CUDA 11 or 13, adjust ``cuda-toolkit``, ``cuda-version``, and the
+``gpu4pyscf-cuda{11,13}x`` pin in ``environment-gpu.yml`` accordingly. Check
+your driver's maximum supported CUDA version with ``nvidia-smi``.
 
 To install the development dependencies, you can run:
 

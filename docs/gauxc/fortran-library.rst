@@ -560,8 +560,8 @@ from the ``huggingface_hub`` package:
 
 .. code-block:: shell
 
-   hf download microsoft/skala-1.0 skala-1.0.fun --local-dir .
-   ./build/Skala He_def2-svp.h5 --model ./skala-1.0.fun
+   hf download microsoft/skala-1.1 skala-1.1.fun --local-dir .
+   ./build/Skala He_def2-svp.h5 --model ./skala-1.1.fun
 
 The output shows results for the Skala functional:
 
@@ -569,14 +569,14 @@ The output shows results for the Skala functional:
 
    Configuration
    -> Input file        : He_def2-svp.h5
-   -> Model             : ./skala-1.0.fun
+   -> Model             : ./skala-1.1.fun
    -> Grid              : fine
    -> Radial quadrature : muraknowles
    -> Pruning scheme    : robust
 
    Results
-   Exc          = -1.0712560874E+00 Eh
-   |VXC(a+b)|_F =  1.5002997546E+00
+   Exc          = -1.0646206500E+00 Eh
+   |VXC(a+b)|_F =  1.4893029702E+00
    |VXC(a-b)|_F =  0.0000000000E+00
    Runtime XC   =  1.5986489670E+00
 

@@ -10,7 +10,7 @@ dependencies:
   - h5py
   - numpy
   - opt_einsum_fx
-  - pyscf
+  - pyscf >=2.8,<2.13
   - python
   - pytorch * cpu_*
   - qcelemental
@@ -18,5 +18,8 @@ dependencies:
   - pre-commit
   - pytest
   - pytest-cov
+  - pytest-randomly
+  - ruff
+  - mypy
   - pip:
     - huggingface_hub

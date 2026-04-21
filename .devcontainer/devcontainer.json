@@ -1,0 +1,52 @@
+{
+    "name": "skala-dev-gpu",
+    "build": {
+        "dockerfile": "skala_dev.Dockerfile",
+        "context": "..",
+        "args": {
+            "ENV_VARIANT": "gpu"
+        }
+    },
+    "postCreateCommand": "",
+    "containerEnv": {
+        "PYTHONPATH": "${containerWorkspaceFolder}/src/"
+    },
+    "runArgs": [
+        "--shm-size=2gb",
+        "--network=host"
+    ],
+    "forwardPorts": [],
+    "containerUser": "ubuntu", // or "${localEnv:USER}",
+    "features": {
+        "ghcr.io/devcontainers/features/common-utils:2": {
+            "installZsh": false,
+            "installOhMyZsh": false,
+            "upgradePackages": false
+            // If a user with this UID already exists in the image, comment the following lines and set "containerUser" to that user instead.
+            // "username": "${localEnv:USER}",
+            // "userUid": "${localEnv:UID}",
+            // "userGid": "${localEnv:UID}"
+        }
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",
+                "charliermarsh.ruff",
+                "ms-python.mypy-type-checker"
+            ],
+            "settings": {
+                "[python]": {
+                    "editor.defaultFormatter": "charliermarsh.ruff"
+                },
+                "python.testing.pytestEnabled": true,
+                "python.testing.pytestArgs": [
+                    "${containerWorkspaceFolder}/tests/"
+                ],
+                "mypy-type-checker.args": [
+                    "--config-file=pyproject.toml"
+                ]
+            }
+        }
+    }
+}

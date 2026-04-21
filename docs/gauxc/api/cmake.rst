@@ -37,7 +37,7 @@ When building with CUDA support via :cmake:variable:`GAUXC_ENABLE_CUDA` (default
 When building with HDF5 support via :cmake:variable:`GAUXC_ENABLE_HDF5` (default ``on``), the following dependencies are also required:
 
 - `HDF5 <https://support.hdfgroup.org/documentation>`__
-- `HighFive <https://github.com/highfive-dev/highfive>`__\ * (version 2.4.0 or higher)
+- `HighFive <https://github.com/highfive-devs/highfive>`__\ * (version 2.4.0 or higher)
 
 All libraries marked with a * can be automatically fetched by the GauXC build system and do not need to be installed manually.
 

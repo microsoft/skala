@@ -10,17 +10,20 @@ dependencies:
   - h5py
   - numpy
   - opt_einsum_fx
-  - pyscf
+  - pyscf >=2.8,<2.13
   - python
   - pytorch-gpu
   - qcelemental
-  - cuda-toolkit
-  - cupy
-  - cutensor
-  - cuda-version
+  - cuda-toolkit >=12,<13
+  - cuda-version >=12,<13
+  - cutensor >=2
   # Testing and development
   - pre-commit
   - pytest
   - pytest-cov
+  - pytest-randomly
+  - ruff
+  - mypy
   - pip:
     - huggingface_hub
+    - gpu4pyscf-cuda12x ==1.5

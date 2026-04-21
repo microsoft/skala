@@ -50,6 +50,7 @@ def num_dif_ridders(
 
     d_estimate[0, 0] = (func(x + step) - func(x - step)) / (2 * step)
     prev_deriv = d_estimate[0, 0]
+    num_deriv = prev_deriv
     for iter in range(1, max_tab):
         step /= step_div
         d_estimate[iter, 0] = (func(x + step) - func(x - step)) / (2 * step)
@@ -93,7 +94,7 @@ def num_grad_ridders(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Recursively calculates the partial derivative w.r.t. all elements of x over all dimensions."""
 
-    def func_1d_red(xi: torch.Tensor):
+    def func_1d_red(xi: torch.Tensor) -> torch.Tensor:
         x_ = x.clone()
         x_[i] = xi
         return func(x_)
@@ -116,7 +117,7 @@ def num_grad_ridders(
 
 
 @pytest.fixture(params=["HF", "H2O", "H2O+"])
-def mol_name(request) -> gto.Mole:
+def mol_name(request: pytest.FixtureRequest) -> str:
     return request.param
 
 
@@ -153,19 +154,19 @@ def get_grid_and_rdm1(mol: gto.Mole) -> tuple[dft.Grids, torch.Tensor]:
         grids=minimal_grid(mol),
     )
     mf.kernel()
-    rdm1 = torch.from_dlpack(mf.make_rdm1())
+    rdm1 = torch.from_dlpack(mf.make_rdm1())  # type: ignore[attr-defined]
     return mf.grids, rdm1  # maybe_expand_and_divide(rdm1, len(rdm1.shape) == 2, 2)
 
 
 def test_grid_coords_gradient(mol_name: str) -> None:
     class TestFunc(ExcFunctionalBase):
-        def __init__(self):
+        def __init__(self) -> None:
             super().__init__()
             self.features = ["grid_coords"]
 
-        def get_exc(self, mol_feats: dict[str, torch.Tensor]) -> torch.Tensor:
+        def get_exc(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
             """This actually calculates the total electron number"""
-            return mol_feats["grid_coords"].sum()
+            return mol["grid_coords"].sum()
 
     mol = get_mol(mol_name)
     grid, rdm1 = get_grid_and_rdm1(mol)
@@ -186,13 +187,13 @@ def test_grid_coords_gradient(mol_name: str) -> None:
 
 def test_coarse_0_atomic_coords_gradient(mol_name: str) -> None:
     class TestFunc(ExcFunctionalBase):
-        def __init__(self):
+        def __init__(self) -> None:
             super().__init__()
             self.features = ["coarse_0_atomic_coords"]
 
-        def get_exc(self, mol_feats: dict[str, torch.Tensor]) -> torch.Tensor:
+        def get_exc(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
             """This actually calculates the total electron number"""
-            return torch.einsum("nx->", mol_feats["coarse_0_atomic_coords"])
+            return torch.einsum("nx->", mol["coarse_0_atomic_coords"])
 
     mol = get_mol(mol_name)
     grid, rdm1 = get_grid_and_rdm1(mol)
@@ -209,17 +210,17 @@ def test_grid_weights_gradient(mol_name: str) -> None:
     mol = get_mol(mol_name)
 
     class TestFunc(ExcFunctionalBase):
-        def __init__(self):
+        def __init__(self) -> None:
             super().__init__()
             self.features = ["grid_weights"]
 
-        def get_exc(self, mol_feats: dict[str, torch.Tensor]) -> torch.Tensor:
+        def get_exc(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
             """This actually calculates the total electron number"""
-            return mol_feats["grid_weights"].sum()
+            return mol["grid_weights"].sum()
 
     def finite_difference_nuc_grad(
         weight_sum: ExcFunctionalBase, mol: gto.Mole, rdm1: torch.Tensor
-    ):
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Calculates the gradient in Exc w.r.t. nuclear coordinates numerically"""
         # mol_.verbose = 2
         mol_feats = generate_features(
@@ -229,7 +230,7 @@ def test_grid_weights_gradient(mol_name: str) -> None:
         def weight_sum_as_nuc_coords_func(nuc_coords: torch.Tensor) -> torch.Tensor:
             """Exc wrapper for the finite difference"""
             mol.set_geom_(nuc_coords.cpu().numpy(), "bohr", symmetry=None)
-            mol_feats["grid_weights"] = torch.from_dlpack(minimal_grid(mol).weights)
+            mol_feats["grid_weights"] = torch.from_dlpack(minimal_grid(mol).weights)  # type: ignore[attr-defined]
 
             return weight_sum.get_exc(mol_feats)
 
@@ -244,7 +245,7 @@ def test_grid_weights_gradient(mol_name: str) -> None:
     num_grad, num_err = finite_difference_nuc_grad(exc_test, mol, rdm1)
     # estimate the minimum expected absolute error
     eps = (
-        exc_test.get_exc({"grid_weights": torch.from_dlpack(grid.weights)})
+        exc_test.get_exc({"grid_weights": torch.from_dlpack(grid.weights)})  # type: ignore[attr-defined]
         * torch.finfo(num_grad.dtype).eps
     )
 
@@ -261,17 +262,17 @@ def test_density_veff(mol_name: str) -> None:
     mol = get_mol(mol_name)
 
     class TestFunc(ExcFunctionalBase):
-        def __init__(self):
+        def __init__(self) -> None:
             super().__init__()
             self.features = ["density", "grid_weights"]
 
-        def get_exc(self, mol_feats: dict[str, torch.Tensor]) -> torch.Tensor:
+        def get_exc(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
             """This actually calculates the total electron number"""
-            return (mol_feats["density"] @ mol_feats["grid_weights"]).sum()
+            return (mol["density"] @ mol["grid_weights"]).sum()
 
     def finite_difference_nuc_grad(
         dens_sum: ExcFunctionalBase, mol: gto.Mole, rdm1: torch.Tensor
-    ):
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Calculates the gradient in Exc w.r.t. nuclear coordinates numerically"""
 
         grid = minimal_grid(mol)
@@ -316,23 +317,23 @@ def test_grad_veff(mol_name: str) -> None:
     mol = get_mol(mol_name)
 
     class TestFunc(ExcFunctionalBase):
-        def __init__(self):
+        def __init__(self) -> None:
             super().__init__()
             self.features = ["grad", "grid_weights"]
 
-        def get_exc(self, mol_feats: dict[str, torch.Tensor]) -> torch.Tensor:
+        def get_exc(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
             return (
-                (mol_feats["grad"] ** 2 @ mol_feats["grid_weights"])
+                (mol["grad"] ** 2 @ mol["grid_weights"])
                 @ torch.tensor(
                     [1.0, 2.0, 3.0],
                     dtype=torch.float64,
-                    device=mol_feats["grad"].device,
+                    device=mol["grad"].device,
                 )
             ).sum()
 
     def finite_difference_nuc_grad(
         grad_func: ExcFunctionalBase, mol: gto.Mole, rdm1: torch.Tensor
-    ):
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Calculates the gradient in Exc w.r.t. nuclear coordinates numerically"""
 
         grid = minimal_grid(mol)
@@ -376,17 +377,17 @@ def test_kin_veff(mol_name: str) -> None:
     mol = get_mol(mol_name)
 
     class TestFunc(ExcFunctionalBase):
-        def __init__(self):
+        def __init__(self) -> None:
             super().__init__()
             self.features = ["kin", "grid_weights"]
 
-        def get_exc(self, mol_feats: dict[str, torch.Tensor]) -> torch.Tensor:
+        def get_exc(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
             """This actually calculates the total kinetic energy number"""
-            return (mol_feats["kin"] @ mol_feats["grid_weights"]).sum()
+            return (mol["kin"] @ mol["grid_weights"]).sum()
 
     def finite_difference_nuc_grad(
         kin_func: ExcFunctionalBase, mol: gto.Mole, rdm1: torch.Tensor
-    ):
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Calculates the gradient in Exc w.r.t. nuclear coordinates numerically"""
 
         grid = minimal_grid(mol)
@@ -427,20 +428,29 @@ def test_kin_veff(mol_name: str) -> None:
 
 
 def run_scf(
-    mol: gto.Mole, functional: ExcFunctionalBase, with_dftd3: bool
+    mol: gto.Mole,
+    functional: ExcFunctionalBase,
+    with_dftd3: bool,
+    *,
+    grid_level: int = 1,
 ) -> scf.hf.SCF:
     print(f"{mol.basis = }")
     scf = SkalaKS(mol, xc=functional, with_dftd3=with_dftd3)
-    scf.grids = minimal_grid(mol)
+    scf.grids.level = grid_level
     scf.conv_tol = 1e-14
-    # scf.verbose = 0
     scf.kernel()
 
     return scf
 
 
-@pytest.fixture(params=["pbe"])
-def xc_name(request) -> str:
+@pytest.fixture(
+    params=[
+        "pbe",
+        "skala-1.0",
+        "skala-1.1",
+    ]
+)
+def xc_name(request: pytest.FixtureRequest) -> str:
     return request.param
 
 
@@ -472,15 +482,63 @@ FULL_GRAD_REF = {
         ],
         dtype=torch.float64,
     ),
+    "HF:skala-1.0": torch.tensor(
+        [
+            [-6.613324869518045e-11, 8.252792463549002e-11, -0.11766455093793571],
+            [6.61332489653549e-11, -8.252792460791792e-11, 0.11766455093858674],
+        ],
+        dtype=torch.float64,
+    ),
+    "H2O:skala-1.0": torch.tensor(
+        [
+            [0.047614265311160864, -1.531395405982722e-10, -3.8752502138778113e-10],
+            [-0.023807132833466138, 1.4666252996608134e-10, -0.1265627683625854],
+            [-0.02380713247717514, 6.477008760972603e-12, 0.12656276875009254],
+        ],
+        dtype=torch.float64,
+    ),
+    "H2O+:skala-1.0": torch.tensor(
+        [
+            [0.11016449231802916, -1.4692817466244152e-10, 8.447353527447336e-10],
+            [-0.05508224759855285, 4.2209029890734686e-10, -0.15564538047513543],
+            [-0.05508224472116563, -2.751621283378772e-10, 0.15564537963040848],
+        ],
+        dtype=torch.float64,
+    ),
+    "HF:skala-1.1": torch.tensor(
+        [
+            [-9.093651147681359e-11, 1.8436550945505342e-10, -0.11922130029704636],
+            [9.093651147684337e-11, -1.8436550945509882e-10, 0.11922130029705125],
+        ],
+        dtype=torch.float64,
+    ),
+    "H2O:skala-1.1": torch.tensor(
+        [
+            [0.05518685428627901, 1.0112539782960166e-09, 5.727682266064312e-10],
+            [-0.027593427632945478, -4.887476070628282e-06, -0.12591870031741337],
+            [-0.027593426653364173, 4.886464816658505e-06, 0.12591869974465286],
+        ],
+        dtype=torch.float64,
+    ),
+    "H2O+:skala-1.1": torch.tensor(
+        [
+            [0.11201511304824052, -2.33353601498583e-10, 4.162082128268623e-10],
+            [-0.05600755684684611, -1.4123079854089175e-06, -0.15729176960843216],
+            [-0.056007556201392195, 1.4125413389947007e-06, 0.15729176919222287],
+        ],
+        dtype=torch.float64,
+    ),
 }
 
 
 def test_full_grad(mol_name: str, xc_name: str) -> None:
     # analytical result
     mol = get_mol(mol_name)
-    scf = run_scf(
-        mol, load_functional(xc_name, device=torch.device("cuda:0")), with_dftd3=False
-    )
+    func = load_functional(xc_name, device=torch.device("cuda:0"))
+    assert isinstance(func, ExcFunctionalBase)
+    # skala-1.1 uses per-atom packed grids (unsorted) and needs a denser grid
+    # to avoid NaNs in the SCF.
+    scf = run_scf(mol, func, with_dftd3=False)
 
     if mol.spin == 0:
         grad = SkalaRKSGradient(scf).kernel()
@@ -490,17 +548,10 @@ def test_full_grad(mol_name: str, xc_name: str) -> None:
 
     # get reference result
     ref_grad = FULL_GRAD_REF[mol_name + ":" + xc_name]
-    # get numerical result
-    # num_grad, num_err = SkalaRKSGradient(scf).numerical()
-    # print(f"{ana_grad = }")
-    # print(f"{num_grad = }")
-    # print(f"{num_err = }")
-    # print(f"{ana_grad - num_grad}")
-    # print(f"{ref_grad = }")
 
     assert torch.allclose(ana_grad, ref_grad, atol=1e-4), (
         f"Gradients for {mol_name} with {xc_name} do not match reference.\n"
-        f"Analytic: {ana_grad}\n"
+        f"Analytic: {ana_grad.tolist()!r}\n"
         f"Reference: {ref_grad}\n"
         f"Difference: {ana_grad - ref_grad}"
     )

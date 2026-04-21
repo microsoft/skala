@@ -1,5 +1,5 @@
-Skala model
-===========
+Skala 1.0 model
+===============
 
 Model details
 -------------
@@ -85,9 +85,9 @@ The following data is included in our training set:
 - Four datasets from the `NCI-Atlas collection of non-covalent interactions <http://www.nciatlas.org/>`__:
 
   - `D442x10 <http://www.nciatlas.org/D442x10.html>`__, dissociation curves for dispersion-bound van der Waals complexes
-  - `SH250x10 <http://www.nciatlas.org/sh250.html>`__, dissociation curves for sigma-hole-bound van der Waals complexes
-  - `R739x5 <http://www.nciatlas.org/r739.html>`__, compressed van der Waals complexes
-  - `HB300SPXx10 <http://www.nciatlas.org/hb300spx.html>`__, dissociation curves for hydrogen-bound van der Waals complexes
+  - `SH250x10 <http://www.nciatlas.org/SH250.html>`__, dissociation curves for sigma-hole-bound van der Waals complexes
+  - `R739x5 <http://www.nciatlas.org/R739.html>`__, compressed van der Waals complexes
+  - `HB300SPXx10 <http://www.nciatlas.org/HB300SPX.html>`__, dissociation curves for hydrogen-bound van der Waals complexes
 
 - W4-CC, containing atomization energies of carbon clusters.\ :footcite:`karton2009`
 

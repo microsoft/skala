@@ -16,4 +16,11 @@ KNOWN_HASHES: dict[tuple[str, str], str] = {
     ("microsoft/skala-1.0", "skala-1.0-cuda.fun"): (
         "0b38e13237cec771fed331664aace42f8c0db8f15caca6a5c563085e61e2b1fd"
     ),
+    ("microsoft/skala-1.1", "skala-1.1.fun"): (
+        "0c8432ac3f03c8f1276372df9aca5b7ee7f8939d47a8789eb158976e89aa0606"
+    ),
+    (
+        "microsoft/skala-1.1",
+        "skala-1.1-cuda.fun",
+    ): "f77be6002d873c0a2384b6df7850d32bbec519036344ff5fdde9730c6f9a4326",
 }

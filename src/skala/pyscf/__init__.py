@@ -8,15 +8,10 @@ functionals and the PySCF quantum chemistry package, enabling DFT calculations
 with neural network-based functionals.
 """
 
-try:
-    import pyscf  # noqa: F401
-except ModuleNotFoundError as e:
-    raise ModuleNotFoundError(
-        "PySCF is not installed. Please install it with `pip install pyscf` or `conda install pyscf`."
-    ) from e
-
 from typing import Any
 
+import torch
+from pyscf import dft as pyscf_dft
 from pyscf import gto
 
 from skala.functional import ExcFunctionalBase, load_functional
@@ -33,6 +28,7 @@ def SkalaKS(
     auxbasis: str | None = None,
     ks_config: dict[str, Any] | None = None,
     soscf_config: dict[str, Any] | None = None,
+    device: torch.device | None = None,
 ) -> dft.SkalaRKS | dft.SkalaUKS:
     """
     Create a Kohn-Sham calculator for the Skala functional.
@@ -55,6 +51,8 @@ def SkalaKS(
         Additional configuration options for the Kohn-Sham calculator. Default is None.
     soscf_config : dict, optional
         Additional configuration options for the second-order SCF (SOSCF) method. Default is None.
+    device : torch.device, optional
+        The device to run the calculations on. Default is None.
 
     Returns
     -------
@@ -68,19 +66,29 @@ def SkalaKS(
     >>> from skala.pyscf import SkalaKS
     >>>
     >>> mol = gto.M(atom="H 0 0 0; H 0 0 1", basis="def2-svp")
-    >>> ks = SkalaKS(mol, xc=load_functional("skala"))
+    >>> ks = SkalaKS(mol, xc=load_functional("skala-1.1"))
     >>> ks = ks.density_fit(auxbasis="def2-svp-jkfit")  # Optional: use density fitting
     >>> ks = ks.set(verbose=0)
     >>> energy = ks.kernel()
     >>> print(energy)  # DOCTEST: Ellipsis
-    -1.142773...
+    -1.143024...
     >>> ks = ks.nuc_grad_method()
     >>> gradient = ks.kernel()
     >>> print(abs(gradient).mean())  # DOCTEST: Ellipsis
-    0.029477...
+    0.029415...
     """
     if isinstance(xc, str):
         xc = load_functional(xc)
+    if isinstance(xc, str):
+        return _create_native_pyscf_ks(
+            mol,
+            xc,
+            with_density_fit=with_density_fit,
+            with_newton=with_newton,
+            auxbasis=auxbasis,
+            ks_config=ks_config,
+            soscf_config=soscf_config,
+        )
     if mol.spin == 0:
         return SkalaRKS(
             mol,
@@ -91,6 +99,7 @@ def SkalaKS(
             auxbasis=auxbasis,
             ks_config=ks_config,
             soscf_config=soscf_config,
+            device=device,
         )
     else:
         return SkalaUKS(
@@ -102,6 +111,7 @@ def SkalaKS(
             auxbasis=auxbasis,
             ks_config=ks_config,
             soscf_config=soscf_config,
+            device=device,
         )
 
 
@@ -115,6 +125,7 @@ def SkalaRKS(
     auxbasis: str | None = None,
     ks_config: dict[str, Any] | None = None,
     soscf_config: dict[str, Any] | None = None,
+    device: torch.device | None = None,
 ) -> dft.SkalaRKS:
     """
     Create a restricted Kohn-Sham calculator for the Skala functional.
@@ -137,6 +148,8 @@ def SkalaRKS(
         Additional configuration options for the Kohn-Sham calculator. Default is None.
     soscf_config : dict, optional
         Additional configuration options for the second-order SCF (SOSCF) method. Default is None.
+    device : torch.device, optional
+        The device to run the calculations on. Default is None.
 
     Returns
     -------
@@ -149,37 +162,36 @@ def SkalaRKS(
     >>> from skala.pyscf import SkalaRKS
     >>>
     >>> mol = gto.M(atom="H 0 0 0; H 0 0 1", basis="def2-svp")
-    >>> ks = SkalaRKS(mol, xc="skala", with_density_fit=True, auxbasis="def2-svp-jkfit")(verbose=0)
+    >>> ks = SkalaRKS(mol, xc="skala-1.1", with_density_fit=True, auxbasis="def2-svp-jkfit")(verbose=0)
     >>> ks  # DOCTEST: Ellipsis
     <pyscf.df.df_jk.DFSkalaRKS object at ...>
     >>> energy = ks.kernel()
     >>> print(energy)  # DOCTEST: Ellipsis
-    -1.142773...
+    -1.143024...
     """
     if isinstance(xc, str):
         xc = load_functional(xc)
-    ks = dft.SkalaRKS(mol, xc)
+    if isinstance(xc, str):
+        ks = pyscf_dft.RKS(mol)
+        ks.xc = xc
+        return _apply_ks_config(
+            ks,
+            with_density_fit=with_density_fit,
+            with_newton=with_newton,
+            auxbasis=auxbasis,
+            ks_config=ks_config,
+            soscf_config=soscf_config,
+        )
+    ks = dft.SkalaRKS(mol, xc, device=device, with_dftd3=with_dftd3)
 
-    if ks_config is not None:
-        ks = ks(**ks_config)
-
-    if not with_dftd3:
-        ks.with_dftd3 = None
-
-    if with_density_fit:
-        ks = ks.density_fit(auxbasis=auxbasis)
-    else:
-        if auxbasis is not None:
-            raise ValueError(
-                "Auxiliary basis can only be set when density fitting is enabled."
-            )
-
-    if with_newton:
-        ks = ks.newton()
-        if soscf_config is not None:
-            ks.__dict__.update(soscf_config)
-
-    return ks
+    return _apply_ks_config(
+        ks,
+        with_density_fit=with_density_fit,
+        with_newton=with_newton,
+        auxbasis=auxbasis,
+        ks_config=ks_config,
+        soscf_config=soscf_config,
+    )
 
 
 def SkalaUKS(
@@ -192,6 +204,7 @@ def SkalaUKS(
     auxbasis: str | None = None,
     ks_config: dict[str, Any] | None = None,
     soscf_config: dict[str, Any] | None = None,
+    device: torch.device | None = None,
 ) -> dft.SkalaUKS:
     """
     Create an unrestricted Kohn-Sham calculator for the Skala functional.
@@ -214,6 +227,8 @@ def SkalaUKS(
         Additional configuration options for the Kohn-Sham calculator. Default is None.
     soscf_config : dict, optional
         Additional configuration options for the second-order SCF (SOSCF) method. Default is None.
+    device : torch.device, optional
+        The device to run the calculations on. Default is None.
 
     Returns
     -------
@@ -226,34 +241,82 @@ def SkalaUKS(
     >>> from skala.pyscf import SkalaUKS
     >>>
     >>> mol = gto.M(atom="H", basis="def2-svp", spin=1)
-    >>> ks = SkalaUKS(mol, xc="skala", with_density_fit=True, auxbasis="def2-svp-jkfit")(verbose=0)
+    >>> ks = SkalaUKS(mol, xc="skala-1.1", with_density_fit=True, auxbasis="def2-svp-jkfit")(verbose=0)
     >>> ks  # DOCTEST: Ellipsis
     <pyscf.df.df_jk.DFSkalaUKS object at ...>
     >>> energy = ks.kernel()
     >>> print(energy)  # DOCTEST: Ellipsis
-    -0.499031...
+    -0.499123...
     """
     if isinstance(xc, str):
         xc = load_functional(xc)
-    ks = dft.SkalaUKS(mol, xc)
+    if isinstance(xc, str):
+        ks = pyscf_dft.UKS(mol)
+        ks.xc = xc
+        return _apply_ks_config(
+            ks,
+            with_density_fit=with_density_fit,
+            with_newton=with_newton,
+            auxbasis=auxbasis,
+            ks_config=ks_config,
+            soscf_config=soscf_config,
+        )
+    ks = dft.SkalaUKS(mol, xc, device=device, with_dftd3=with_dftd3)
 
+    return _apply_ks_config(
+        ks,
+        with_density_fit=with_density_fit,
+        with_newton=with_newton,
+        auxbasis=auxbasis,
+        ks_config=ks_config,
+        soscf_config=soscf_config,
+    )
+
+
+def _apply_ks_config(
+    ks: "dft.SkalaRKS | dft.SkalaUKS",
+    *,
+    with_density_fit: bool,
+    with_newton: bool,
+    auxbasis: str | None,
+    ks_config: dict[str, Any] | None,
+    soscf_config: dict[str, Any] | None,
+) -> "dft.SkalaRKS | dft.SkalaUKS":
+    """Apply common KS configuration (grids, density fitting, Newton, SOSCF)."""
     if ks_config is not None:
         ks = ks(**ks_config)
-
-    if not with_dftd3:
-        ks.with_dftd3 = None
-
     if with_density_fit:
         ks = ks.density_fit(auxbasis=auxbasis)
-    else:
-        if auxbasis is not None:
-            raise ValueError(
-                "Auxiliary basis can only be set when density fitting is enabled."
-            )
-
+    elif auxbasis is not None:
+        raise ValueError(
+            "Auxiliary basis can only be set when density fitting is enabled."
+        )
     if with_newton:
         ks = ks.newton()
         if soscf_config is not None:
             ks.__dict__.update(soscf_config)
-
     return ks
+
+
+def _create_native_pyscf_ks(
+    mol: gto.Mole,
+    xc_name: str,
+    *,
+    with_density_fit: bool,
+    with_newton: bool,
+    auxbasis: str | None,
+    ks_config: dict[str, Any] | None,
+    soscf_config: dict[str, Any] | None,
+) -> "pyscf_dft.rks.RKS | pyscf_dft.uks.UKS":
+    """Create a native PySCF KS calculator for standard functionals."""
+    cls = pyscf_dft.RKS if mol.spin == 0 else pyscf_dft.UKS
+    ks = cls(mol)
+    ks.xc = xc_name
+    return _apply_ks_config(
+        ks,
+        with_density_fit=with_density_fit,
+        with_newton=with_newton,
+        auxbasis=auxbasis,
+        ks_config=ks_config,
+        soscf_config=soscf_config,
+    )

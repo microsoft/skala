@@ -5,7 +5,7 @@ import torch
 from skala.functional.base import spin_symmetrized_enhancement_factor
 
 
-def test_spin_symmetrized_enhancement_factor():
+def test_spin_symmetrized_enhancement_factor() -> None:
     n = 16
     dim_ab = 6
     dim_agnostic = 2

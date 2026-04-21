@@ -40,7 +40,7 @@ def test_retry_newton(mol: gto.Mole) -> None:
 
     assert state.ntries > 1, "SCF should have been retried"
     assert ks.converged, "SCF did not converge with retry mechanism"
-    assert isinstance(
-        ks, _CIAH_SOSCF
-    ), "SCF should have used Newton's method after retries"
+    assert isinstance(ks, _CIAH_SOSCF), (
+        "SCF should have used Newton's method after retries"
+    )
     assert ks.level_shift == 0, "Level shift should be zero after Newton's method retry"

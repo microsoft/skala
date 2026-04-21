@@ -25,6 +25,13 @@ from skala.pyscf.backend import (
 DEFAULT_FEATURES = ["density", "kin", "grad", "grid_coords", "grid_weights"]
 DEFAULT_FEATURES_SET = set(DEFAULT_FEATURES)
 
+# Features that require per-atom grid decomposition.
+_ATOMIC_GRID_FEATURES = {
+    "atomic_grid_weights",
+    "atomic_grid_sizes",
+    "atomic_grid_size_bound_shape",
+}
+
 
 def maybe_expand_and_divide(
     feature: torch.Tensor, expand: bool, divisor: float
@@ -97,6 +104,31 @@ def generate_features(
         mol_features["coarse_0_atomic_coords"] = from_numpy_or_cupy(
             mol.atom_coords(), device=dm.device, dtype=dm.dtype
         )
+
+    if features & _ATOMIC_GRID_FEATURES:
+        atom_grids_tab = grids.gen_atomic_grids(
+            mol, grids.atom_grid, grids.radi_method, grids.level, grids.prune
+        )
+        sizes = [len(atom_grids_tab[mol.atom_symbol(ia)][1]) for ia in range(mol.natm)]
+
+        if "atomic_grid_sizes" in features:
+            mol_features["atomic_grid_sizes"] = torch.tensor(
+                sizes, dtype=torch.long, device=dm.device
+            )
+
+        if "atomic_grid_size_bound_shape" in features:
+            max_size = max(sizes)
+            mol_features["atomic_grid_size_bound_shape"] = torch.zeros(
+                max_size, 0, dtype=torch.long, device=dm.device
+            )
+
+        if "atomic_grid_weights" in features:
+            raw_weights = np.concatenate(
+                [atom_grids_tab[mol.atom_symbol(ia)][1] for ia in range(mol.natm)]
+            )
+            mol_features["atomic_grid_weights"] = from_numpy_or_cupy(
+                raw_weights, device=dm.device, dtype=dm.dtype
+            )
 
     with_mgga_feature = (
         "density" in features
@@ -180,7 +212,7 @@ def partial_vjp_function_over_tangents(
     return reduced_vjp
 
 
-class FeatureFunction(nn.Module, ABC):  # type: ignore[misc]
+class FeatureFunction(nn.Module, ABC):
     deriv: int
     nfeats: int
     only_linear_feats: bool
@@ -376,7 +408,7 @@ class MGGAFeatureFunction(FeatureFunction):
             return features.reshape((*dm.shape[:-2], self.nfeats, -1))
 
 
-class ChunkEvalForward(Function):  # type: ignore[misc]
+class ChunkEvalForward(Function):
     @staticmethod
     def setup_context(
         ctx: FunctionCtx,
@@ -441,6 +473,13 @@ class ChunkEvalForward(Function):  # type: ignore[misc]
         if len(vectors_jvp) > 1 and feature_function.only_linear_feats:
             return features
 
+        # Pre-sort DM and JVP vectors once (sort_idx is constant across blocks)
+        sort_idx_t = torch.as_tensor(sort_idx, device=dm.device)
+        dm_sorted = dm[..., sort_idx_t, :][..., sort_idx_t]
+        vectors_jvp_sorted = [
+            v[..., sort_idx_t, :][..., sort_idx_t] for v in vectors_jvp
+        ]
+
         end = 0
         for ao_block, mask, weights, _ in ni.block_loop(
             *block_loop_args, **block_loop_kwargs
@@ -451,9 +490,7 @@ class ChunkEvalForward(Function):  # type: ignore[misc]
                 mask = torch.arange(mol.nao_nr(), device=dm.device)
             else:
                 mask = torch.from_dlpack(mask)
-            masked_dm = dm[..., sort_idx, :][..., sort_idx][
-                ..., mask[:, None], mask[None, :]
-            ]
+            masked_dm = dm_sorted[..., mask[:, None], mask[None, :]]
 
             # Apply chain rule for this particular block
             partial_func = partial_feature_function_over_aos(
@@ -462,12 +499,10 @@ class ChunkEvalForward(Function):  # type: ignore[misc]
                     ao_block, device=dm.device, dtype=dm.dtype, transpose=not gpu
                 ),
             )
-            for vector_jvp in vectors_jvp:
+            for v_sorted in vectors_jvp_sorted:
                 partial_func = partial_jvp_function_over_tangents(
                     partial_func,
-                    vector_jvp[..., sort_idx, :][..., sort_idx][
-                        ..., mask[:, None], mask[None, :]
-                    ],
+                    v_sorted[..., mask[:, None], mask[None, :]],
                 )
 
             # Compute feature (or its jvp) for this block with masked dm
@@ -496,7 +531,7 @@ class ChunkEvalForward(Function):  # type: ignore[misc]
 
     @staticmethod
     def backward(
-        ctx: FunctionCtx, grad_output: torch.Tensor
+        ctx: FunctionCtx, *grad_outputs: torch.Tensor
     ) -> tuple[torch.Tensor | None, ...]:
         # After one vjp (backward) the signature of the function changes from dm.shape -> (*dm.shape[:-2], nfeats, ngrid) to dm.shape -> dm.shape
         # therefore we move to a different function that does essentially the same thing, but with the new signature
@@ -513,7 +548,7 @@ class ChunkEvalForward(Function):  # type: ignore[misc]
                 ctx.compile_feature_function,
                 ctx.gpu,
                 *ctx.vectors_jvp,
-                grad_output,
+                *grad_outputs,
             )
         ]
 
@@ -539,7 +574,7 @@ class ChunkEvalForward(Function):  # type: ignore[misc]
                     ctx.compile_feature_function,
                     ctx.gpu,
                     *ctx.vectors_jvp[:i],
-                    grad_output,
+                    *grad_outputs,
                     *ctx.vectors_jvp[i + 1 :],
                 )
             )
@@ -547,7 +582,7 @@ class ChunkEvalForward(Function):  # type: ignore[misc]
         return tuple(grads)
 
 
-class ChunkEvalBackward(Function):  # type: ignore[misc]
+class ChunkEvalBackward(Function):
     @staticmethod
     def setup_context(
         ctx: FunctionCtx,
@@ -608,7 +643,15 @@ class ChunkEvalBackward(Function):  # type: ignore[misc]
         if len(vectors) > 1 and feature_function.only_linear_feats:
             return out
 
-        unsort_idx = torch.argsort(torch.tensor(sort_idx))
+        # Pre-sort DM and derivative vectors once (sort_idx is constant across blocks)
+        sort_idx_t = torch.as_tensor(sort_idx, device=dm.device)
+        unsort_idx = torch.argsort(sort_idx_t)
+        dm_sorted = dm[..., sort_idx_t, :][..., sort_idx_t]
+        vectors_sorted = [
+            v[..., sort_idx_t, :][..., sort_idx_t] if dt in ("jvp", "vjp") else v
+            for dt, v in zip(derivative_types, vectors, strict=True)
+        ]
+
         for ao_block, mask, weights, _ in ni.block_loop(
             *block_loop_args,
             **block_loop_kwargs,
@@ -629,20 +672,18 @@ class ChunkEvalBackward(Function):  # type: ignore[misc]
                     ao_block, device=dm.device, dtype=dm.dtype, transpose=not gpu
                 ),
             )
-            for derivative_type, vector in zip(derivative_types, vectors, strict=True):
+            for derivative_type, vector, v_sorted in zip(
+                derivative_types, vectors, vectors_sorted, strict=True
+            ):
                 if derivative_type == "jvp":
                     partial_func = partial_jvp_function_over_tangents(
                         partial_func,
-                        vector[..., sort_idx, :][..., sort_idx][
-                            ..., mask[:, None], mask[None, :]
-                        ],
+                        v_sorted[..., mask[:, None], mask[None, :]],
                     )
                 elif derivative_type == "vjp":
                     partial_func = partial_vjp_function_over_tangents(
                         partial_func,
-                        vector[..., sort_idx, :][..., sort_idx][
-                            ..., mask[:, None], mask[None, :]
-                        ],
+                        v_sorted[..., mask[:, None], mask[None, :]],
                     )
                 elif derivative_type == "first_vjp":
                     partial_func = partial_vjp_function_over_tangents(
@@ -654,15 +695,11 @@ class ChunkEvalBackward(Function):  # type: ignore[misc]
                     )
             if compile_feature_function:
                 out[..., mask[:, None], mask[None, :]] += torch.compile(partial_func)(
-                    dm[..., sort_idx, :][..., sort_idx][
-                        ..., mask[:, None], mask[None, :]
-                    ]
+                    dm_sorted[..., mask[:, None], mask[None, :]]
                 )
             else:
                 out[..., mask[:, None], mask[None, :]] += partial_func(
-                    dm[..., sort_idx, :][..., sort_idx][
-                        ..., mask[:, None], mask[None, :]
-                    ]
+                    dm_sorted[..., mask[:, None], mask[None, :]]
                 )
         return out[..., unsort_idx, :][..., unsort_idx]
 
@@ -684,7 +721,7 @@ class ChunkEvalBackward(Function):  # type: ignore[misc]
 
     @staticmethod
     def backward(
-        ctx: FunctionCtx, grad_output: torch.Tensor
+        ctx: FunctionCtx, *grad_outputs: torch.Tensor
     ) -> tuple[torch.Tensor | None, ...]:
         # Chain rule for the vjp
 
@@ -700,7 +737,7 @@ class ChunkEvalBackward(Function):  # type: ignore[misc]
                 ctx.compile_feature_function,
                 ctx.gpu,
                 *ctx.vectors,
-                grad_output,
+                *grad_outputs,
             )
         ]
         # We need to provide None for the gradients of the non-differentiable inputs
@@ -725,7 +762,7 @@ class ChunkEvalBackward(Function):  # type: ignore[misc]
                         ctx.compile_feature_function,
                         ctx.gpu,
                         *ctx.vectors[:i],
-                        grad_output,
+                        *grad_outputs,
                         *ctx.vectors[i + 1 :],
                     )
                 )
@@ -740,7 +777,7 @@ class ChunkEvalBackward(Function):  # type: ignore[misc]
                         ctx.compile_feature_function,
                         ctx.gpu,
                         *ctx.vectors[:i],
-                        grad_output,
+                        *grad_outputs,
                         *ctx.vectors[i + 1 :],
                     )
                 )

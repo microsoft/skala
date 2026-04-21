@@ -11,7 +11,7 @@ import math
 from collections.abc import Iterator
 
 import torch
-from torch import Tensor
+from torch import Tensor, nn
 
 from skala.functional import density
 from skala.functional.base import ExcFunctionalBase
@@ -153,12 +153,12 @@ class PBE(SpinScaledXCFunctional):
     def __init__(self) -> None:
         super().__init__()
         self.lda = SPW92()
-        self.beta = torch.tensor(0.066725)
-        self.kappa = torch.tensor(0.804)
+        self.beta = nn.Parameter(torch.tensor(0.066725), requires_grad=False)
+        self.kappa = nn.Parameter(torch.tensor(0.804), requires_grad=False)
         self.mu = self.beta * (math.pi**2 / 3)
 
-    def parameters(self, recurse: bool = True) -> Iterator[Tensor]:
-        super().parameters(recurse)
+    def parameters(self, recurse: bool = True) -> Iterator[nn.Parameter]:
+        yield from super().parameters(recurse)
         yield from [self.beta, self.kappa]
 
     def exchange(self, mol_features: dict[str, Tensor]) -> Tensor:
@@ -211,13 +211,13 @@ class TPSS(SpinScaledXCFunctional):
         super().__init__()
         self.lda = SPW92()
         self.pbe = PBE()
-        self.c = torch.tensor(1.59096)
-        self.e = torch.tensor(1.537)
-        self.b = torch.tensor(0.40)
-        self.d = torch.tensor(2.8)
+        self.c = nn.Parameter(torch.tensor(1.59096), requires_grad=False)
+        self.e = nn.Parameter(torch.tensor(1.537), requires_grad=False)
+        self.b = nn.Parameter(torch.tensor(0.40), requires_grad=False)
+        self.d = nn.Parameter(torch.tensor(2.8), requires_grad=False)
 
-    def parameters(self, recurse: bool = True) -> Iterator[Tensor]:
-        super().parameters(recurse)
+    def parameters(self, recurse: bool = True) -> Iterator[nn.Parameter]:
+        yield from super().parameters(recurse)
         yield from [self.c, self.e, self.b, self.d]
 
     def exchange(self, mol_features: dict[str, Tensor]) -> Tensor:

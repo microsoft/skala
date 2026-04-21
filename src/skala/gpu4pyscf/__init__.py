@@ -89,7 +89,7 @@ def SkalaKS(
     >>> from skala.gpu4pyscf import SkalaKS
     >>>
     >>> mol = gto.M(atom="H 0 0 0; H 0 0 1", basis="def2-svp")
-    >>> ks = SkalaKS(mol, xc="skala")
+    >>> ks = SkalaKS(mol, xc="skala-1.1")
     >>> ks = ks.density_fit(auxbasis="def2-svp-jkfit")  # Optional: use density fitting
     >>> ks = ks.set(verbose=0)
     >>> energy = ks.kernel()
@@ -102,6 +102,7 @@ def SkalaKS(
     """
     if isinstance(xc, str):
         xc = load_functional(xc, device=torch.device("cuda:0"))
+    assert isinstance(xc, ExcFunctionalBase)
     if mol.spin == 0:
         return SkalaRKS(
             mol,
@@ -128,7 +129,7 @@ def SkalaKS(
 
 def SkalaRKS(
     mol: gto.Mole,
-    xc: ExcFunctionalBase,
+    xc: ExcFunctionalBase | str,
     *,
     with_density_fit: bool = False,
     with_newton: bool = False,
@@ -172,7 +173,7 @@ def SkalaRKS(
     >>> import torch
     >>>
     >>> mol = gto.M(atom="H 0 0 0; H 0 0 1", basis="def2-svp")
-    >>> ks = SkalaRKS(mol, xc=load_functional("skala", device=torch.device("cuda:0")), with_density_fit=True)(verbose=0)
+    >>> ks = SkalaRKS(mol, xc=load_functional("skala-1.1", device=torch.device("cuda:0")), with_density_fit=True)(verbose=0)
     >>> ks  # DOCTEST: Ellipsis
     <gpu4pyscf.df.df_jk.DFSkalaRKS object at ...>
     >>> energy = ks.kernel()
@@ -181,13 +182,11 @@ def SkalaRKS(
     """
     if isinstance(xc, str):
         xc = load_functional(xc, device=torch.device("cuda:0"))
-    ks = dft.SkalaRKS(mol, xc)
+    assert isinstance(xc, ExcFunctionalBase)
+    ks = dft.SkalaRKS(mol, xc, with_dftd3=with_dftd3)
 
     if ks_config is not None:
         ks = ks(**ks_config)
-
-    if not with_dftd3:
-        ks.with_dftd3 = None
 
     if with_density_fit:
         ks = ks.density_fit(auxbasis=auxbasis)
@@ -207,7 +206,7 @@ def SkalaRKS(
 
 def SkalaUKS(
     mol: gto.Mole,
-    xc: ExcFunctionalBase,
+    xc: ExcFunctionalBase | str,
     *,
     with_density_fit: bool = False,
     with_newton: bool = False,
@@ -251,7 +250,7 @@ def SkalaUKS(
     >>> import torch
     >>>
     >>> mol = gto.M(atom="H", basis="def2-svp", spin=1)
-    >>> ks = SkalaUKS(mol, xc=load_functional("skala", device=torch.device("cuda:0")), with_density_fit=True, auxbasis="def2-svp-jkfit")(verbose=0)
+    >>> ks = SkalaUKS(mol, xc=load_functional("skala-1.1", device=torch.device("cuda:0")), with_density_fit=True, auxbasis="def2-svp-jkfit")(verbose=0)
     >>> ks  # DOCTEST: Ellipsis
     <gpu4pyscf.df.df_jk.DFSkalaUKS object at ...>
     >>> energy = ks.kernel()
@@ -260,13 +259,11 @@ def SkalaUKS(
     """
     if isinstance(xc, str):
         xc = load_functional(xc, device=torch.device("cuda:0"))
-    ks = dft.SkalaUKS(mol, xc)
+    assert isinstance(xc, ExcFunctionalBase)
+    ks = dft.SkalaUKS(mol, xc, with_dftd3=with_dftd3)
 
     if ks_config is not None:
         ks = ks(**ks_config)
-
-    if not with_dftd3:
-        ks.with_dftd3 = None
 
     if with_density_fit:
         ks = ks.density_fit(auxbasis=auxbasis)

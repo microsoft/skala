@@ -19,7 +19,7 @@ from skala.pyscf import SkalaKS
 from skala.pyscf.retry import retry_scf
 
 
-class Skala(Calculator):  # type: ignore[misc]
+class Skala(Calculator):
     """
     ASE calculator for the Skala exchange-correlation functional.
 
@@ -38,7 +38,7 @@ class Skala(Calculator):  # type: ignore[misc]
     ]
 
     default_parameters: dict[str, Any] = {
-        "xc": "skala",
+        "xc": "skala-1.1",
         "basis": None,
         "with_density_fit": False,
         "auxbasis": None,
@@ -54,8 +54,8 @@ class Skala(Calculator):  # type: ignore[misc]
     _mol: gto.Mole | None = None
     _ks: grad.rhf.GradientsBase | None = None
 
-    def __init__(self, atoms: Atoms | None = None, **kwargs: Any):
-        super().__init__(atoms=atoms, **kwargs)
+    def __init__(self, atoms: Atoms | None = None, **kwargs: Any) -> None:
+        super().__init__(atoms=atoms, **kwargs)  # type: ignore[no-untyped-call]
 
     def set(self, **kwargs: Any) -> dict[str, Any]:
         """
@@ -66,12 +66,12 @@ class Skala(Calculator):  # type: ignore[misc]
         **kwargs : dict
             Additional parameters to set for the calculator.
         """
-        changed_parameters: dict[str, Any] = super().set(**kwargs)
+        changed_parameters: dict[str, Any] = super().set(**kwargs)  # type: ignore[no-untyped-call]
         if "verbose" in changed_parameters:
             if self._mol is not None:
-                self._mol.verbose = int(self.parameters.verbose)
+                self._mol.verbose = int(self.parameters.verbose)  # type: ignore
             if self._ks is not None:
-                verbose = int(self.parameters.verbose)
+                verbose = int(self.parameters.verbose)  # type: ignore
                 self._ks.verbose = verbose
                 self._ks.base.verbose = verbose
 
@@ -104,7 +104,7 @@ class Skala(Calculator):  # type: ignore[misc]
         """
         Reset the calculator to its initial state.
         """
-        super().reset()
+        super().reset()  # type: ignore[no-untyped-call]
 
     def calculate(
         self,
@@ -129,11 +129,11 @@ class Skala(Calculator):  # type: ignore[misc]
         if system_changes is None:
             system_changes = all_changes
 
-        super().calculate(
+        super().calculate(  # type: ignore[no-untyped-call]
             atoms=atoms, properties=properties, system_changes=system_changes
         )
 
-        if not isinstance(basis := self.parameters.basis, str):
+        if not isinstance(basis := self.parameters.basis, str):  # type: ignore
             raise InputError("Basis set must be specified in the parameters.")
 
         if self.atoms is None:
@@ -154,25 +154,25 @@ class Skala(Calculator):  # type: ignore[misc]
                 atom=atom,
                 basis=basis,
                 unit="Angstrom",
-                verbose=int(self.parameters.verbose),
-                charge=_get_charge(self.atoms, self.parameters),
-                spin=_get_uhf(self.atoms, self.parameters),
+                verbose=int(self.parameters.verbose),  # type: ignore
+                charge=_get_charge(self.atoms, self.parameters),  # type: ignore
+                spin=_get_uhf(self.atoms, self.parameters),  # type: ignore
             )
             self._ks = None
         else:
             self._mol = self._mol.set_geom_(atom, inplace=False)
 
         if self._ks is None:
-            if not isinstance(xc_param := self.parameters.xc, (ExcFunctionalBase, str)):
+            if not isinstance(xc_param := self.parameters.xc, (ExcFunctionalBase, str)):  # type: ignore
                 raise InputError("XC functional must be a string or ExcFunctionalBase.")
             grad_method = SkalaKS(
                 self._mol,
                 xc=xc_param,
-                with_density_fit=bool(self.parameters.with_density_fit),
-                auxbasis=self.parameters.auxbasis,
-                with_newton=bool(self.parameters.with_newton),
-                with_dftd3=bool(self.parameters.with_dftd3),
-                ks_config=self.parameters.ks_config,
+                with_density_fit=bool(self.parameters.with_density_fit),  # type: ignore
+                auxbasis=self.parameters.auxbasis,  # type: ignore
+                with_newton=bool(self.parameters.with_newton),  # type: ignore
+                with_dftd3=bool(self.parameters.with_dftd3),  # type: ignore
+                ks_config=self.parameters.ks_config,  # type: ignore
             ).nuc_grad_method()
             self._ks = grad_method
         else:
@@ -198,7 +198,7 @@ def _get_charge(atoms: Atoms, parameters: Parameters) -> int:
     by summing the initial charges of all atoms.
     """
     if parameters.charge is None:
-        charge = atoms.get_initial_charges().sum()
+        charge = atoms.get_initial_charges().sum()  # type: ignore[no-untyped-call]
     else:
         charge = parameters.charge
     return int(charge)
@@ -211,6 +211,6 @@ def _get_uhf(atoms: Atoms, parameters: Parameters) -> int:
     is calculated by summing the initial magnetic moments of all atoms.
     """
     if parameters.multiplicity is None:
-        multiplicity = int(atoms.get_initial_magnetic_moments().sum().round())
+        multiplicity = int(atoms.get_initial_magnetic_moments().sum().round())  # type: ignore[no-untyped-call]
         return multiplicity
     return int(parameters.multiplicity) - 1

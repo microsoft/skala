@@ -39,11 +39,16 @@ def veff_and_expl_nuc_grad(
         "kin",
         "grid_coords",
         "grid_weights",
+        "atomic_grid_weights",
         "coarse_0_atomic_coords",
     }
 
     if nuc_grad_feats is None:  # generate feature list from functional features
         nuc_grad_feats = set(functional.features)
+
+    # Integer-valued features have no nuclear gradient — always discard them
+    nuc_grad_feats.discard("atomic_grid_sizes")
+    nuc_grad_feats.discard("atomic_grid_size_bound_shape")
 
     # check for unsupported features
     unsupported_feats = {feat for feat in nuc_grad_feats if feat not in SUPPORTED_FEATS}
@@ -73,6 +78,11 @@ def veff_and_expl_nuc_grad(
     grid_.coords = np.concatenate(coord_list)
     grid_.weights = np.concatenate(weight_list)
     mol_feats = feature.generate_features(mol, rdm1, grid_, set(functional.features))
+
+    # Discard atomic_grid_weights from VJP features: d(atomic_grid_weights)/dR = 0
+    # because they are raw quadrature weights that depend only on the radial/angular
+    # grid rule, not on nuclear positions. They still pass through as other_feats.
+    nuc_grad_feats.discard("atomic_grid_weights")
 
     # Get required derivatives
     nuc_feat_names = list(nuc_grad_feats)  # ensure specific order
@@ -194,7 +204,7 @@ def veff_and_expl_nuc_grad(
 
         if "grid_coords" in nuc_grad_feats:
             # also add the explicit grid coordinate dependence
-            nuc_grad[atm_id] += dExc["grid_coords"][atm_start:atm_end].sum(axis=0)
+            nuc_grad[atm_id] += dExc["grid_coords"][atm_start:atm_end].sum(dim=0)
 
         if "grid_weights" in nuc_grad_feats:
             Exc_dgw = dExc["grid_weights"][atm_start:atm_end]

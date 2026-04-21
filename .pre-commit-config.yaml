@@ -2,24 +2,16 @@
 # See https://pre-commit.com/hooks.html for more hooks
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    # Ruff version.
-    rev: v0.8.4
+    rev: v0.15.10
     hooks:
       # Run the linter.
       - id: ruff
-        args: [--fix, --select, I]
-        exclude: '^(third_party)/.*'
+        args: [--config, pyproject.toml, --fix]
       # Run the formatter.
       - id: ruff-format
-        exclude: '^(third_party)/.*'
+        args: [--config, pyproject.toml]
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.16.1
+    rev: v1.20.0
     hooks:
       - id: mypy
-        exclude: '^(third_party|tests)/.*'
-        args:
-          - --strict
-          - --ignore-missing-imports
-          - --no-namespace-packages
-          - --python-version=3.11
-        entry: mypy
+        args: [--config-file, pyproject.toml]

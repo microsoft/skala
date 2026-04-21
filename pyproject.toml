@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "skala"
-version = "1.1.1"
+version = "2026.1"
 description = "Skala Exchange Correlation Functional"
 authors = []
 license-files = ["LICENSE.txt"]
@@ -24,7 +24,7 @@ dependencies = [
     "huggingface_hub",
     "numpy",
     "opt_einsum_fx",
-    "pyscf",
+    "pyscf>=2.8,<2.13",
     "qcelemental",
     "torch"
 ]
@@ -33,8 +33,10 @@ optional-dependencies.dev = [
     "pre-commit",
     "pytest",
     "pytest-cov",
+    "pytest-randomly",
 ]
 optional-dependencies.doc = [
+    "ipywidgets",
     "myst-nb",
     "sphinx",
     "sphinx-book-theme",
@@ -48,22 +50,62 @@ urls.repository = "https://github.com/microsoft/skala"
 urls.documentation = "https://microsoft.github.io/skala"
 urls.homepage = "https://aka.ms/dft"
 
+[tool.mypy]
+strict = true
+ignore_missing_imports = true
+no_namespace_packages = true
+python_version = "3.11"
+exclude = ["third_party/"]
+disable_error_code = ["no-any-return"]
+
+# torch.autograd.Function uses dynamic attributes on FunctionCtx (ctx.save_for_backward pattern)
+# and Function.apply() is untyped. These are fundamental to PyTorch's autograd API.
+[[tool.mypy.overrides]]
+module = "skala.pyscf.features"
+disable_error_code = ["no-any-return", "attr-defined", "no-untyped-call"]
+
 [tool.ruff]
 target-version = "py311"
 src = ["src"]
+exclude = ["third_party"]
 
 [tool.ruff.lint]
 extend-select = [
   "B", # flake8-bugbear
   "D417", # undocumented-param in docstring
+  "I", # isort
   "UP", # pyupgrade
 ]
 extend-ignore = [
   "UP015", # redundant-open-modes
+  "E741", # variable name l
 ]
+
+[tool.ruff.lint.per-file-ignores]
+# E402: imports must come after CUDA checks and CuPy allocator configuration
+"src/skala/gpu4pyscf/__init__.py" = ["E402"]
+"src/skala/gpu4pyscf/dft.py" = ["E402"]
 
 [tool.ruff.lint.isort]
 detect-same-package = true
 
 [tool.black]
 line-length = 100
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "error",
+    # PyTorch 2.11 deprecated `torch.jit.load`; Skala's pretrained checkpoints
+    # are TorchScript archives, so `skala.functional.load` still uses it.
+    'ignore:`torch\.jit\.load` is deprecated\. Please switch to `torch\.export`\.:DeprecationWarning',
+    # PySCF's `SCF.__init__` (pyscf/scf/hf.py, currently line 1733) creates
+    # `self._chkfile = tempfile.NamedTemporaryFile(...)` as its checkpoint file
+    # and relies on finalization to close it, which emits ResourceWarning during
+    # GC. The warning is emitted by CPython's I/O layer (not from the pyscf
+    # module), so we match on the message. Traced via PYTHONTRACEMALLOC.
+    "ignore:unclosed file <_io\\.FileIO name='/tmp/tmp.*' mode='rb\\+' closefd=True>:ResourceWarning",
+    # On recent pytest versions the same leaked tempfile surfaces during GC at
+    # session teardown via the unraisable-exception hook, which re-emits it as
+    # `pytest.PytestUnraisableExceptionWarning`. Filter that wrapper too.
+    "ignore:Exception ignored in. <_io\\.FileIO name='/tmp/tmp.*' mode='rb\\+' closefd=True>:pytest.PytestUnraisableExceptionWarning",
+]

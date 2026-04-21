@@ -42,7 +42,7 @@ python ./prepare_inputs.py --output-dir H2
 Finally, run $E_\text{xc}$ and (partial) $V_\text{xc}$ computations with the C++ example:
 
 ```bash
-./_build/skala_cpp_integration skala-1.0.fun H2
+./_build/skala_cpp_integration skala-1.1.fun H2
 ```
 
 **Note:** You are expected to add D3 dispersion correction (using b3lyp settings) to the final energy of Skala.

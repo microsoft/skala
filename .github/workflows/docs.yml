@@ -47,6 +47,11 @@ jobs:
           touch docs/_build/html/.nojekyll
         shell: micromamba-shell {0}
 
+      - name: Check external links
+        run: |
+          sphinx-build -b linkcheck docs docs/_build/linkcheck
+        shell: micromamba-shell {0}
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

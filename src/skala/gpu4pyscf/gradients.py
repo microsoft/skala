@@ -42,11 +42,16 @@ def veff_and_expl_nuc_grad(
         "kin",
         "grid_coords",
         "grid_weights",
+        "atomic_grid_weights",
         "coarse_0_atomic_coords",
     }
 
     if nuc_grad_feats is None:  # generate feature list from functional features
         nuc_grad_feats = set(functional.features)
+
+    # Integer-valued features have no nuclear gradient — always discard them
+    nuc_grad_feats.discard("atomic_grid_sizes")
+    nuc_grad_feats.discard("atomic_grid_size_bound_shape")
 
     # check for unsupported features
     unsupported_feats = {feat for feat in nuc_grad_feats if feat not in SUPPORTED_FEATS}
@@ -79,6 +84,11 @@ def veff_and_expl_nuc_grad(
         mol, rdm1, grid_, set(functional.features), gpu=True
     )
 
+    # Discard atomic_grid_weights from VJP features: d(atomic_grid_weights)/dR = 0
+    # because they are raw quadrature weights that depend only on the radial/angular
+    # grid rule, not on nuclear positions. They still pass through as other_feats.
+    nuc_grad_feats.discard("atomic_grid_weights")
+
     # Get required derivatives
     nuc_feat_names = list(nuc_grad_feats)  # ensure specific order
     nuc_feat_tensors = [mol_feats[feat] for feat in nuc_feat_names]
@@ -92,13 +102,27 @@ def veff_and_expl_nuc_grad(
         )
         return functional.get_exc(exc_mol_feats)
 
-    _, dExc_func = torch.func.vjp(exc_feat_func, *nuc_feat_tensors)
-    dExc_tuple = dExc_func(torch.tensor(1.0, dtype=rdm1.dtype, device=rdm1.device))
+    # torch.func.vjp wraps primals in functional tensors that may not expose
+    # backing storage, which TorchScript traced models can reject.
+    diff_nuc_feat_tensors = [
+        feat.detach().requires_grad_(True) for feat in nuc_feat_tensors
+    ]
+    if len(diff_nuc_feat_tensors) > 0:
+        exc = exc_feat_func(*diff_nuc_feat_tensors)
+        dExc_tuple = torch.autograd.grad(
+            exc,
+            tuple(diff_nuc_feat_tensors),
+            create_graph=False,
+            retain_graph=False,
+            allow_unused=False,
+        )
+    else:
+        dExc_tuple = ()
     dExc: dict[str, torch.Tensor] = {}
     for i in range(len(dExc_tuple)):
         dExc[nuc_feat_names[i]] = dExc_tuple[i].detach()
 
-    LOG.debug("torch.func.vjp done")
+    LOG.debug("autograd gradients for nuclear features done")
 
     nao = rdm1.shape[-1]
     veff = torch.zeros((2, 3, nao, nao), dtype=rdm1.dtype, device=rdm1.device)
@@ -107,7 +131,7 @@ def veff_and_expl_nuc_grad(
     atm_start = 0
     for atm_id, (coords, weight, weight1) in enumerate(grids_response_cc(grid)):
         mask = dft.gen_grid.make_mask(mol, coords)
-        ao = torch.from_dlpack(
+        ao = torch.from_dlpack(  # type: ignore[attr-defined]
             dft.numint.eval_ao(
                 mol,
                 coords,
@@ -202,11 +226,11 @@ def veff_and_expl_nuc_grad(
 
         if "grid_coords" in nuc_grad_feats:
             # also add the explicit grid coordinate dependence
-            nuc_grad[atm_id] += dExc["grid_coords"][atm_start:atm_end].sum(axis=0)
+            nuc_grad[atm_id] += dExc["grid_coords"][atm_start:atm_end].sum(dim=0)
 
         if "grid_weights" in nuc_grad_feats:
             Exc_dgw = dExc["grid_weights"][atm_start:atm_end]
-            nuc_grad += torch.from_dlpack(weight1) @ Exc_dgw
+            nuc_grad += torch.from_dlpack(weight1) @ Exc_dgw  # type: ignore[attr-defined]
             # add the grid coordinate dependence via the density-like quantities to the nuclear gradient
             # we get those from the veff block. This tends to largely cancel with the grid_weights derivative,
             # so that's why we include it here.
@@ -280,12 +304,12 @@ class SkalaRKSGradient(RHFGradient):  # type: ignore[misc]
             self.functional,
             mol=mol,
             grid=self.grids,
-            rdm1=torch.from_dlpack(dm),
+            rdm1=torch.from_dlpack(dm),  # type: ignore[attr-defined]
             nuc_grad_feats=self.nuc_grad_feats,
         )
         vhfopt = self.base._opt_gpu.get(mol.omega)
         return cp.from_dlpack(
-            nuc_grad_from_veff(mol, veff, torch.from_dlpack(dm))
+            nuc_grad_from_veff(mol, veff, torch.from_dlpack(dm))  # type: ignore[attr-defined]
         ) + _jk_energy_per_atom(mol, dm, vhfopt, k_factor=0.0, verbose=self.verbose)
 
     def grad_elec(
@@ -358,12 +382,12 @@ class SkalaUKSGradient(UHFGradient):  # type: ignore[misc]
             self.functional,
             mol=mol,
             grid=self.grids,
-            rdm1=torch.from_dlpack(dm),
+            rdm1=torch.from_dlpack(dm),  # type: ignore[attr-defined]
             nuc_grad_feats=self.nuc_grad_feats,
         )
         vhfopt = self.base._opt_gpu.get(mol.omega)
         return cp.from_dlpack(
-            nuc_grad_from_veff(mol, veff, torch.from_dlpack(dm))
+            nuc_grad_from_veff(mol, veff, torch.from_dlpack(dm))  # type: ignore[attr-defined]
         ) + _jk_energy_per_atom(mol, dm, vhfopt, k_factor=0.0, verbose=self.verbose)
 
     def grad_elec(

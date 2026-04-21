@@ -98,10 +98,12 @@ class SkalaNumInt(PySCFNumInt[Array]):
     >>>
     >>> mol = gto.M(atom="H 0 0 0; H 0 0 1", basis="def2-svp", verbose=0)
     >>> ks = dft.KS(mol)
-    >>> ks._numint = SkalaNumInt(load_functional("skala"))
+    >>> ks._numint = SkalaNumInt(load_functional("skala-1.1"))
+    >>> ks.grids.build(mol, sort_grids=False)  # DOCTEST: Ellipsis
+    <pyscf.dft.gen_grid.Grids object at 0x...>
     >>> energy = ks.kernel()
     >>> print(energy)  # DOCTEST: Ellipsis
-    -1.142330...
+    -1.1425799...
     """
 
     device: torch.device
@@ -133,7 +135,7 @@ class SkalaNumInt(PySCFNumInt[Array]):
 
     def to_backend(self, x: Tensor | list[Tensor]) -> Array | list[Array]:
         if isinstance(x, list):
-            return [self.to_backend(y) for y in x]
+            return [self.to_backend(y) for y in x]  # type: ignore
 
         if self.device.type == "cuda":
             return to_cupy(x)
@@ -157,7 +159,7 @@ class SkalaNumInt(PySCFNumInt[Array]):
             max_memory=max_memory,
             gpu=self.device.type == "cuda",
         )
-        return self.to_backend(mol_features["density"].sum(0))
+        return self.to_backend(mol_features["density"].sum(0))  # type: ignore
 
     def __call__(
         self,
@@ -210,7 +212,7 @@ class SkalaNumInt(PySCFNumInt[Array]):
         N, E_xc, V_xc = self(
             mol, grids, xc_code, self.from_backend(dm), max_memory=max_memory
         )
-        return N.sum().item(), E_xc.item(), self.to_backend(V_xc)
+        return N.sum().item(), E_xc.item(), self.to_backend(V_xc)  # type: ignore
 
     def nr_uks(
         self,
@@ -225,7 +227,7 @@ class SkalaNumInt(PySCFNumInt[Array]):
         N, E_xc, V_xc = self(
             mol, grids, xc_code, self.from_backend(dm), max_memory=max_memory
         )
-        return self.to_backend(N), E_xc.item(), self.to_backend(V_xc)
+        return self.to_backend(N), E_xc.item(), self.to_backend(V_xc)  # type: ignore
 
     class libxc:
         __version__ = None
@@ -239,7 +241,7 @@ class SkalaNumInt(PySCFNumInt[Array]):
         def is_nlc(xc: str) -> bool:
             return False
 
-    def gen_response(
+    def gen_response(  # type: ignore[override]  # wider Array type than PySCF base
         self,
         mo_coeff: Array | None,
         mo_occ: Array | None,

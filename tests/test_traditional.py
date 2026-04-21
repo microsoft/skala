@@ -9,7 +9,7 @@ from skala.pyscf import SkalaKS
 
 
 @pytest.fixture(params=["HF", "B", "H"])
-def mol(request) -> gto.Mole:
+def mol(request: pytest.FixtureRequest) -> gto.Mole:
     if request.param == "HF":
         return gto.M(atom="H 0 0 0; F 0 0 1.1", basis="cc-pvdz")
     elif request.param == "B":
@@ -20,14 +20,16 @@ def mol(request) -> gto.Mole:
 
 
 @pytest.fixture(params=["lda", "spw92", "pbe", "tpss"])
-def xc(request) -> str:
+def xc(request: pytest.FixtureRequest) -> str:
     return request.param
 
 
 @pytest.fixture
 def xc_fun(xc: str) -> ExcFunctionalBase:
     """Fixture to load the functional."""
-    return load_functional(xc)
+    func = load_functional(xc)
+    assert isinstance(func, ExcFunctionalBase)
+    return func
 
 
 @pytest.fixture

@@ -182,7 +182,7 @@ To evaluate Skala, we download the model checkpoint from HuggingFace using the `
 
 .. code-block:: shell
 
-   hf download microsoft/skala-1.0 skala-1.0.fun --local-dir .
+   hf download microsoft/skala-1.1 skala-1.1.fun --local-dir .
 
 .. note::
 
@@ -203,14 +203,14 @@ And run the application, passing the path to the Skala model and the feature dir
 
 .. code-block:: bash
 
-   ./build/Skala skala-1.0.fun features
+   ./build/Skala skala-1.1.fun features
 
 The output for the H2 molecule with the def2-QZVP basis set should look like this:
 
 .. code-block:: text
 
-   [1] Loading model from skala-1.0.fun
-   [2] Loading features from features
+   [1] Loading model from skala-1.1.fun
+   [2] Loading features from H2-def2qzvp
     -> Loading coarse_0_atomic_coords
     -> Loading grad
     -> Loading grid_coords
@@ -254,14 +254,14 @@ Finally, we can run the application again to see the updated output with the com
 
 .. code-block:: bash
 
-   ./build/Skala skala-1.0.fun features
+   ./build/Skala skala-1.1.fun features
 
 In the output we can see the computed exchange-correlation energy as well as the mean values of the potential components, and the raw tensor data for each component.
 
 .. code-block:: text
 
-   [1] Loading model from skala-1.0.fun
-   [2] Loading features from features
+   [1] Loading model from skala-1.1.fun
+   [2] Loading features from H2-def2qzvp
     -> Loading coarse_0_atomic_coords
     -> Loading grad
     -> Loading grid_coords
