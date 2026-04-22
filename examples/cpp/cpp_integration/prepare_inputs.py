@@ -8,7 +8,11 @@ from pyscf import dft, gto
 from pyscf.dft import gen_grid
 
 from skala.functional.traditional import LDA
-from skala.pyscf.features import generate_features
+from skala.pyscf.features import (
+    _ATOMIC_GRID_FEATURES,
+    DEFAULT_FEATURES_SET,
+    generate_features,
+)
 
 
 def main() -> None:
@@ -39,8 +43,10 @@ def main() -> None:
     dm = get_density_matrix(molecule)
     grid = gen_grid.Grids(molecule)
     grid.level = 3
-    grid.build()
-    features = generate_features(molecule, dm, grid)
+    grid.build(sort_grids=False)
+    features = generate_features(
+        molecule, dm, grid, features=DEFAULT_FEATURES_SET | _ATOMIC_GRID_FEATURES
+    )
 
     # Add a feature called `coarse_0_atomic_coords` containing the atomic coordinates.
     features["coarse_0_atomic_coords"] = torch.from_numpy(molecule.atom_coords())
