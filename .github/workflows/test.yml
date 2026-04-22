@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  pre-commit:
+  lint:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -28,20 +28,20 @@ jobs:
         pip install -e . --no-deps
       shell: micromamba-shell {0}
 
-    - name: Run mypy
-      run: mypy .
-      shell: micromamba-shell {0}
-
     - name: Run pre-commit hooks
       run: |
         pre-commit install
         pre-commit run --all-files
       shell: micromamba-shell {0}
 
+    - name: Run mypy
+      run: mypy .
+      shell: micromamba-shell {0}
+
   test:
     runs-on: ubuntu-latest
     needs:
-      - pre-commit
+      - lint
     strategy:
       fail-fast: false
       matrix:
