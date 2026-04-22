@@ -75,9 +75,9 @@ class Skala(Calculator):
                 self._ks.verbose = verbose
                 self._ks.base.verbose = verbose
 
-        if "ks_config" in changed_parameters and self.parameters.ks_config is not None:
+        if "ks_config" in changed_parameters and self.parameters.ks_config is not None:  # type: ignore
             if self._ks is not None:
-                self._ks.base(**self.parameters.ks_config)
+                self._ks.base(**self.parameters.ks_config)  # type: ignore
 
         if (
             "charge" in changed_parameters
@@ -178,7 +178,7 @@ class Skala(Calculator):
         else:
             self._ks.reset(self._mol)
 
-        if self.parameters.with_retry:
+        if self.parameters.with_retry:  # type: ignore
             self._ks.base, _ = retry_scf(self._ks.base)
             energy = self._ks.base.e_tot
         else:
