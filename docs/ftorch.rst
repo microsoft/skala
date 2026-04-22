@@ -90,35 +90,35 @@ We start the main program with the necessary module imports and variable declara
 .. literalinclude:: ../examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
-   :lines: 1-17
+   :lines: 1-18
 
 First, we obtain the command line arguments for the model path and feature directory, and check that they are provided:
 
 .. literalinclude:: ../examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
-   :lines: 19-29
+   :lines: 20-30
 
 We define a small contained helper procedure to read the command line arguments:
 
 .. literalinclude:: ../examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
-   :lines: 211-232
+   :lines: 227-248
 
 The main types provided by the Skala bindings are the ``skala_model`` type, which extends the ``torch_model`` provided by FTorch and has a custom ``skala_model_load`` procedure for loading the Skala model and its meta data.
 
 .. literalinclude:: ../examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
-   :lines: 31-33
+   :lines: 32-34
 
 The input to the Skala model is passed via a dictionary of tensors, which we prepare by loading the necessary features from disk and converting them to the appropriate format.
 
 .. literalinclude:: ../examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
-   :lines: 35-60
+   :lines: 36-70
 
 .. note::
 
@@ -137,7 +137,7 @@ To place the features in the correct format for Skala, we add them to the input 
 .. literalinclude:: ../examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
-   :lines: 62-76
+   :lines: 72-92
 
 .. note::
 
@@ -157,14 +157,14 @@ With this we can now compute the exchange-correlation energy and potential by ca
 .. literalinclude:: ../examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
-   :lines: 78-80
+   :lines: 94-96
 
 To get the exchange-correlation energy, we need to weight the exc values by the grid weights and sum over the grid points, which we can do using the provided tensor operations.
 
 .. literalinclude:: ../examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
-   :lines: 82-89
+   :lines: 98-105
 
 .. note::
 
@@ -228,21 +228,21 @@ The potential terms are stored under the same keys as the input features and can
 .. literalinclude:: ../examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
-   :lines: 91-103
+   :lines: 107-119
 
 We can use those tensors for further processing in our application, for example to compute the norm of the potential
 
 .. literalinclude:: ../examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
-   :lines: 105-139
+   :lines: 121-155
 
 Or by converting them to Fortran arrays and using the built-in array operations.
 
 .. literalinclude:: ../examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
-   :lines: 141-209
+   :lines: 162-225
 
 We rebuild the application to include the latest changes:
 
