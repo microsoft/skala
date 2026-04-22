@@ -1,11 +1,18 @@
 import numpy as np
 import pytest
+
+try:
+    import ase
+except ModuleNotFoundError:
+    ase = None
+
 from ase.build import molecule
 from ase.calculators import calculator
 
 from skala.ase import Skala
 
 
+@pytest.mark.skipif(ase is None, reason="ASE is not installed")
 @pytest.mark.parametrize("xc", ["pbe", "tpss", "skala-1.0", "skala-1.1"])
 def test_calc(xc: str) -> None:
     atoms = molecule("H2O")  # type: ignore[no-untyped-call]
@@ -42,6 +49,7 @@ def test_calc(xc: str) -> None:
     )
 
 
+@pytest.mark.skipif(ase is None, reason="ASE is not installed")
 def test_missing_basis() -> None:
     atoms = molecule("H2O")  # type: ignore[no-untyped-call]
     atoms.calc = Skala(xc="pbe", with_density_fit=True, auxbasis="def2-svp-jkfit")
@@ -65,11 +73,11 @@ def test_ks_config() -> None:
 
     energy = atoms.get_potential_energy()
 
-    assert (
-        atoms.calc._ks.base.conv_tol == 1e-6
-    ), "KS solver convergence tolerance not set correctly"
+    assert atoms.calc._ks.base.conv_tol == 1e-6, (
+        "KS solver convergence tolerance not set correctly"
+    )
 
     reference_energy = -2075.4896490374904
-    assert (
-        pytest.approx(energy, rel=1e-3) == reference_energy
-    ), f"Energy mismatch with custom KS config: {energy} vs {reference_energy}"
+    assert pytest.approx(energy, rel=1e-3) == reference_energy, (
+        f"Energy mismatch with custom KS config: {energy} vs {reference_energy}"
+    )
