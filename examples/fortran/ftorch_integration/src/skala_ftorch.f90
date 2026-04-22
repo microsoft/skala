@@ -349,6 +349,12 @@ contains
       key = "grid_weights"
     case (skala_feature%coarse_0_atomic_coords)
       key = "coarse_0_atomic_coords"
+    case (skala_feature%atomic_grid_weights)
+      key = "atomic_grid_weights"
+    case (skala_feature%atomic_grid_sizes)
+      key = "atomic_grid_sizes"
+    case (skala_feature%atomic_grid_size_bound_shape)
+      key = "atomic_grid_size_bound_shape"
     end select
   end subroutine skala_feature_key
 

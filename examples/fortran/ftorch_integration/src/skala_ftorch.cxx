@@ -16,7 +16,7 @@ typedef enum SkalaFeature {
   Feature_Kin = 3,
   Feature_GridCoords = 4,
   Feature_GridWeights = 5,
-  Feature_Coarse0AtomicCoords = 6
+  Feature_Coarse0AtomicCoords = 6,
   Feature_AtomicGridWeights = 7,
   Feature_AtomicGridSizes = 8,
   Feature_AtomicGridSizeBoundShape = 9
@@ -169,13 +169,16 @@ skala_model_get_exc_and_vxc(torch_jit_script_module_t module, skala_dict_t input
   c10::Dict<std::string, at::Tensor> features_with_grad;
   for (const auto& entry : *dict) {
     std::string key = entry.key();
+    bool requires_grad = (key == "density" || key == "grad" || key == "kin" || key == "coarse_0_atomic_coords" || key == "grid_coords" || key == "grid_weights");
     const auto& values = entry.value();
     std::vector<at::Tensor> tensors;
     for (const auto &value : values) {
-      auto tensor_with_grad = value.clone().requires_grad_(true);
+      auto tensor_with_grad = value.clone().requires_grad_(requires_grad);
       tensors.push_back(tensor_with_grad);
-      input_tensors.push_back(tensor_with_grad);
-      tensor_keys.push_back(key);
+      if (requires_grad) {
+        input_tensors.push_back(tensor_with_grad);
+        tensor_keys.push_back(key);
+      }
     }
     features_with_grad.insert(key, torch::concat(tensors));
   }
