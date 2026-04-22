@@ -17,6 +17,9 @@ typedef enum SkalaFeature {
   Feature_GridCoords = 4,
   Feature_GridWeights = 5,
   Feature_Coarse0AtomicCoords = 6
+  Feature_AtomicGridWeights = 7,
+  Feature_AtomicGridSizes = 8,
+  Feature_AtomicGridSizeBoundShape = 9
 } SkalaFeature;
 
 static inline
@@ -106,6 +109,12 @@ skala_model_load(const char *filename,
       feature_keys.insert({feature_key, Feature_GridWeights});
     } else if (feature_key == "coarse_0_atomic_coords") {
       feature_keys.insert({feature_key, Feature_Coarse0AtomicCoords});
+    } else if (feature_key == "atomic_grid_weights") {
+      feature_keys.insert({feature_key, Feature_AtomicGridWeights});
+    } else if (feature_key == "atomic_grid_sizes") {
+      feature_keys.insert({feature_key, Feature_AtomicGridSizes});
+    } else if (feature_key == "atomic_grid_size_bound_shape") {
+      feature_keys.insert({feature_key, Feature_AtomicGridSizeBoundShape});
     }
     pos = end_pos + 1;
   }
