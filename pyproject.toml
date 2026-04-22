@@ -98,6 +98,7 @@ filterwarnings = [
     # PyTorch 2.11 deprecated `torch.jit.load`; Skala's pretrained checkpoints
     # are TorchScript archives, so `skala.functional.load` still uses it.
     'ignore:`torch\.jit\.load` is deprecated\. Please switch to `torch\.export`\.:DeprecationWarning',
+    'ignore:`torch\.jit\.script` is deprecated\. Please switch to `torch\.compile` or `torch\.export`\.:DeprecationWarning',
     # PySCF's `SCF.__init__` (pyscf/scf/hf.py, currently line 1733) creates
     # `self._chkfile = tempfile.NamedTemporaryFile(...)` as its checkpoint file
     # and relies on finalization to close it, which emits ResourceWarning during
