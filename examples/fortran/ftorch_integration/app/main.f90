@@ -10,7 +10,8 @@ program main
   type(skala_model) :: model
   type(skala_dict) :: input, vxc
   type(torch_tensor) :: exc
-  type(torch_tensor) :: density, grad, kin, grid_coords, grid_weights, coarse_0_atomic_coords
+  type(torch_tensor) :: density, grad, kin, grid_coords, grid_weights, coarse_0_atomic_coords, &
+    & atomic_grid_weights, atomic_grid_sizes, atomic_grid_size_bound_shape
   type(torch_tensor) :: dexc_ddensity, dexc_dgrad, dexc_dkin, dexc_dgrid_coords, &
     & dexc_dgrid_weights, dexc_dcoarse_0_atomic_coords, vxc_norm
 
@@ -55,6 +56,15 @@ program main
     case(skala_feature%coarse_0_atomic_coords)
       print '(a)', " -> Loading coarse_0_atomic_coords"
       call skala_tensor_load(coarse_0_atomic_coords, feature_dir//"/coarse_0_atomic_coords.pt")
+    case(skala_feature%atomic_grid_weights)
+      print '(a)', " -> Loading atomic_grid_weights"
+      call skala_tensor_load(atomic_grid_weights, feature_dir//"/atomic_grid_weights.pt")
+    case(skala_feature%atomic_grid_sizes)
+      print '(a)', " -> Loading atomic_grid_sizes"
+      call skala_tensor_load(atomic_grid_sizes, feature_dir//"/atomic_grid_sizes.pt")
+    case(skala_feature%atomic_grid_size_bound_shape)
+      print '(a)', " -> Loading atomic_grid_size_bound_shape"
+      call skala_tensor_load(atomic_grid_size_bound_shape, feature_dir//"/atomic_grid_size_bound_shape.pt")
     end select
   end do
   end block get_features
@@ -74,6 +84,12 @@ program main
     call input%insert(skala_feature%grid_weights, grid_weights)
   if (model%needs_feature(skala_feature%coarse_0_atomic_coords)) &
     call input%insert(skala_feature%coarse_0_atomic_coords, coarse_0_atomic_coords)
+  if (model%needs_feature(skala_feature%atomic_grid_weights)) &
+    call input%insert(skala_feature%atomic_grid_weights, atomic_grid_weights)
+  if (model%needs_feature(skala_feature%atomic_grid_sizes)) &
+    call input%insert(skala_feature%atomic_grid_sizes, atomic_grid_sizes)
+  if (model%needs_feature(skala_feature%atomic_grid_size_bound_shape)) &
+    call input%insert(skala_feature%atomic_grid_size_bound_shape, atomic_grid_size_bound_shape)
 
   ! Request exc and vxc from the model
   print '(a)', "[4] Running model inference"

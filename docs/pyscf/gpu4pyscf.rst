@@ -13,7 +13,7 @@ The Skala functional can also be used in GPU4PySCF with an appropriate PyTorch C
        atom="""H 0 0 0; H 0 0 1.4""",
        basis="def2-tzvp",
    )
-   ks = SkalaKS(mol, xc="skala")
+   ks = SkalaKS(mol, xc="skala-1.1")
    ks.kernel()
 
    print(ks.dump_scf_summary())

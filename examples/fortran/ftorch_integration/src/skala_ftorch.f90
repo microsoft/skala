@@ -24,7 +24,10 @@ module skala_ftorch
     integer :: grid_coords = 4
     integer :: grid_weights = 5
     integer :: coarse_0_atomic_coords = 6
-    integer :: max_feature = 6
+    integer :: atomic_grid_weights = 7
+    integer :: atomic_grid_sizes = 8
+    integer :: atomic_grid_size_bound_shape = 9
+    integer :: max_feature = 9
   end type skala_feature_enum
   type(skala_feature_enum), parameter :: skala_feature = skala_feature_enum()
 
