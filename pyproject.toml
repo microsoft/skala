@@ -112,4 +112,6 @@ filterwarnings = [
     # session teardown via the unraisable-exception hook, which re-emits it as
     # `pytest.PytestUnraisableExceptionWarning`. Filter that wrapper too.
     "ignore:Exception ignored in. <_io\\.FileIO name='/tmp/tmp.*' mode='rb\\+' closefd=True>:pytest.PytestUnraisableExceptionWarning",
+    # From gpu4pyscf if cutensor is not available
+    'ignore:using cupy as the tensor contraction engine\.:UserWarning',
 ]

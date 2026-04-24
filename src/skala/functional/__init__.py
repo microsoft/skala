@@ -18,7 +18,16 @@ from skala.functional._hashes import KNOWN_HASHES
 from skala.functional.base import ExcFunctionalBase
 from skala.functional.load import TracedFunctional
 from skala.functional.model import SkalaFunctional
-from skala.functional.traditional import LDA, PBE, SPW92, TPSS, SpinScaledXCFunctional
+from skala.functional.traditional import (
+    LDA,
+    PBE,
+    R2SCAN,
+    RSCAN,
+    SCAN,
+    SPW92,
+    TPSS,
+    XC_FUNCTIONAL_MAP,
+)
 
 __all__ = [
     "ExcFunctionalBase",
@@ -26,6 +35,9 @@ __all__ = [
     "TracedFunctional",
     "LDA",
     "PBE",
+    "R2SCAN",
+    "RSCAN",
+    "SCAN",
     "SPW92",
     "TPSS",
     "load_functional",
@@ -51,6 +63,9 @@ def load_functional(
             - ``"spw92"``: SPW92 (LDA with PW92 correlation).
             - ``"pbe"``: Perdew-Burke-Ernzerhof functional.
             - ``"tpss"``: Tao-Perdew-Staroverov-Scuseria meta-GGA.
+            - ``"scan"``: Strongly Constrained and Appropriately Normed.
+            - ``"rscan"``: Regularized SCAN.
+            - ``"r2scan"``: Regularized-restored SCAN.
 
             Any other string is returned as-is for native PySCF/gpu4pyscf evaluation.
 
@@ -78,7 +93,6 @@ def load_functional(
             'Please use "skala-1.0" or "skala-1.1".'
         )
 
-    func: SpinScaledXCFunctional
     if func_name in _SKALA_VERSIONS:
         env_path = os.environ.get("SKALA_LOCAL_MODEL_PATH")
         if env_path is not None:
@@ -100,18 +114,10 @@ def load_functional(
 
         return TracedFunctional.load(path, device=device, expected_hash=expected_hash)
 
-    elif func_name == "lda":
-        func = LDA()
-    elif func_name == "spw92":
-        func = SPW92()
-    elif func_name == "pbe":
-        func = PBE()
-    elif func_name == "tpss":
-        func = TPSS()
+    elif func_name in XC_FUNCTIONAL_MAP:
+        func = XC_FUNCTIONAL_MAP[func_name]()
+        if device is not None:
+            func = func.to(device=device)
+        return func
     else:
         return name
-
-    if device is not None:
-        func = func.to(device=device)
-
-    return func
