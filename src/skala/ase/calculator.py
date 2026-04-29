@@ -3,6 +3,7 @@
 from typing import Any
 
 import numpy as np
+import scipy.linalg
 from ase.atoms import Atoms
 from ase.calculators.calculator import (
     Calculator,
@@ -176,7 +177,20 @@ class Skala(Calculator):
             ).nuc_grad_method()
             self._ks = grad_method
         else:
-            self._ks.reset(self._mol)
+            # When using Newton SCF, the old MO coefficients are not orthogonal
+            # w.r.t. the new overlap matrix after a geometry change. Project them
+            # via Löwdin: C2 = S2^{-1/2} S1^{1/2} C1, which gives exact
+            # orthonormality C2^T S2 C2 = I by construction.
+            if hasattr(self._ks.base, "_scf") and self._ks.base.mo_coeff is not None:
+                old_mo_coeff = self._ks.base.mo_coeff
+                old_ovlp = self._ks.base.get_ovlp()
+                self._ks.reset(self._mol)
+                new_ovlp = self._ks.base.get_ovlp()
+                s1_half = _mat_power(old_ovlp, 0.5)
+                s2_neghalf = _mat_power(new_ovlp, -0.5)
+                self._ks.base.mo_coeff = s2_neghalf @ s1_half @ old_mo_coeff
+            else:
+                self._ks.reset(self._mol)
 
         if self.parameters.with_retry:  # type: ignore
             self._ks.base, _ = retry_scf(self._ks.base)
@@ -214,3 +228,15 @@ def _get_uhf(atoms: Atoms, parameters: Parameters) -> int:
         multiplicity = int(atoms.get_initial_magnetic_moments().sum().round())  # type: ignore[no-untyped-call]
         return multiplicity
     return int(parameters.multiplicity) - 1
+
+
+def _mat_power(S: np.ndarray, p: float) -> np.ndarray:
+    """Compute S^p for a symmetric positive-definite matrix via eigendecomposition.
+
+    Eigenvalues below a threshold are clamped to avoid numerical instability
+    (e.g. when p < 0 and S has near-linear-dependence).
+    """
+    eigvals, eigvecs = scipy.linalg.eigh(S)
+    # Clamp small eigenvalues to avoid division by near-zero for negative powers
+    eigvals = np.maximum(eigvals, 1e-15)
+    return (eigvecs * eigvals**p) @ eigvecs.T
