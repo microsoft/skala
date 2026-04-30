@@ -3,7 +3,6 @@
 from typing import Any
 
 import numpy as np
-import scipy.linalg
 from ase.atoms import Atoms
 from ase.calculators.calculator import (
     Calculator,
@@ -164,6 +163,7 @@ class Skala(Calculator):
             self._mol = self._mol.set_geom_(atom, inplace=False)
 
         if self._ks is None:
+            dm0 = None
             if not isinstance(xc_param := self.parameters.xc, (ExcFunctionalBase, str)):  # type: ignore
                 raise InputError("XC functional must be a string or ExcFunctionalBase.")
             grad_method = SkalaKS(
@@ -177,26 +177,21 @@ class Skala(Calculator):
             ).nuc_grad_method()
             self._ks = grad_method
         else:
-            # When using Newton SCF, the old MO coefficients are not orthogonal
-            # w.r.t. the new overlap matrix after a geometry change. Project them
-            # via Löwdin: C2 = S2^{-1/2} S1^{1/2} C1, which gives exact
-            # orthonormality C2^T S2 C2 = I by construction.
-            if hasattr(self._ks.base, "_scf") and self._ks.base.mo_coeff is not None:
-                old_mo_coeff = self._ks.base.mo_coeff
-                old_ovlp = self._ks.base.get_ovlp()
-                self._ks.reset(self._mol)
-                new_ovlp = self._ks.base.get_ovlp()
-                s1_half = _mat_power(old_ovlp, 0.5)
-                s2_neghalf = _mat_power(new_ovlp, -0.5)
-                self._ks.base.mo_coeff = s2_neghalf @ s1_half @ old_mo_coeff
-            else:
-                self._ks.reset(self._mol)
+            # Mimic PySCF's SCF_Scanner (hf.py:1569-1588): convert old MOs
+            # into a density-matrix guess, wipe mo_coeff so Newton won't
+            # reuse stale (non-orthogonal w.r.t. new overlap) orbitals,
+            # and let the solver re-diagonalise the Fock matrix.
+            dm0 = None
+            if self._ks.base.mo_coeff is not None:
+                dm0 = self._ks.base.make_rdm1()
+            self._ks.reset(self._mol)
+            self._ks.base.mo_coeff = None
 
-        if self.parameters.with_retry:  # type: ignore
+        if self.parameters.with_retry and dm0 is None:  # type: ignore
             self._ks.base, _ = retry_scf(self._ks.base)
             energy = self._ks.base.e_tot
         else:
-            energy = self._ks.base.kernel()
+            energy = self._ks.base.kernel(dm0=dm0)
         gradient = self._ks.kernel()
 
         self.results["energy"] = float(energy) * Hartree
@@ -228,15 +223,3 @@ def _get_uhf(atoms: Atoms, parameters: Parameters) -> int:
         multiplicity = int(atoms.get_initial_magnetic_moments().sum().round())  # type: ignore[no-untyped-call]
         return multiplicity
     return int(parameters.multiplicity) - 1
-
-
-def _mat_power(S: np.ndarray, p: float) -> np.ndarray:
-    """Compute S^p for a symmetric positive-definite matrix via eigendecomposition.
-
-    Eigenvalues below a threshold are clamped to avoid numerical instability
-    (e.g. when p < 0 and S has near-linear-dependence).
-    """
-    eigvals, eigvecs = scipy.linalg.eigh(S)
-    # Clamp small eigenvalues to avoid division by near-zero for negative powers
-    eigvals = np.maximum(eigvals, 1e-15)
-    return (eigvecs * eigvals**p) @ eigvecs.T
