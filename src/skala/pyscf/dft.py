@@ -192,11 +192,11 @@ class SkalaUKS(dft.uks.UKS):  # type: ignore[misc]
         if self._needs_unsorted:
             _build_grids_unsorted(self.grids, mol)
 
-    def kernel(self, dm0: np.ndarray | None = None, **kwargs: Any) -> float:
+    def initialize_grids(self, mol: gto.Mole | None = None, dm: np.ndarray | None = None) -> "SkalaUKS":
         # Ensure grids stay unsorted even if user changed grid settings after __init__
         if self._needs_unsorted and self.grids.coords is None:
-            _build_grids_unsorted(self.grids, self.mol)
-        return super().kernel(dm0, **kwargs)
+            _build_grids_unsorted(self.grids, mol or self.mol)
+        return super().initialize_grids(mol or self.mol, dm)
 
     def energy_nuc(self) -> float:
         enuc = float(super().energy_nuc())
