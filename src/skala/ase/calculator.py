@@ -174,6 +174,7 @@ class Skala(Calculator):
             dm0 = None
             if not isinstance(xc_param := self.parameters.xc, (ExcFunctionalBase, str)):  # type: ignore
                 raise InputError("XC functional must be a string or ExcFunctionalBase.")
+            device = self.parameters.device  # type: ignore
             _kwargs = dict(
                 mol=self._mol,
                 xc=xc_param,
@@ -183,16 +184,16 @@ class Skala(Calculator):
                 with_dftd3=bool(self.parameters.with_dftd3),  # type: ignore
                 ks_config=self.parameters.ks_config,  # type: ignore
             )
-            if str(self.parameters.device) == "cuda":
+            if device == "cuda":
                 if skala_gpu is None:
                     raise ImportError(
                         "gpu4pyscf is not available. Please install gpu4pyscf to use GPU acceleration."
                     ) from gpu4pyscf_import_error
                 ks = skala_gpu.SkalaKS(**_kwargs)
-            elif str(self.parameters.device) == "cpu":
+            elif device == "cpu":
                 ks = skala_cpu.SkalaKS(**_kwargs)
             else:
-                raise InputError(f"Unsupported device type: {self.parameters.device}")
+                raise InputError(f"Unsupported device type: {device}")
 
             self._ks = ks.nuc_grad_method()
         else:
