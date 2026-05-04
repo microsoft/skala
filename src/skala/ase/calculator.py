@@ -15,13 +15,13 @@ from ase.units import Bohr, Debye, Hartree
 from pyscf import grad, gto
 
 from skala.functional.base import ExcFunctionalBase
-from skala.pyscf import SkalaKS as SkalaKSCPU
+import skala.pyscf as skala_cpu
 from skala.pyscf.retry import retry_scf
 
 try:
-    from skala.gpu4pyscf import SkalaKS as SkalaKSGPU
+    import skala.gpu4pyscf as skala_gpu
 except ImportError as e:
-    SkalaKSGPU = None
+    skala_gpu = None  # type: ignore[assignment]
     gpu4pyscf_import_error = e
 
 
@@ -184,13 +184,13 @@ class Skala(Calculator):
                 ks_config=self.parameters.ks_config,  # type: ignore
             )
             if str(self.parameters.device) == "cuda":
-                if SkalaKSGPU is None:
+                if skala_gpu is None:
                     raise ImportError(
                         "gpu4pyscf is not available. Please install gpu4pyscf to use GPU acceleration."
                     ) from gpu4pyscf_import_error
-                ks = SkalaKSGPU(**_kwargs)
+                ks = skala_gpu.SkalaKS(**_kwargs)
             elif str(self.parameters.device) == "cpu":
-                ks = SkalaKSCPU(**_kwargs)
+                ks = skala_cpu.SkalaKS(**_kwargs)
             else:
                 raise InputError(f"Unsupported device type: {self.parameters.device}")
 
