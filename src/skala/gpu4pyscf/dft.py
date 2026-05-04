@@ -94,7 +94,9 @@ class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
         if self._needs_unsorted:
             _build_grids_unsorted(self.grids, mol)
 
-    def initialize_grids(self, mol: gto.Mole | None = None, dm: Any = None) -> "SkalaRKS":
+    def initialize_grids(
+        self, mol: gto.Mole | None = None, dm: Any = None
+    ) -> "SkalaRKS":
         # Ensure grids stay unsorted even if user changed grid settings after __init__
         if self._needs_unsorted and self.grids.coords is None:
             _build_grids_unsorted(self.grids, mol or self.mol)
@@ -173,7 +175,9 @@ class SkalaUKS(dft.uks.UKS):  # type: ignore[misc]
         if self._needs_unsorted:
             _build_grids_unsorted(self.grids, mol)
 
-    def initialize_grids(self, mol: gto.Mole | None = None, dm: Any = None) -> "SkalaUKS":
+    def initialize_grids(
+        self, mol: gto.Mole | None = None, dm: Any = None
+    ) -> "SkalaUKS":
         # Ensure grids stay unsorted even if user changed grid settings after __init__
         if self._needs_unsorted and self.grids.coords is None:
             _build_grids_unsorted(self.grids, mol or self.mol)
