@@ -14,8 +14,8 @@ from ase.calculators.calculator import (
 from ase.units import Bohr, Debye, Hartree
 from pyscf import grad, gto
 
-from skala.functional.base import ExcFunctionalBase
 import skala.pyscf as skala_cpu
+from skala.functional.base import ExcFunctionalBase
 from skala.pyscf.retry import retry_scf
 
 try:
