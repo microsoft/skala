@@ -91,6 +91,7 @@ def test_grid_alignment_mismatch_raises() -> None:
 
     mol = gto.M(atom="H 0 0 0; H 0 0 0.74", basis="sto-3g", verbose=0)
     func = load_functional("skala-1.1")
+    assert not isinstance(func, str)
 
     def _build_grids_keep_padding(grids: gto.Mole, mol: gto.Mole) -> gto.Mole:
         """Build grids WITHOUT disabling alignment, so padding is preserved."""
