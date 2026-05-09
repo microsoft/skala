@@ -13,6 +13,7 @@ from skala.functional.base import ExcFunctionalBase
 from skala.gpu4pyscf import SkalaKS
 from skala.gpu4pyscf.dft import SkalaRKS, SkalaUKS
 from skala.gpu4pyscf.gradients import SkalaRKSGradient, SkalaUKSGradient
+from skala.gpu4pyscf.grids import UnsortableGrids
 
 
 @pytest.fixture(params=["skala-1.0", "skala-1.1"])
@@ -66,6 +67,8 @@ def test_skala_class(
     assert ks.xc == "custom"
     assert isinstance(ks, SkalaRKS if mol.spin == 0 else SkalaUKS)
     assert ks.with_dftd3 is not None if with_dftd3 else ks.with_dftd3 is None
+    if ks._needs_unsorted:
+        assert isinstance(ks.grids, UnsortableGrids)
 
     ks_scanner = ks.as_scanner()
     assert isinstance(ks_scanner, SkalaRKS if mol.spin == 0 else SkalaUKS)
@@ -78,11 +81,17 @@ def test_skala_class(
     grad = ks.nuc_grad_method()
     assert isinstance(grad, SkalaRKSGradient if mol.spin == 0 else SkalaUKSGradient)
     assert grad.with_dftd3 is not None if with_dftd3 else grad.with_dftd3 is None
+    if ks._needs_unsorted:
+        assert isinstance(grad.grids, UnsortableGrids)
 
     grad = ks.Gradients()
     assert isinstance(grad, SkalaRKSGradient if mol.spin == 0 else SkalaUKSGradient)
     assert grad.with_dftd3 is not None if with_dftd3 else grad.with_dftd3 is None
+    if ks._needs_unsorted:
+        assert isinstance(grad.grids, UnsortableGrids)
 
     ks = grad.base
     assert isinstance(ks, SkalaRKS if mol.spin == 0 else SkalaUKS)
     assert ks.with_dftd3 is not None if with_dftd3 else ks.with_dftd3 is None
+    if ks._needs_unsorted:
+        assert isinstance(ks.grids, UnsortableGrids)

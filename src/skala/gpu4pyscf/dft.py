@@ -67,7 +67,7 @@ cp.cuda.set_allocator(cp.get_default_memory_pool().malloc)
 
 from skala.functional.base import ExcFunctionalBase
 from skala.gpu4pyscf.gradients import SkalaRKSGradient, SkalaUKSGradient
-from skala.gpu4pyscf.grids import Grids
+from skala.gpu4pyscf.grids import UnsortableGrids
 from skala.pyscf.dft import _build_grids_unsorted, _needs_unsorted_grids
 from skala.pyscf.numint import SkalaNumInt
 from skala.pyscf.utils import pyscf_version_newer_than_2_10
@@ -99,8 +99,8 @@ class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
 
         self._needs_unsorted = _needs_unsorted_grids(xc)
         if self._needs_unsorted:
-            self.grids = Grids(mol)(level=self.grids.level)
-            self.cphf_grids = Grids(mol)(
+            self.grids = UnsortableGrids(mol)(level=self.grids.level)
+            self.cphf_grids = UnsortableGrids(mol)(
                 prune=self.cphf_grids.prune, atom_grid=self.cphf_grids.atom_grid
             )
             _build_grids_unsorted(self.grids, mol)
@@ -182,8 +182,8 @@ class SkalaUKS(dft.uks.UKS):  # type: ignore[misc]
 
         self._needs_unsorted = _needs_unsorted_grids(xc)
         if self._needs_unsorted:
-            self.grids = Grids(mol)(level=self.grids.level)
-            self.cphf_grids = Grids(mol)(
+            self.grids = UnsortableGrids(mol)(level=self.grids.level)
+            self.cphf_grids = UnsortableGrids(mol)(
                 prune=self.cphf_grids.prune, atom_grid=self.cphf_grids.atom_grid
             )
             _build_grids_unsorted(self.grids, mol)
