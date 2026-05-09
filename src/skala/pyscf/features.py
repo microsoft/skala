@@ -111,6 +111,16 @@ def generate_features(
         )
         sizes = [len(atom_grids_tab[mol.atom_symbol(ia)][1]) for ia in range(mol.natm)]
 
+        n_atomic = sum(sizes)
+        n_grid = grids.weights.shape[0]
+        if n_atomic != n_grid:
+            raise ValueError(
+                f"Grid size mismatch: sum of atomic grid sizes ({n_atomic}) does not match "
+                f"total grid points ({n_grid}). This is likely caused by grid alignment padding "
+                f"(grids.alignment={getattr(grids, 'alignment', '?')}). "
+                f"Set grids.alignment = 1 before building grids to disable padding."
+            )
+
         if "atomic_grid_sizes" in features:
             mol_features["atomic_grid_sizes"] = torch.tensor(
                 sizes, dtype=torch.long, device=dm.device

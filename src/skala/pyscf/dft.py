@@ -50,6 +50,7 @@ The provided classes support the same transformations and methods as the origina
 <pyscf.scf.hf.DFSkalaRKS_Scanner object at ...>
 """
 
+import logging
 import warnings
 from collections.abc import Callable
 from typing import Any, cast
@@ -67,6 +68,8 @@ from skala.pyscf.grids import UnsortableGrids
 from skala.pyscf.numint import SkalaNumInt
 from skala.pyscf.utils import pyscf_version_newer_than_2_10
 
+logger = logging.getLogger(__name__)
+
 
 def _needs_unsorted_grids(func: ExcFunctionalBase) -> bool:
     """Return True when the functional needs per-atom grid ordering."""
@@ -76,7 +79,19 @@ def _needs_unsorted_grids(func: ExcFunctionalBase) -> bool:
 def _build_grids_unsorted(
     grids: dft.gen_grid.Grids, mol: gto.Mole
 ) -> dft.gen_grid.Grids:
-    """Build grids without sorting, preserving per-atom ordering."""
+    """Build grids without sorting, preserving per-atom ordering.
+
+    Also disables grid alignment padding, which would introduce extra
+    zero-weight grid points that are not accounted for in the per-atom
+    grid size decomposition used by the Skala functional.
+    """
+    if grids.alignment != 1:
+        logger.debug(
+            "Overriding grids.alignment from %d to 1. "
+            "The Skala functional requires unsorted, unpadded grids.",
+            grids.alignment,
+        )
+        grids.alignment = 1
     grids.build(mol, sort_grids=False)
     return grids
 

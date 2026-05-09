@@ -88,3 +88,34 @@ def test_skala_class(
     assert ks.with_dftd3 is not None if with_dftd3 else ks.with_dftd3 is None
     if ks._needs_unsorted:
         assert isinstance(ks.grids, UnsortableGrids)
+
+
+def test_grid_alignment_mismatch_raises() -> None:
+    """generate_features raises ValueError when grid has alignment padding."""
+    from unittest.mock import patch
+
+    import torch
+
+    from skala.pyscf.features import generate_features
+
+    mol = gto.M(atom="H 0 0 0; H 0 0 0.74", basis="sto-3g", verbose=0)
+    func = load_functional("skala-1.1")
+    assert not isinstance(func, str)
+
+    def _build_grids_keep_padding(grids: gto.Mole, mol: gto.Mole) -> gto.Mole:
+        """Build grids WITHOUT disabling alignment, so padding is preserved."""
+        grids.build(mol, sort_grids=False)
+        return grids
+
+    with patch("skala.pyscf.dft._build_grids_unsorted", _build_grids_keep_padding):
+        ks = SkalaKS(mol, xc=func, with_dftd3=False)
+
+    # The default PySCF alignment is 8, so grids may have padding.
+    # Force alignment to something large to guarantee a mismatch.
+    ks.grids.alignment = 128
+    ks.grids.build(mol, sort_grids=False)
+
+    dm = torch.from_numpy(ks.get_init_guess())
+
+    with pytest.raises(ValueError, match="Grid size mismatch"):
+        generate_features(mol, dm, ks.grids, set(func.features))
