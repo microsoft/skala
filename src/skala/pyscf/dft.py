@@ -86,6 +86,9 @@ class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
 
     xc: str
 
+    grids: dft.gen_grid.Grids
+    """Numerical integration grids."""
+
     with_dftd3: DFTD3Dispersion | None = None
     """DFT-D3 dispersion correction."""
 
@@ -171,6 +174,9 @@ class SkalaUKS(dft.uks.UKS):  # type: ignore[misc]
     """Unrestricted Kohn-Sham method with support for Skala functional."""
 
     xc: str
+
+    grids: dft.gen_grid.Grids
+    """Numerical integration grids."""
 
     with_dftd3: DFTD3Dispersion | None = None
     """DFT-D3 dispersion correction."""

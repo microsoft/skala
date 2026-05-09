@@ -7,7 +7,7 @@ from gpu4pyscf.dft import gen_grid
 LOG = getLogger(__name__)
 
 
-class Grids(gen_grid.Grids):
+class Grids(gen_grid.Grids):  # type: ignore
     def build(self, mol=None, with_non0tab=False, **kwargs) -> "Grids":
         sort_grids = kwargs.pop("sort_grids", None)
         if sort_grids is None:

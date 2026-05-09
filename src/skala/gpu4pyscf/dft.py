@@ -79,6 +79,12 @@ class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
     with_dftd3: DFTD3Dispersion | None = None
     """DFT-D3 dispersion correction."""
 
+    grids: dft.gen_grid.Grids
+    """Grids object"""
+
+    cphf_grids: dft.gen_grid.Grids
+    """Grids object for CPHF"""
+
     def __init__(
         self, mol: gto.Mole, xc: ExcFunctionalBase, *, with_dftd3: bool = True
     ):
@@ -94,6 +100,9 @@ class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
         self._needs_unsorted = _needs_unsorted_grids(xc)
         if self._needs_unsorted:
             self.grids = Grids(mol)(level=self.grids.level)
+            self.cphf_grids = Grids(mol)(
+                prune=self.cphf_grids.prune, atom_grid=self.cphf_grids.atom_grid
+            )
             _build_grids_unsorted(self.grids, mol)
 
     def energy_nuc(self) -> float:
@@ -152,6 +161,12 @@ class SkalaUKS(dft.uks.UKS):  # type: ignore[misc]
 
     with_dftd3: DFTD3Dispersion | None = None
     """DFT-D3 dispersion correction."""
+
+    grids: dft.gen_grid.Grids
+    """Grids object"""
+
+    cphf_grids: dft.gen_grid.Grids
+    """Grids object for CPHF"""
 
     def __init__(
         self, mol: gto.Mole, xc: ExcFunctionalBase, *, with_dftd3: bool = True
