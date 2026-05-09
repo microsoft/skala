@@ -9,10 +9,11 @@ import warnings
 from skala._huggingface import hf_hub_download
 
 
-def test_hf_hub_download_suppresses_hf_xet_deprecation(monkeypatch) -> None:
+def test_hf_hub_download_suppresses_hf_xet_deprecation(monkeypatch, tmp_path) -> None:
     """The hf_xet implementation detail warning should not escape downloads."""
 
     calls = {}
+    downloaded_path = tmp_path / "skala.fun"
 
     def fake_hf_hub_download(**kwargs) -> str:
         calls.update(kwargs)
@@ -22,7 +23,7 @@ def test_hf_hub_download_suppresses_hf_xet_deprecation(monkeypatch) -> None:
             DeprecationWarning,
             stacklevel=2,
         )
-        return "/tmp/skala.fun"
+        return str(downloaded_path)
 
     monkeypatch.setitem(
         sys.modules,
@@ -37,6 +38,6 @@ def test_hf_hub_download_suppresses_hf_xet_deprecation(monkeypatch) -> None:
             filename="skala-1.1.fun",
         )
 
-    assert path == "/tmp/skala.fun"
+    assert path == str(downloaded_path)
     assert calls == {"repo_id": "microsoft/skala-1.1", "filename": "skala-1.1.fun"}
     assert not caught

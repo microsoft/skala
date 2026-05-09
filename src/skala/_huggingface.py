@@ -12,7 +12,15 @@ _HF_XET_DOWNLOAD_FILES_DEPRECATION = (
 
 
 def hf_hub_download(*args: Any, **kwargs: Any) -> str:
-    """Download a file from Hugging Face Hub without surfacing hf_xet internals."""
+    """Download a file from Hugging Face Hub without surfacing hf_xet internals.
+
+    Args:
+        *args: Positional arguments passed through to Hugging Face Hub.
+        **kwargs: Keyword arguments passed through to Hugging Face Hub.
+
+    Returns:
+        The local path to the downloaded file.
+    """
     from huggingface_hub import hf_hub_download as _hf_hub_download
 
     with warnings.catch_warnings():
