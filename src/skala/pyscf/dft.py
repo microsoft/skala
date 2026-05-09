@@ -63,6 +63,7 @@ from pyscf.df import df_jk
 from skala.functional.base import ExcFunctionalBase
 from skala.pyscf.features import _ATOMIC_GRID_FEATURES
 from skala.pyscf.gradients import SkalaRKSGradient, SkalaUKSGradient
+from skala.pyscf.grids import Grids
 from skala.pyscf.numint import SkalaNumInt
 from skala.pyscf.utils import pyscf_version_newer_than_2_10
 
@@ -107,6 +108,7 @@ class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
         )
 
         if self._needs_unsorted:
+            self.grids = Grids(mol)(level=self.grids.level)
             _build_grids_unsorted(self.grids, mol)
 
     def initialize_grids(

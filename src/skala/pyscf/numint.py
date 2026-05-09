@@ -83,6 +83,10 @@ class PySCFNumInt(
         """Generates the response function for the functional."""
         ...
 
+    def reset(self) -> "PySCFNumInt[Array]":
+        """GPU4PySCF-specific method to reset the internal cache of the functional, if any."""
+        return self
+
 
 class SkalaNumInt(PySCFNumInt[Array]):
     """PySCF-compatible reimplementation of `pyscf.dft.numint.NumInt`.
