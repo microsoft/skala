@@ -39,4 +39,4 @@ def test_hf_hub_download_suppresses_hf_xet_deprecation(monkeypatch) -> None:
 
     assert path == "/tmp/skala.fun"
     assert calls == {"repo_id": "microsoft/skala-1.1", "filename": "skala-1.1.fun"}
-    assert caught == []
+    assert not caught
