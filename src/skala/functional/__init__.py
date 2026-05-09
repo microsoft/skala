@@ -12,8 +12,8 @@ import logging
 import os
 
 import torch
-from huggingface_hub import hf_hub_download
 
+from skala._huggingface import hf_hub_download
 from skala.functional._hashes import KNOWN_HASHES
 from skala.functional.base import ExcFunctionalBase
 from skala.functional.load import TracedFunctional

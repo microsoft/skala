@@ -9,8 +9,7 @@ and can be used to verify that the C++ integration is working correctly.
 
 import shutil
 
-from huggingface_hub import hf_hub_download
-
+from skala._huggingface import hf_hub_download
 from skala.functional._hashes import KNOWN_HASHES
 from skala.functional.load import TracedFunctional
 
