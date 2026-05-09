@@ -114,4 +114,6 @@ filterwarnings = [
     "ignore:Exception ignored in. <_io\\.FileIO name='/tmp/tmp.*' mode='rb\\+' closefd=True>:pytest.PytestUnraisableExceptionWarning",
     # From gpu4pyscf if cutensor is not available
     'ignore:using cupy as the tensor contraction engine\.:UserWarning',
+    # Deprecation warning in huggingface_hub package
+    'ignore:hf_xet\.download_files\(\) is deprecated\. Use XetSession\(\)\.new_file_download_group\(\)\.start_download_file\(\) instead\.:DeprecationWarning',
 ]
