@@ -289,6 +289,7 @@ class SkalaRKSGradient(RHFGradient):  # type: ignore[misc]
         self.nuc_grad_feats = nuc_grad_feats
         self.verbose = verbose
         self.with_dftd3 = getattr(ks, "with_dftd3", None)
+        self.veff_nuc_grad_ = None
 
     def get_veff(
         self,
@@ -326,6 +327,16 @@ class SkalaRKSGradient(RHFGradient):  # type: ignore[misc]
         if mo_coeff is None:
             mo_coeff = self.base.mo_coeff
 
+        if self.veff_nuc_grad_ is None:
+            dm = self.base.make_rdm1()
+            _, self.veff_nuc_grad_ = veff_and_expl_nuc_grad(
+                self.functional,
+                mol=self.mol,
+                grid=self.grids,
+                rdm1=torch.from_dlpack(dm),  # type: ignore[attr-defined]
+                nuc_grad_feats=self.nuc_grad_feats,
+            )
+
         grad = super().grad_elec(mo_energy, mo_coeff, mo_occ, atmlst)
         return grad + self.veff_nuc_grad_.detach().cpu().numpy()
 
@@ -343,6 +354,11 @@ class SkalaRKSGradient(RHFGradient):  # type: ignore[misc]
 
     def extra_force(self, atom_id: int, envs: dict[str, Any]) -> int:
         return 0
+
+    def reset(self, mol: gto.Mole | None = None) -> "SkalaRKSGradient":
+        super().reset(mol)
+        self.veff_nuc_grad_ = None
+        return self
 
 
 class SkalaUKSGradient(UHFGradient):  # type: ignore[misc]
@@ -367,6 +383,7 @@ class SkalaUKSGradient(UHFGradient):  # type: ignore[misc]
         self.nuc_grad_feats = nuc_grad_feats
         self.verbose = verbose
         self.with_dftd3 = getattr(ks, "with_dftd3", None)
+        self.veff_nuc_grad_ = None
 
     def get_veff(
         self,
@@ -404,6 +421,16 @@ class SkalaUKSGradient(UHFGradient):  # type: ignore[misc]
         if mo_coeff is None:
             mo_coeff = self.base.mo_coeff
 
+        if self.veff_nuc_grad_ is None:
+            dm = self.base.make_rdm1()
+            _, self.veff_nuc_grad_ = veff_and_expl_nuc_grad(
+                self.functional,
+                mol=self.mol,
+                grid=self.grids,
+                rdm1=torch.from_dlpack(dm),  # type: ignore[attr-defined]
+                nuc_grad_feats=self.nuc_grad_feats,
+            )
+
         grad = super().grad_elec(mo_energy, mo_coeff, mo_occ, atmlst)
 
         return grad + self.veff_nuc_grad_.detach().cpu().numpy()
@@ -419,3 +446,11 @@ class SkalaUKSGradient(UHFGradient):  # type: ignore[misc]
             disp_g = disp_g[atmlst]
         nuc_g += disp_g
         return nuc_g
+
+    def extra_force(self, atom_id: int, envs: dict[str, Any]) -> int:
+        return 0
+
+    def reset(self, mol: gto.Mole | None = None) -> "SkalaUKSGradient":
+        super().reset(mol)
+        self.veff_nuc_grad_ = None
+        return self
