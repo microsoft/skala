@@ -16,6 +16,7 @@ from gpu4pyscf.grad.rks import grids_noresponse_cc, grids_response_cc
 from gpu4pyscf.grad.uks import Gradients as UHFGradient
 from gpu4pyscf.scf.hf import SCF
 from pyscf import gto
+from torch.utils.dlpack import from_dlpack
 
 import skala.pyscf.features as feature
 from skala.functional.base import ExcFunctionalBase
@@ -131,7 +132,7 @@ def veff_and_expl_nuc_grad(
     atm_start = 0
     for atm_id, (coords, weight, weight1) in enumerate(grids_response_cc(grid)):
         mask = dft.gen_grid.make_mask(mol, coords)
-        ao = torch.from_dlpack(  # type: ignore[attr-defined]
+        ao = from_dlpack(
             dft.numint.eval_ao(
                 mol,
                 coords,
@@ -230,7 +231,7 @@ def veff_and_expl_nuc_grad(
 
         if "grid_weights" in nuc_grad_feats:
             Exc_dgw = dExc["grid_weights"][atm_start:atm_end]
-            nuc_grad += torch.from_dlpack(weight1) @ Exc_dgw  # type: ignore[attr-defined]
+            nuc_grad += from_dlpack(weight1) @ Exc_dgw
             # add the grid coordinate dependence via the density-like quantities to the nuclear gradient
             # we get those from the veff block. This tends to largely cancel with the grid_weights derivative,
             # so that's why we include it here.
@@ -272,7 +273,7 @@ class SkalaRKSGradient(RHFGradient):  # type: ignore[misc]
     """Skala functional"""
     nuc_grad_feats: set[str] | None
     """Which partial derivatives to take into account. None defaults to all."""
-    veff_nuc_grad_: torch.Tensor
+    veff_nuc_grad_: torch.Tensor | None
     """Contribution of the coordinate dependence of density, grad, kin, etc."""
     with_dftd3: DFTD3Dispersion | None = None
     """DFTD3 dispersion correction"""
@@ -305,12 +306,12 @@ class SkalaRKSGradient(RHFGradient):  # type: ignore[misc]
             self.functional,
             mol=mol,
             grid=self.grids,
-            rdm1=torch.from_dlpack(dm),  # type: ignore[attr-defined]
+            rdm1=from_dlpack(dm),
             nuc_grad_feats=self.nuc_grad_feats,
         )
         vhfopt = self.base._opt_gpu.get(mol.omega)
         return cp.from_dlpack(
-            nuc_grad_from_veff(mol, veff, torch.from_dlpack(dm))  # type: ignore[attr-defined]
+            nuc_grad_from_veff(mol, veff, from_dlpack(dm))
         ) + _jk_energy_per_atom(mol, dm, vhfopt, k_factor=0.0, verbose=self.verbose)
 
     def grad_elec(
@@ -333,12 +334,15 @@ class SkalaRKSGradient(RHFGradient):  # type: ignore[misc]
                 self.functional,
                 mol=self.mol,
                 grid=self.grids,
-                rdm1=torch.from_dlpack(dm),  # type: ignore[attr-defined]
+                rdm1=from_dlpack(dm),
                 nuc_grad_feats=self.nuc_grad_feats,
             )
+        veff_nuc_grad = self.veff_nuc_grad_
+        if veff_nuc_grad is None:
+            raise RuntimeError("Nuclear gradient contribution was not computed")
 
         grad = super().grad_elec(mo_energy, mo_coeff, mo_occ, atmlst)
-        return grad + self.veff_nuc_grad_.detach().cpu().numpy()
+        return grad + veff_nuc_grad.detach().cpu().numpy()
 
     def grad_nuc(
         self, mol: gto.Mole | None = None, atmlst: list[int] | None = None
@@ -366,7 +370,7 @@ class SkalaUKSGradient(UHFGradient):  # type: ignore[misc]
     """Skala functional"""
     nuc_grad_feats: set[str] | None
     """Which partial derivatives to take into account. None defaults to all."""
-    veff_nuc_grad_: torch.Tensor
+    veff_nuc_grad_: torch.Tensor | None
     """Contribution of the coordinate dependence of density, grad, kin, etc."""
     with_dftd3: DFTD3Dispersion | None = None
     """DFTD3 dispersion correction"""
@@ -399,12 +403,12 @@ class SkalaUKSGradient(UHFGradient):  # type: ignore[misc]
             self.functional,
             mol=mol,
             grid=self.grids,
-            rdm1=torch.from_dlpack(dm),  # type: ignore[attr-defined]
+            rdm1=from_dlpack(dm),
             nuc_grad_feats=self.nuc_grad_feats,
         )
         vhfopt = self.base._opt_gpu.get(mol.omega)
         return cp.from_dlpack(
-            nuc_grad_from_veff(mol, veff, torch.from_dlpack(dm))  # type: ignore[attr-defined]
+            nuc_grad_from_veff(mol, veff, from_dlpack(dm))
         ) + _jk_energy_per_atom(mol, dm, vhfopt, k_factor=0.0, verbose=self.verbose)
 
     def grad_elec(
@@ -427,13 +431,16 @@ class SkalaUKSGradient(UHFGradient):  # type: ignore[misc]
                 self.functional,
                 mol=self.mol,
                 grid=self.grids,
-                rdm1=torch.from_dlpack(dm),  # type: ignore[attr-defined]
+                rdm1=from_dlpack(dm),
                 nuc_grad_feats=self.nuc_grad_feats,
             )
+        veff_nuc_grad = self.veff_nuc_grad_
+        if veff_nuc_grad is None:
+            raise RuntimeError("Nuclear gradient contribution was not computed")
 
         grad = super().grad_elec(mo_energy, mo_coeff, mo_occ, atmlst)
 
-        return grad + self.veff_nuc_grad_.detach().cpu().numpy()
+        return grad + veff_nuc_grad.detach().cpu().numpy()
 
     def grad_nuc(
         self, mol: gto.Mole | None = None, atmlst: list[int] | None = None
