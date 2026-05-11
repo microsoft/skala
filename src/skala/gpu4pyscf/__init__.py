@@ -8,17 +8,13 @@ functionals and the GPU4PySCF quantum chemistry package, enabling DFT calculatio
 with neural network-based functionals.
 """
 
-from importlib.util import find_spec
 from typing import Any
 
 import torch
 
-if not torch.cuda.is_available() and find_spec("pytest") is not None:
-    import pytest
-
-    pytest.skip(
-        "Skipping gpu4pyscf doctests, because CUDA is not available.",
-        allow_module_level=True,
+if not torch.cuda.is_available():
+    raise ImportError(
+        "skala.gpu4pyscf requires a CUDA-capable device, but CUDA is not available."
     )
 
 try:
