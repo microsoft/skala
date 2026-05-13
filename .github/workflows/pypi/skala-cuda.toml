@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "skala-cuda@CUDA@"
+version = "@VERSION@"
+description = "Skala Exchange Correlation Functional"
+authors = []
+license-files = ["LICENSE.txt"]
+readme = "README.md"
+keywords = []
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Development Status :: 5 - Production/Stable",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "skala==@VERSION@",
+    "gpu4pyscf-cuda@CUDA@>=1.5,<1.8",
+]
+urls.repository = "https://github.com/microsoft/skala"
+urls.documentation = "https://microsoft.github.io/skala"
+urls.homepage = "https://aka.ms/dft"

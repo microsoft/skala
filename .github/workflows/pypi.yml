@@ -13,6 +13,14 @@ jobs:
       fail-fast: false
       matrix:
         package: [skala, microsoft-skala]
+        cuda: ['']
+        include:
+          - package: skala-cuda
+            cuda: 11x
+          - package: skala-cuda
+            cuda: 12x
+          - package: skala-cuda
+            cuda: 13x
 
     steps:
     - uses: actions/checkout@v4
@@ -42,13 +50,25 @@ jobs:
         sed -e "s/@VERSION@/$VERSION/g" .github/workflows/pypi/microsoft-skala.toml > pyproject.toml
         cat pyproject.toml
 
+    - name: Replace pyproject.toml
+      if: ${{ matrix.package == 'skala-cuda' }}
+      run: |
+        VERSION=$(python3 -c "from tomllib import load; print(load(open('pyproject.toml', 'rb'))['project']['version'])")
+        CUDA=${{ matrix.cuda }}
+        rm -r src/skala
+        mkdir -p src/skala_cuda
+        echo "from skala import *" > src/skala_cuda/__init__.py
+        touch src/skala_cuda/py.typed
+        sed -e "s/@VERSION@/$VERSION/g" -e "s/@CUDA@/$CUDA/g" .github/workflows/pypi/skala-cuda.toml > pyproject.toml
+        cat pyproject.toml
+
     - name: Build a binary wheel and a source tarball
       run: python3 -m build
 
     - name: Store the distribution packages
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ matrix.package }}-pkg
+        name: ${{ matrix.package }}${{ matrix.cuda }}-pkg
         path: dist/
 
   publish-to-pypi:
@@ -60,7 +80,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [skala, microsoft-skala]
+        package: [skala, microsoft-skala, skala-cuda11x, skala-cuda12x, skala-cuda13x]
     environment:
       name: pypi
       url: https://pypi.org/p/${{ matrix.package }}
