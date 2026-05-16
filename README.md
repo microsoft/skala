@@ -77,9 +77,19 @@ ks.kernel()
 ## Getting started: GPU4PySCF (GPU)
 
 The GPU install is more involved because `gpu4pyscf` ships CUDA-version-specific
-wheels that must match your CUDA toolkit. The recommended path is the provided
-[`environment-gpu.yml`](environment-gpu.yml), which pins `pytorch-gpu`,
-`cuda-toolkit` 12, `cutensor`, and installs `gpu4pyscf-cuda12x` 1.5 from PyPI:
+wheels that must match your CUDA toolkit.
+
+To install all dependencies from PyPI, use the GPU specific package with the
+matching CUDA version, e.g., for CUDA 12:
+
+```bash
+pip install skala-cuda12x
+```
+
+The `skala-cuda11x` and `skala-cuda13x` packages are also available for CUDA 11 and 13, respectively.
+
+The recommended path is the provided [`environment-gpu.yml`](environment-gpu.yml),
+which pins `pytorch-gpu`, `cuda-toolkit` 12, `cutensor`, and installs `gpu4pyscf-cuda12x` from PyPI:
 
 ```bash
 mamba env create -n skala -f environment-gpu.yml
