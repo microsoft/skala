@@ -86,10 +86,10 @@ class SCFState:
         if "norm_ddm" not in envs:
             envs["norm_ddm"] = np.linalg.norm(envs["dm"] - envs["dm_last"])
 
-        norm_ddm = envs["norm_ddm"]
-        assert isinstance(norm_ddm, (float, int)), (
-            f"Expected norm_ddm to be a float, got {type(norm_ddm)}"
-        )
+        # gpu4pyscf stores norm_ddm as a 0-d cupy.ndarray; CPU pyscf as a numpy
+        # scalar. Coerce to a Python float so downstream consumers (and the
+        # `dm_change_per_cycle` list) always see a uniform numeric type.
+        norm_ddm = float(envs["norm_ddm"])
         self.dm_change_per_cycle.append(norm_ddm)
 
         if not isinstance(mo_energy, list) and len(mo_energy.shape) == 1:
@@ -194,13 +194,13 @@ def retry_scf(
 
 
 def increment_level_shift(
-    level_shift: float,
+    level_shift: float | None,
     max_level_shift: float = 0.5,
     level_shift_init: float = 0.1,
     level_shift_increment: float = 0.2,
 ) -> float:
-    return (
-        min(level_shift + level_shift_increment, max_level_shift)
-        if level_shift > 0
-        else level_shift_init
-    )
+    # gpu4pyscf SCF objects default ``level_shift`` to None, CPU pyscf uses 0.
+    # Treat both as "no level shift yet" and start from ``level_shift_init``.
+    if not level_shift:
+        return level_shift_init
+    return min(level_shift + level_shift_increment, max_level_shift)
