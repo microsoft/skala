@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "skala"
-version = "2026.4"
+version = "2026.5"
 description = "Skala Exchange Correlation Functional"
 authors = []
 license-files = ["LICENSE.txt"]
