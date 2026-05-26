@@ -123,6 +123,26 @@ ks = SkalaKS(mol, xc="skala-1.1")
 ks.kernel()
 ```
 
+### Known issue: multiple visible GPUs
+
+Skala uses a single GPU, but importing `gpu4pyscf` allocates memory on **every**
+visible CUDA device. This can conflict with PyTorch and with other processes
+sharing those GPUs (e.g. in MPI-parallel workloads).
+
+Restrict CUDA to one device **before** launching Python:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python my_script.py
+```
+
+For MPI-parallel runs, assign one GPU per local rank:
+
+```bash
+mpirun -np 4 bash -c 'CUDA_VISIBLE_DEVICES=$OMPI_COMM_WORLD_LOCAL_RANK python my_script.py'
+```
+
+Tracked upstream at [pyscf/gpu4pyscf#435](https://github.com/pyscf/gpu4pyscf/issues/435).
+
 ## Getting started: ASE calculator
 
 Skala also provides an [ASE](https://wiki.fysik.dtu.dk/ase/) calculator for energy, force, and geometry optimization workflows:
