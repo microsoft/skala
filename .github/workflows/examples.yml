@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Setup Python
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
       with:
         version: "3.x"
 
@@ -26,7 +26,7 @@ jobs:
          hf download microsoft/skala-1.1 skala-1.1.fun --local-dir .
 
     - name: Upload checkpoint
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
         name: skala-checkpoint
         path: skala-1.1.fun
@@ -34,10 +34,10 @@ jobs:
   pt-features:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
     - name: Setup micromamba
-      uses: mamba-org/setup-micromamba@v1
+      uses: mamba-org/setup-micromamba@4b9113af4fba0e9e1124b252dd6497a419e7396d # v1
       with:
         environment-file: environment-cpu.yml
         environment-name: skala-dev
@@ -55,7 +55,7 @@ jobs:
       shell: micromamba-shell {0}
 
     - name: Upload features
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
         name: pt-features
         path: features
@@ -72,19 +72,19 @@ jobs:
         example: ["cpp", "c", "fortran"]
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       with:
         path: skala
 
     - name: Setup micromamba
-      uses: mamba-org/setup-micromamba@v1
+      uses: mamba-org/setup-micromamba@4b9113af4fba0e9e1124b252dd6497a419e7396d # v1
       with:
         environment-file: skala/examples/${{ matrix.example }}/gauxc_integration/environment-${{ matrix.toolchain }}.yml
         environment-name: gauxc-dev
         cache-environment: true
         cache-downloads: true
 
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       with:
         repository: wavefunction91/gauxc
         ref: skala
@@ -145,7 +145,7 @@ jobs:
       shell: micromamba-shell {0}
 
     - name: Download checkpoint
-      uses: actions/download-artifact@v5
+      uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
       with:
         name: skala-checkpoint
 
@@ -163,10 +163,10 @@ jobs:
       - skala-checkpoint
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
     - name: Setup micromamba
-      uses: mamba-org/setup-micromamba@v1
+      uses: mamba-org/setup-micromamba@4b9113af4fba0e9e1124b252dd6497a419e7396d # v1
       with:
         environment-file: examples/fortran/ftorch_integration/environment.yml
         environment-name: ftorch-dev
@@ -191,13 +191,13 @@ jobs:
       shell: micromamba-shell {0}
 
     - name: Download features
-      uses: actions/download-artifact@v5
+      uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
       with:
         name: pt-features
         path: features
 
     - name: Download checkpoint
-      uses: actions/download-artifact@v5
+      uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
       with:
         name: skala-checkpoint
         path: .
