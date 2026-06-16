@@ -10,8 +10,7 @@ does not mutate the global RNG visible to other tests in the process.
 """
 
 import math
-from collections.abc import Iterator
-from typing import Callable
+from collections.abc import Callable, Iterator
 
 import pytest
 import torch

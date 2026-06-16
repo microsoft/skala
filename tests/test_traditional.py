@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-from typing import Callable
+from collections.abc import Callable
 
 import pytest
 from pyscf import dft, gto

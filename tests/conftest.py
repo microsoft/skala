@@ -3,7 +3,7 @@
 """Shared test fixtures."""
 
 import functools
-from typing import Callable
+from collections.abc import Callable
 
 import pytest
 
