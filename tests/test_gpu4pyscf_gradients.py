@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 import pytest
 import torch
 from pyscf import gto

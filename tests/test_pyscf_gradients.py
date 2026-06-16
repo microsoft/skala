@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 import pytest
 import torch
 from _ridders import num_grad_ridders
