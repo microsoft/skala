@@ -1,7 +1,8 @@
+from collections.abc import Callable
+
 import pytest
 from pyscf import gto
 
-from skala.functional import load_functional
 from skala.functional.base import ExcFunctionalBase
 from skala.pyscf import SkalaKS
 from skala.pyscf.dft import SkalaRKS, SkalaUKS
@@ -10,9 +11,12 @@ from skala.pyscf.grids import UnsortableGrids
 
 
 @pytest.fixture(params=["skala-1.0", "skala-1.1"])
-def skala_xc(request: pytest.FixtureRequest) -> ExcFunctionalBase:
+def skala_xc(
+    request: pytest.FixtureRequest,
+    load_functional_cached: Callable[..., ExcFunctionalBase | str],
+) -> ExcFunctionalBase:
     """Load the Skala functional under test."""
-    func = load_functional(request.param)
+    func = load_functional_cached(request.param)
     assert isinstance(func, ExcFunctionalBase)
     return func
 
@@ -90,7 +94,9 @@ def test_skala_class(
         assert isinstance(ks.grids, UnsortableGrids)
 
 
-def test_grid_alignment_mismatch_raises() -> None:
+def test_grid_alignment_mismatch_raises(
+    load_functional_cached: Callable[..., ExcFunctionalBase | str],
+) -> None:
     """generate_features raises ValueError when grid has alignment padding."""
     from unittest.mock import patch
 
@@ -99,7 +105,7 @@ def test_grid_alignment_mismatch_raises() -> None:
     from skala.pyscf.features import generate_features
 
     mol = gto.M(atom="H 0 0 0; H 0 0 0.74", basis="sto-3g", verbose=0)
-    func = load_functional("skala-1.1")
+    func = load_functional_cached("skala-1.1")
     assert not isinstance(func, str)
 
     def _build_grids_keep_padding(grids: gto.Mole, mol: gto.Mole) -> gto.Mole:
