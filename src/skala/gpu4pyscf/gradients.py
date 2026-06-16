@@ -11,9 +11,8 @@ import torch
 from dftd3.pyscf import DFTD3Dispersion
 from gpu4pyscf import dft
 from gpu4pyscf.grad.rhf import Gradients as RHFGradient
-from gpu4pyscf.grad.rhf import _jk_energy_per_atom
 from gpu4pyscf.grad.rks import grids_noresponse_cc, grids_response_cc
-from gpu4pyscf.grad.uks import Gradients as UHFGradient
+from gpu4pyscf.grad.uhf import Gradients as UHFGradient
 from gpu4pyscf.scf.hf import SCF
 from pyscf import gto
 from torch.utils.dlpack import from_dlpack
@@ -292,11 +291,11 @@ class SkalaRKSGradient(RHFGradient):  # type: ignore[misc]
         self.with_dftd3 = getattr(ks, "with_dftd3", None)
         self.veff_nuc_grad_ = None
 
-    def get_veff(
+    def energy_ee(
         self,
         mol: gto.Mole | None = None,
         dm: cp.ndarray | None = None,
-    ) -> cp.ndarray:
+    ) -> np.ndarray:
         if mol is None:
             mol = self.mol
         if dm is None:
@@ -309,10 +308,12 @@ class SkalaRKSGradient(RHFGradient):  # type: ignore[misc]
             rdm1=from_dlpack(dm),
             nuc_grad_feats=self.nuc_grad_feats,
         )
-        vhfopt = self.base._opt_gpu.get(mol.omega)
-        return cp.from_dlpack(
-            nuc_grad_from_veff(mol, veff, from_dlpack(dm))
-        ) + _jk_energy_per_atom(mol, dm, vhfopt, k_factor=0.0, verbose=self.verbose)
+        veff_grad = (
+            2 * nuc_grad_from_veff(mol, veff, from_dlpack(dm)).detach().cpu().numpy()
+        )
+        return veff_grad + self.jk_energy_per_atom(
+            dm, k_factor=0.0, verbose=self.verbose
+        )
 
     def grad_elec(
         self,
@@ -389,11 +390,11 @@ class SkalaUKSGradient(UHFGradient):  # type: ignore[misc]
         self.with_dftd3 = getattr(ks, "with_dftd3", None)
         self.veff_nuc_grad_ = None
 
-    def get_veff(
+    def energy_ee(
         self,
         mol: gto.Mole | None = None,
         dm: cp.ndarray | None = None,
-    ) -> cp.ndarray:
+    ) -> np.ndarray:
         if mol is None:
             mol = self.mol
         if dm is None:
@@ -406,10 +407,10 @@ class SkalaUKSGradient(UHFGradient):  # type: ignore[misc]
             rdm1=from_dlpack(dm),
             nuc_grad_feats=self.nuc_grad_feats,
         )
-        vhfopt = self.base._opt_gpu.get(mol.omega)
-        return cp.from_dlpack(
-            nuc_grad_from_veff(mol, veff, from_dlpack(dm))
-        ) + _jk_energy_per_atom(mol, dm, vhfopt, k_factor=0.0, verbose=self.verbose)
+        veff_grad = (
+            2 * nuc_grad_from_veff(mol, veff, from_dlpack(dm)).detach().cpu().numpy()
+        )
+        return veff_grad + self.jk_energy_per_atom(dm, k_factor=0, verbose=self.verbose)
 
     def grad_elec(
         self,

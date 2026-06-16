@@ -26,4 +26,4 @@ dependencies:
   - mypy
   - pip:
     - huggingface_hub
-    - gpu4pyscf-cuda12x >=1.5,<1.6
+    - gpu4pyscf-cuda12x >=1.6,<1.7.1|>=1.7.3,<1.8

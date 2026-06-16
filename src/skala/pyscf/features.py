@@ -4,8 +4,9 @@
 Methods for generating and manipulating density features.
 """
 
+import logging
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from copy import copy
 
 import numpy as np
@@ -16,11 +17,15 @@ from torch.autograd import Function
 from torch.autograd.function import FunctionCtx
 
 from skala.pyscf.backend import (
+    Array,
     Grid,
     check_gpu_imports_were_successful,
     dft_gpu,
     from_numpy_or_cupy,
 )
+from skala.pyscf.memory_estimators import estimate_max_grid_chunk_size
+
+LOG = logging.getLogger(__name__)
 
 DEFAULT_FEATURES = ["density", "kin", "grad", "grid_coords", "grid_weights"]
 DEFAULT_FEATURES_SET = set(DEFAULT_FEATURES)
@@ -43,6 +48,164 @@ def maybe_expand_and_divide(
         return torch.stack([feature / divisor, feature / divisor], dim=0)
     else:
         return feature
+
+
+def chunked_features(
+    mol: gto.Mole,
+    dm: Tensor,
+    grids: Grid,
+    features: set[str],
+    func_deriv: int,
+    max_memory_in_mb: int | None = None,
+    safety_fraction: float = 0.8,
+    compile_feature_function: bool = False,
+) -> Iterator[dict[str, Tensor]]:
+    """
+    Chunked feature generation for a given molecule. The density features are generated in chunks to avoid memory issues.
+
+    Input:
+        mol: The molecule for which to generate features.
+        dm: The density matrix.
+        grids: The grid points.
+        features: The set of features to generate.
+        func_deriv: The order of the functional derivative.
+        max_memory_in_mb: The maximum memory to use for each chunk in megabytes (MB). If None, the maximum memory is determined automatically.
+        safety_fraction: The fraction of the available memory to use for each chunk.
+        compile_feature_function: Whether to compile the feature function.
+
+    Yields:
+        A dictionary of features for each chunk.
+    """
+
+    features = features or DEFAULT_FEATURES_SET
+    if "atomic_grid_sizes" not in features:
+        raise ValueError(
+            "The current implementation of chunked_features requires 'atomic_grid_sizes' to be in the requested features."
+        )
+
+    # if dm is a 3D tensor, then we have a spin-polarized system
+    with_spin = True if len(dm.shape) == 3 else False
+
+    grid_features = get_grid_features(mol, dm, grids, features)
+    with_mgga_feature = (
+        "density" in features
+        or "grad" in features
+        or "kin" in features
+        or "lapl" in features
+    )
+
+    # Build the feature function once; it is reused for every chunk.
+    ff = None
+    if with_mgga_feature:
+        ff = MGGAFeatureFunction(
+            with_density="density" in features,
+            with_grad="grad" in features,
+            with_kin="kin" in features,
+            with_lapl="lapl" in features,
+        )
+
+    # Determine the chunk size automatically when not explicitly provided.
+    if ff is not None:
+        max_grid_chunk_size = estimate_max_grid_chunk_size(
+            dm=dm,
+            deriv=ff.deriv,
+            max_memory_in_mb=max_memory_in_mb,
+            safety_fraction=safety_fraction,
+            func_deriv=func_deriv,
+        )
+        if max_grid_chunk_size < (
+            max_atom_grid := int(grid_features["atomic_grid_sizes"].max().item())
+        ):
+            LOG.warning(
+                f"Adjusted chunk size {max_grid_chunk_size} to match the largest atomic grid {max_atom_grid}. Hope for no OOM."
+            )
+            max_grid_chunk_size = max_atom_grid
+    else:  # no feature function is available, use the full grid.
+        max_grid_chunk_size = grid_features["grid_weights"].shape[0]
+
+    for atom_slice, grid_slice in make_chunks(
+        grid_features["atomic_grid_sizes"], max_grid_chunk_size
+    ):
+        feature_chunk = {}
+        for feat_name in ["grid_coords", "grid_weights", "atomic_grid_weights"]:
+            if feat_name in features:
+                feature_chunk[feat_name] = grid_features[feat_name][grid_slice]
+
+        for feat_name in ["coarse_0_atomic_coords", "atomic_grid_sizes"]:
+            if feat_name in features:
+                feature_chunk[feat_name] = grid_features[feat_name][atom_slice]
+
+        if "atomic_grid_size_bound_shape" in features:
+            max_size = int(feature_chunk["atomic_grid_sizes"].max().item())
+            feature_chunk["atomic_grid_size_bound_shape"] = torch.zeros(
+                max_size, 0, dtype=torch.long, device=dm.device
+            )
+
+        if with_mgga_feature:
+            assert ff is not None
+            feat_tensor = non_chunk(
+                dm.double(),
+                mol,
+                grids.coords[grid_slice],
+                ff,
+                compile_feature_function=compile_feature_function,
+                gpu=dm.device.type == "cuda",
+            )
+
+            for k, v in ff.to_dict(feat_tensor).items():
+                feature_chunk[k] = maybe_expand_and_divide(v, not with_spin, 2)
+
+        yield feature_chunk
+
+
+def make_chunks(
+    atomic_grid_sizes: Tensor, max_grid_chunk_size: int
+) -> list[tuple[slice, slice]]:
+    """
+    Generate chunks of atomic and grid indices based on the maximum grid chunk size.
+    Input:
+        atomic_grid_sizes: A tensor of atomic grid sizes.
+        max_grid_chunk_size: The maximum size of each grid chunk.
+    Returns:
+        A list of tuples, where each tuple contains a slice for the atomic indices and a slice for the grid indices.
+    """
+
+    if max_grid_chunk_size < atomic_grid_sizes.max().item():
+        raise ValueError(
+            "max_grid_chunk_size must be at least the maximum atomic grid size"
+        )
+
+    atom_and_grid_slices = []
+    atom_start = 0
+    grid_start = 0
+    chunk_size = 0
+
+    for i, atom_grid_size in enumerate(atomic_grid_sizes):
+        chunk_size += atom_grid_size.item()
+        if chunk_size > max_grid_chunk_size:
+            atom_and_grid_slices.append(
+                (
+                    slice(atom_start, i),
+                    slice(grid_start, grid_start + chunk_size - atom_grid_size.item()),
+                )
+            )
+            atom_start = i
+            grid_start += chunk_size - atom_grid_size.item()
+            chunk_size = atom_grid_size.item()
+
+    if chunk_size > 0:
+        atom_and_grid_slices.append(
+            (
+                slice(atom_start, len(atomic_grid_sizes)),
+                slice(grid_start, grid_start + chunk_size),
+            )
+        )
+
+    LOG.debug(
+        f"Generated {len(atom_and_grid_slices)} chunks of grid sizes: {[g.stop - g.start for _, g in atom_and_grid_slices]}"
+    )
+
+    return atom_and_grid_slices
 
 
 def generate_features(
@@ -88,57 +251,7 @@ def generate_features(
     if gpu and dm.device.type != "cuda":
         raise ValueError("Density matrix must be on the GPU when gpu=True.")
 
-    mol_features = {}
-
-    if "grid_coords" in features:
-        mol_features["grid_coords"] = from_numpy_or_cupy(
-            grids.coords, device=dm.device, dtype=dm.dtype
-        )
-
-    if "grid_weights" in features:
-        mol_features["grid_weights"] = from_numpy_or_cupy(
-            grids.weights, device=dm.device, dtype=dm.dtype
-        )
-
-    if "coarse_0_atomic_coords" in features:
-        mol_features["coarse_0_atomic_coords"] = from_numpy_or_cupy(
-            mol.atom_coords(), device=dm.device, dtype=dm.dtype
-        )
-
-    if features & _ATOMIC_GRID_FEATURES:
-        atom_grids_tab = grids.gen_atomic_grids(
-            mol, grids.atom_grid, grids.radi_method, grids.level, grids.prune
-        )
-        sizes = [len(atom_grids_tab[mol.atom_symbol(ia)][1]) for ia in range(mol.natm)]
-
-        n_atomic = sum(sizes)
-        n_grid = grids.weights.shape[0]
-        if n_atomic != n_grid:
-            raise ValueError(
-                f"Grid size mismatch: sum of atomic grid sizes ({n_atomic}) does not match "
-                f"total grid points ({n_grid}). This is likely caused by grid alignment padding "
-                f"(grids.alignment={getattr(grids, 'alignment', '?')}). "
-                f"Set grids.alignment = 1 before building grids to disable padding."
-            )
-
-        if "atomic_grid_sizes" in features:
-            mol_features["atomic_grid_sizes"] = torch.tensor(
-                sizes, dtype=torch.long, device=dm.device
-            )
-
-        if "atomic_grid_size_bound_shape" in features:
-            max_size = max(sizes)
-            mol_features["atomic_grid_size_bound_shape"] = torch.zeros(
-                max_size, 0, dtype=torch.long, device=dm.device
-            )
-
-        if "atomic_grid_weights" in features:
-            raw_weights = np.concatenate(
-                [atom_grids_tab[mol.atom_symbol(ia)][1] for ia in range(mol.natm)]
-            )
-            mol_features["atomic_grid_weights"] = from_numpy_or_cupy(
-                raw_weights, device=dm.device, dtype=dm.dtype
-            )
+    mol_features = get_grid_features(mol, dm, grids, features)
 
     with_mgga_feature = (
         "density" in features
@@ -169,6 +282,67 @@ def generate_features(
             )
 
     return mol_features
+
+
+def get_grid_features(
+    mol: gto.Mole,
+    dm: Tensor,
+    grids: Grid,
+    requested_features: set[str],
+) -> dict[str, Tensor]:
+    grid_features = {}
+
+    if "grid_coords" in requested_features:
+        grid_features["grid_coords"] = from_numpy_or_cupy(
+            grids.coords, device=dm.device, dtype=dm.dtype
+        )
+
+    if "grid_weights" in requested_features:
+        grid_features["grid_weights"] = from_numpy_or_cupy(
+            grids.weights, device=dm.device, dtype=dm.dtype
+        )
+
+    if "coarse_0_atomic_coords" in requested_features:
+        grid_features["coarse_0_atomic_coords"] = from_numpy_or_cupy(
+            mol.atom_coords(), device=dm.device, dtype=dm.dtype
+        )
+
+    if requested_features & _ATOMIC_GRID_FEATURES:
+        atom_grids_tab = grids.gen_atomic_grids(
+            mol, grids.atom_grid, grids.radi_method, grids.level, grids.prune
+        )
+        sizes = [len(atom_grids_tab[mol.atom_symbol(ia)][1]) for ia in range(mol.natm)]
+
+        n_atomic = sum(sizes)
+        n_grid = grids.weights.shape[0]
+        if n_atomic != n_grid:
+            raise ValueError(
+                f"Grid size mismatch: sum of atomic grid sizes ({n_atomic}) does not match "
+                f"total grid points ({n_grid}). This is likely caused by grid alignment padding "
+                f"(grids.alignment={getattr(grids, 'alignment', '?')}). "
+                f"Set grids.alignment = 1 before building grids to disable padding."
+            )
+
+        if "atomic_grid_sizes" in requested_features:
+            grid_features["atomic_grid_sizes"] = torch.tensor(
+                sizes, dtype=torch.long, device=dm.device
+            )
+
+        if "atomic_grid_size_bound_shape" in requested_features:
+            max_size = max(sizes)
+            grid_features["atomic_grid_size_bound_shape"] = torch.zeros(
+                max_size, 0, dtype=torch.long, device=dm.device
+            )
+
+        if "atomic_grid_weights" in requested_features:
+            raw_weights = np.concatenate(
+                [atom_grids_tab[mol.atom_symbol(ia)][1] for ia in range(mol.natm)]
+            )
+            grid_features["atomic_grid_weights"] = from_numpy_or_cupy(
+                raw_weights, device=dm.device, dtype=dm.dtype
+            )
+
+    return grid_features
 
 
 def is_density_feature(feature: str) -> bool:
@@ -801,18 +975,18 @@ class ChunkEvalBackward(Function):
 def non_chunk(
     dm: torch.Tensor,
     mol: gto.Mole,
-    grids: Grid,
+    coords: Array,
     feature_function: FeatureFunction,
     compile_feature_function: bool = False,
     gpu: bool = False,
 ) -> torch.Tensor:
     if gpu:
         check_gpu_imports_were_successful()
-        ni = dft_gpu.numint.NumInt().build(mol, grids.coords)
+        ni = dft_gpu.numint.NumInt().build(mol, coords)
     else:
         ni = dft.numint.NumInt()
     ao = from_numpy_or_cupy(
-        ni.eval_ao(mol, grids.coords, deriv=feature_function.deriv, non0tab=None),
+        ni.eval_ao(mol, coords, deriv=feature_function.deriv, non0tab=None),
         device=dm.device,
         dtype=dm.dtype,
         transpose=True,
@@ -906,7 +1080,7 @@ def auto_chunk(
         features = non_chunk(
             dm.double(),
             mol,
-            grids,
+            grids.coords,
             feature_function,
             compile_feature_function=compile_feature_function,
             gpu=gpu,

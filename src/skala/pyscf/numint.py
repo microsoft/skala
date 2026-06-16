@@ -18,7 +18,7 @@ from skala.pyscf.backend import (
     to_cupy,
     to_numpy,
 )
-from skala.pyscf.features import generate_features
+from skala.pyscf.features import chunked_features, generate_features
 
 
 class LibXCSpec(Protocol):
@@ -174,34 +174,81 @@ class SkalaNumInt(PySCFNumInt[Array]):
         second_order: bool = False,
         max_memory: int = 2000,
     ) -> tuple[Tensor, Tensor, Tensor]:
-        dm = dm.requires_grad_()
+        """
+        Evaluate the XC functional for the given molecule and density matrix.
+        Input:
+            mol: The molecule.
+            grids: The grid.
+            xc_code: The XC code (not used in the reimplementation).
+            dm: The density matrix.
+            second_order: Whether to compute second-order derivatives.
+            max_memory: The maximum memory to use for each chunk in megabytes (MB). If None, the maximum memory is determined automatically.
 
-        mol_features = generate_features(
-            mol,
-            dm,
-            grids,
-            set(self.func.features),
-            chunk_size=self.chunk_size,
-            max_memory=max_memory,
-            gpu=self.device.type == "cuda",
-        )
-        for k, v in mol_features.items():
-            mol_features[k] = v.to(self.device)
-        E_xc = self.func.get_exc(mol_features)
-        (V_xc,) = torch.autograd.grad(
-            E_xc,
-            dm,
-            torch.ones_like(E_xc),
-            retain_graph=second_order,
-            create_graph=second_order,
-        )
+        Returns:
+            A tuple of the total integrated density, the XC energy, and the XC potential.
+        """
 
-        rho = mol_features["density"]
-        grid_weights = mol_features.get(
-            "grid_weights", self.from_backend(grids.weights)
-        )
-        N = (rho * grid_weights).sum(dim=-1)
-        return N, E_xc, V_xc
+        if self.device != dm.device:
+            raise ValueError(
+                f"Density matrix device {dm.device} does not match functional device {self.device}"
+            )
+
+        if self._functional_supports_atom_chunking():
+            dm = dm.detach().requires_grad_()
+            tot_dens = torch.tensor((0.0, 0.0), device=self.device, dtype=dm.dtype)
+            E_xc = torch.tensor(0.0, device=self.device, dtype=dm.dtype)
+            V_xc = torch.zeros_like(dm)
+            for mol_features in chunked_features(
+                mol,
+                dm,
+                grids,
+                features=set(self.func.features),
+                func_deriv=1,
+                max_memory_in_mb=max_memory if dm.device.type == "cpu" else None,
+                safety_fraction=0.8,  # tends to be faster for large chunks
+            ):
+                E_xc_chunk = self.func.get_exc(mol_features)
+                (V_xc_chunk,) = torch.autograd.grad(
+                    E_xc_chunk,
+                    dm,
+                    torch.ones_like(E_xc_chunk),
+                )
+                tot_dens += (
+                    (mol_features["density"] * mol_features["grid_weights"])
+                    .sum(dim=-1)
+                    .detach()
+                )
+                E_xc += E_xc_chunk.detach()
+                V_xc += V_xc_chunk.detach()
+                del E_xc_chunk, V_xc_chunk, mol_features
+
+            return tot_dens, E_xc, V_xc
+        else:
+            dm = dm.requires_grad_()
+            mol_features = generate_features(
+                mol,
+                dm,
+                grids,
+                set(self.func.features),
+                chunk_size=self.chunk_size,
+                max_memory=max_memory,
+                gpu=self.device.type == "cuda",
+            )
+            E_xc = self.func.get_exc(mol_features)
+            (V_xc,) = torch.autograd.grad(
+                E_xc,
+                dm,
+                torch.ones_like(E_xc),
+                retain_graph=second_order,
+                create_graph=second_order,
+            )
+
+            rho = mol_features["density"]
+            grid_weights = mol_features.get(
+                "grid_weights", self.from_backend(grids.weights)
+            )
+            tot_dens = (rho * grid_weights).sum(dim=-1)
+            return tot_dens, E_xc, V_xc
 
     def nr_rks(
         self,
@@ -267,22 +314,72 @@ class SkalaNumInt(PySCFNumInt[Array]):
                 assert kwargs["with_j"]
 
         dm0 = self.from_backend(ks.make_rdm1(mo_coeff, mo_occ))
-        # caching V_xc saves a forward pass in each iteration
-        V_xc = self(ks.mol, ks.grids, None, dm0, second_order=True)[2]
 
-        def hessian_vector_product(dm1: Array) -> Array:
-            v1 = self.to_backend(
-                torch.autograd.grad(
-                    V_xc, dm0, self.from_backend(dm1), retain_graph=True
-                )[0]
-            )
-            vj = ks.get_j(ks.mol, dm1, hermi=1)
+        if self._functional_supports_atom_chunking():
+            dm0 = dm0.requires_grad_()
 
-            if ks.mol.spin == 0:
-                v1 += vj
-            else:
-                v1 += vj[0] + vj[1]
+            def hessian_vector_product(dm1: Array) -> Array:
+                dm1_tensor = self.from_backend(dm1)
+                hvp_total = torch.zeros_like(dm0)
+                for mol_features in chunked_features(
+                    ks.mol,
+                    dm0,
+                    ks.grids,
+                    features=set(self.func.features),
+                    func_deriv=2,
+                    max_memory_in_mb=kwargs.get("max_memory", None)
+                    if dm0.device.type == "cpu"
+                    else None,
+                    safety_fraction=kwargs.get(
+                        "safety_fraction", 0.0
+                    ),  # Force small chunks (single atoms) because it's empirically fastest.
+                ):
+                    E_xc_chunk = self.func.get_exc(mol_features)
+                    (V_xc_chunk,) = torch.autograd.grad(
+                        E_xc_chunk,
+                        dm0,
+                        torch.ones_like(E_xc_chunk),
+                        retain_graph=True,
+                        create_graph=True,
+                    )
+                    (hvp_chunk,) = torch.autograd.grad(
+                        V_xc_chunk,
+                        dm0,
+                        dm1_tensor,
+                        retain_graph=True,
+                    )
+                    hvp_total += hvp_chunk
+                    del E_xc_chunk, V_xc_chunk, hvp_chunk, mol_features
 
-            return v1
+                v1 = self.to_backend(hvp_total)
+                vj = ks.get_j(ks.mol, dm1, hermi=1)
+                if ks.mol.spin == 0:
+                    v1 += vj
+                else:
+                    v1 += vj[0] + vj[1]
+                return v1
+
+        else:
+            # caching V_xc saves a forward pass in each iteration
+            dm0 = dm0.requires_grad_()
+            V_xc = self(ks.mol, ks.grids, None, dm0, second_order=True)[2]
+
+            def hessian_vector_product(dm1: Array) -> Array:
+                v1 = self.to_backend(
+                    torch.autograd.grad(
+                        V_xc, dm0, self.from_backend(dm1), retain_graph=True
+                    )[0]
+                )
+                vj = ks.get_j(ks.mol, dm1, hermi=1)
+
+                if ks.mol.spin == 0:
+                    v1 += vj
+                else:
+                    v1 += vj[0] + vj[1]
+
+                return v1
 
         return hessian_vector_product
+
+    def _functional_supports_atom_chunking(self) -> bool:
+        return "atomic_grid_sizes" in self.func.features

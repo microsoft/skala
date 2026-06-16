@@ -604,7 +604,7 @@ class TensorProduct(nn.Module):
                 if full_key not in state_dict:
                     state_dict[full_key] = buf_val
 
-        super()._load_from_state_dict(  # type: ignore[no-untyped-call]
+        super()._load_from_state_dict(
             state_dict,
             prefix,
             local_metadata,
