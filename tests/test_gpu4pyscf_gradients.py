@@ -12,7 +12,6 @@ if not torch.cuda.is_available():
 
 from gpu4pyscf import dft, scf
 
-from skala.functional import load_functional
 from skala.functional.base import ExcFunctionalBase
 from skala.gpu4pyscf import SkalaKS
 from skala.gpu4pyscf.gradients import (
@@ -531,10 +530,14 @@ FULL_GRAD_REF = {
 }
 
 
-def test_full_grad(mol_name: str, xc_name: str) -> None:
+def test_full_grad(
+    mol_name: str,
+    xc_name: str,
+    load_functional_cached: Callable[..., ExcFunctionalBase | str],
+) -> None:
     # analytical result
     mol = get_mol(mol_name)
-    func = load_functional(xc_name, device=torch.device("cuda:0"))
+    func = load_functional_cached(xc_name, device=torch.device("cuda:0"))
     assert isinstance(func, ExcFunctionalBase)
     # skala-1.1 uses per-atom packed grids (unsorted) and needs a denser grid
     # to avoid NaNs in the SCF.

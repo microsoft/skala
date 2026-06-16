@@ -10,12 +10,13 @@ does not mutate the global RNG visible to other tests in the process.
 """
 
 import math
+import typing as ty
 from collections.abc import Iterator
 
 import pytest
 import torch
 
-from skala.functional import ExcFunctionalBase, load_functional
+from skala.functional import ExcFunctionalBase
 from skala.functional.model import (
     ANGSTROM_TO_BOHR,
     ExpRadialScaleModel,
@@ -415,11 +416,13 @@ def test_get_exc_variable_grid_sizes() -> None:
     )
 
 
-def test_traced_functional_and_loaded_functional_are_equal() -> None:
+def test_traced_functional_and_loaded_functional_are_equal(
+    load_functional_cached: ty.Callable[..., ExcFunctionalBase | str],
+) -> None:
     # This test ensures that the traced functional and the loaded functional
     # give the same output for the same input.
 
-    traced_model = load_functional("skala-1.1")
+    traced_model = load_functional_cached("skala-1.1")
     assert isinstance(traced_model, ExcFunctionalBase)
 
     clean_state_dict = {

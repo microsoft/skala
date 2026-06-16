@@ -1,3 +1,5 @@
+import typing as ty
+
 import pytest
 import torch
 from pyscf import gto
@@ -8,7 +10,6 @@ if not torch.cuda.is_available():
         allow_module_level=True,
     )
 
-from skala.functional import load_functional
 from skala.functional.base import ExcFunctionalBase
 from skala.gpu4pyscf import SkalaKS
 from skala.gpu4pyscf.dft import SkalaRKS, SkalaUKS
@@ -17,9 +18,12 @@ from skala.gpu4pyscf.grids import UnsortableGrids
 
 
 @pytest.fixture(params=["skala-1.0", "skala-1.1"])
-def skala_xc(request: pytest.FixtureRequest) -> ExcFunctionalBase:
+def skala_xc(
+    request: pytest.FixtureRequest,
+    load_functional_cached: ty.Callable[..., ExcFunctionalBase | str],
+) -> ExcFunctionalBase:
     """Load the Skala functional under test on GPU."""
-    func = load_functional(request.param, device=torch.device("cuda:0"))
+    func = load_functional_cached(request.param, device=torch.device("cuda:0"))
     assert isinstance(func, ExcFunctionalBase)
     return func
 
