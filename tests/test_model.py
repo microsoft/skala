@@ -10,8 +10,8 @@ does not mutate the global RNG visible to other tests in the process.
 """
 
 import math
-import typing as ty
 from collections.abc import Iterator
+from typing import Callable
 
 import pytest
 import torch
@@ -417,7 +417,7 @@ def test_get_exc_variable_grid_sizes() -> None:
 
 
 def test_traced_functional_and_loaded_functional_are_equal(
-    load_functional_cached: ty.Callable[..., ExcFunctionalBase | str],
+    load_functional_cached: Callable[..., ExcFunctionalBase | str],
 ) -> None:
     # This test ensures that the traced functional and the loaded functional
     # give the same output for the same input.

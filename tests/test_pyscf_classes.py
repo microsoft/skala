@@ -1,4 +1,4 @@
-import typing as ty
+from typing import Callable
 
 import pytest
 from pyscf import gto
@@ -13,7 +13,7 @@ from skala.pyscf.grids import UnsortableGrids
 @pytest.fixture(params=["skala-1.0", "skala-1.1"])
 def skala_xc(
     request: pytest.FixtureRequest,
-    load_functional_cached: ty.Callable[..., ExcFunctionalBase | str],
+    load_functional_cached: Callable[..., ExcFunctionalBase | str],
 ) -> ExcFunctionalBase:
     """Load the Skala functional under test."""
     func = load_functional_cached(request.param)
@@ -95,7 +95,7 @@ def test_skala_class(
 
 
 def test_grid_alignment_mismatch_raises(
-    load_functional_cached: ty.Callable[..., ExcFunctionalBase | str],
+    load_functional_cached: Callable[..., ExcFunctionalBase | str],
 ) -> None:
     """generate_features raises ValueError when grid has alignment padding."""
     from unittest.mock import patch

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-import typing as ty
+from typing import Callable
 
 import pytest
 from pyscf import dft, gto
@@ -30,7 +30,7 @@ def xc(request: pytest.FixtureRequest) -> str:
 @pytest.fixture
 def xc_fun(
     xc: str,
-    load_functional_cached: ty.Callable[..., ExcFunctionalBase | str],
+    load_functional_cached: Callable[..., ExcFunctionalBase | str],
 ) -> ExcFunctionalBase:
     """Fixture to load the functional."""
     func = load_functional_cached(xc)
@@ -58,7 +58,7 @@ def test_scf(mol: gto.Mole, xc_str: str, xc_fun: ExcFunctionalBase) -> None:
 @pytest.mark.parametrize("xc_name", ["pbe", "tpss", "scan", "rscan", "r2scan"])
 def test_parameters(
     xc_name: str,
-    load_functional_cached: ty.Callable[..., ExcFunctionalBase | str],
+    load_functional_cached: Callable[..., ExcFunctionalBase | str],
 ) -> None:
     xc_fun = load_functional_cached(xc_name)
     assert isinstance(xc_fun, ExcFunctionalBase)
@@ -83,7 +83,7 @@ def test_parameters(
 @pytest.mark.parametrize("xc_name", ["scan", "rscan", "r2scan"])
 def test_scan_constants(
     xc_name: str,
-    load_functional_cached: ty.Callable[..., ExcFunctionalBase | str],
+    load_functional_cached: Callable[..., ExcFunctionalBase | str],
 ) -> None:
     xc_fun = load_functional_cached(xc_name)
     assert isinstance(xc_fun, ExcFunctionalBase)

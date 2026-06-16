@@ -1,4 +1,4 @@
-import typing as ty
+from typing import Callable
 
 import pytest
 import torch
@@ -20,7 +20,7 @@ from skala.gpu4pyscf.grids import UnsortableGrids
 @pytest.fixture(params=["skala-1.0", "skala-1.1"])
 def skala_xc(
     request: pytest.FixtureRequest,
-    load_functional_cached: ty.Callable[..., ExcFunctionalBase | str],
+    load_functional_cached: Callable[..., ExcFunctionalBase | str],
 ) -> ExcFunctionalBase:
     """Load the Skala functional under test on GPU."""
     func = load_functional_cached(request.param, device=torch.device("cuda:0"))
