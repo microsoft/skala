@@ -245,7 +245,8 @@ class SkalaNumInt(PySCFNumInt[Array]):
         def is_nlc(xc: str) -> bool:
             return False
 
-    def gen_response(  # type: ignore[override]  # wider Array type than PySCF base
+    # Overrides PySCF's base with a wider Array type for mo_coeff/mo_occ.
+    def gen_response(
         self,
         mo_coeff: Array | None,
         mo_occ: Array | None,
