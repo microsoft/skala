@@ -11,7 +11,7 @@ dependencies:
   - numpy
   - opt_einsum_fx
   - pyscf >=2.8,<2.14
-  - python < 3.13
+  - python
   - pytorch * cpu_*
   - qcelemental
 # Testing and development
