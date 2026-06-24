@@ -55,7 +55,7 @@ urls.homepage = "https://aka.ms/dft"
 strict = true
 ignore_missing_imports = true
 no_namespace_packages = true
-python_version = "3.11"
+python_version = "3.12"
 exclude = ["third_party/"]
 disable_error_code = ["no-any-return"]
 
