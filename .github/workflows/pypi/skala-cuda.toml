@@ -17,7 +17,11 @@ classifiers = [
 requires-python = ">=3.10"
 dependencies = [
     "skala==@VERSION@",
+<<<<<<< HEAD
     "gpu4pyscf-cuda@CUDA@ >=1.6,<1.7.1|>=1.7.3,<1.8",
+=======
+    "gpu4pyscf-cuda@CUDA@>=1.6,<1.7.1|>=1.7.3,<1.8",
+>>>>>>> refs/remotes/public-repo/klaas/chunked-skala
 ]
 urls.repository = "https://github.com/microsoft/skala"
 urls.documentation = "https://microsoft.github.io/skala"
