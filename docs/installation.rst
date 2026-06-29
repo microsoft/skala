@@ -75,7 +75,7 @@ If you prefer to install Skala from the source code, you can clone the repositor
 where ``environment-cpu.yml`` can be replaced with ``environment-gpu.yml`` for
 GPU support via `GPU4PySCF <https://github.com/pyscf/gpu4pyscf>`__. The GPU
 environment pins ``cuda-toolkit 12``, ``cuda-version 12``, ``cutensor``, and
-installs ``gpu4pyscf-cuda12x >=1.6,<1.7.1|>=1.7.3,<1.8`` from PyPI as part of the environment file —
+installs ``gpu4pyscf-cuda12x >=1.6,<1.8,!=1.7.1,!=1.7.2`` from PyPI as part of the environment file —
 no separate install step is required:
 
 .. code-block:: bash
