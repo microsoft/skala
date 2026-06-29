@@ -318,7 +318,7 @@ class SkalaNumInt(PySCFNumInt[Array]):
         if self._functional_supports_atom_chunking():
             dm0 = dm0.requires_grad_()
 
-            def hessian_vector_product(dm1: Array) -> Array:
+            def hessian_vector_product_atom_chunked(dm1: Array) -> Array:
                 dm1_tensor = self.from_backend(dm1)
                 hvp_total = torch.zeros_like(dm0)
                 for mol_features in chunked_features(
@@ -359,6 +359,8 @@ class SkalaNumInt(PySCFNumInt[Array]):
                     v1 += vj[0] + vj[1]
                 return v1
 
+            return hessian_vector_product_atom_chunked
+
         else:
             # caching V_xc saves a forward pass in each iteration
             dm0 = dm0.requires_grad_()
@@ -379,7 +381,7 @@ class SkalaNumInt(PySCFNumInt[Array]):
 
                 return v1
 
-        return hessian_vector_product
+            return hessian_vector_product
 
     def _functional_supports_atom_chunking(self) -> bool:
         return "atomic_grid_sizes" in self.func.features

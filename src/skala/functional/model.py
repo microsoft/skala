@@ -612,7 +612,7 @@ class TensorProduct(nn.Module):
             missing_keys,
             unexpected_keys,
             error_msgs,
-        )
+        )  # type: ignore[no-untyped-call]
 
     def _setup_batched_tp(self) -> None:
         """Detect batched mode and pre-compute gather indices.
