@@ -327,7 +327,7 @@ class SkalaNumInt(PySCFNumInt[Array]):
                     ks.grids,
                     features=set(self.func.features),
                     func_deriv=2,
-                    max_memory_in_mb=kwargs.get("max_memory", None)
+                    max_memory_in_mb=ks.max_memory
                     if dm0.device.type == "cpu"
                     else None,
                     safety_fraction=kwargs.get(
