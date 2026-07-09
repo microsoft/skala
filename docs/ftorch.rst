@@ -209,18 +209,21 @@ The output for the H2 molecule with the def2-QZVP basis set should look like thi
 
 .. code-block:: text
 
-   [1] Loading model from skala-1.1.fun
-   [2] Loading features from H2-def2qzvp
+   [1] Loading model from ./skala-1.1.fun
+   [2] Loading features from ./features
+    -> Loading atomic_grid_size_bound_shape
     -> Loading coarse_0_atomic_coords
     -> Loading grad
     -> Loading grid_coords
     -> Loading kin
+    -> Loading atomic_grid_sizes
+    -> Loading atomic_grid_weights
     -> Loading grid_weights
     -> Loading density
    [3] Preparing input dictionary
    [4] Running model inference
    [5] Computing XC energy = sum(exc * grid_weights)
-    -> E_xc =  -6.26480858787919E-01
+    -> E_xc =  -6.24491437792573E-01
 
 The ``get_exc_vxc`` procedure computes the exchange-correlation energy and potential, which we can then access from the returned dictionary.
 The potential terms are stored under the same keys as the input features and can be extracted as tensors.
@@ -260,46 +263,49 @@ In the output we can see the computed exchange-correlation energy as well as the
 
 .. code-block:: text
 
-   [1] Loading model from skala-1.1.fun
-   [2] Loading features from H2-def2qzvp
+   [1] Loading model from ./skala-1.1.fun
+   [2] Loading features from ./features
+    -> Loading atomic_grid_size_bound_shape
     -> Loading coarse_0_atomic_coords
     -> Loading grad
     -> Loading grid_coords
     -> Loading kin
+    -> Loading atomic_grid_sizes
+    -> Loading atomic_grid_weights
     -> Loading grid_weights
     -> Loading density
    [3] Preparing input dictionary
    [4] Running model inference
    [5] Computing XC energy = sum(exc * grid_weights)
-    -> E_xc =  -6.26480858787919E-01
+    -> E_xc =  -6.24491437792573E-01
    [6] Extracting vxc components
    [7] Gradient means (dexc/dx)
-    -> mean(dexc/d_density)                =  -3.61391813525080E-03
-    -> mean(dexc/d_grad)                   =  -2.32959324675360E-13
-    -> mean(dexc/d_kin)                    =  -8.83645473913423E-04
-    -> mean(dexc/d_grid_coords)            =   4.28210805205588E-15
-    -> mean(dexc/d_grid_weights)           =  -3.07264776522541E-02
-    -> mean(dexc/d_coarse_0_atomic_coords) =  -4.19989157107543E-11
+    -> mean(dexc/d_density)                =  -4.22419335262521E-03
+    -> mean(dexc/d_grad)                   =   7.34686947724400E-14
+    -> mean(dexc/d_kin)                    =  -9.29253735658196E-04
+    -> mean(dexc/d_grid_coords)            =  -6.87739518316912E-15
+    -> mean(dexc/d_grid_weights)           =  -3.47625888953444E-02
+    -> mean(dexc/d_coarse_0_atomic_coords) =   6.74534920784954E-11
    [8] Accessing tensor data as Fortran arrays
     -> exc: shape = (19616)
-         [ -1.70762973238251E-01 -1.70762851641779E-01 -1.70761433376289E-01 ...]
+         [ -2.27818608240367E-01 -2.27817104148283E-01 -2.27798286191804E-01 ...]
     -> dexc/d_density: shape = (19616, 2)
-        [[ -6.91094160750184E-15 -2.68068796422506E-12 -8.75755568871490E-11 ...]
-         [ -6.91094160750184E-15 -2.68068796422506E-12 -8.75755568871490E-11 ...]]
+        [[ -7.42783701343921E-15 -2.88117252256267E-12 -9.41193381837591E-11 ...]
+         [ -7.42783701343921E-15 -2.88117252256267E-12 -9.41193381837591E-11 ...]]
     -> dexc/d_grad: shape = (19616, 3, 2)
-       [[[ -3.53224861366702E-20 -1.25883699330863E-16 -1.50302693127561E-14 ...]
-         [  2.45810484635441E-32  9.53375368531974E-30  3.11056983360779E-28 ...]]
+       [[[ -2.26087793682497E-19 -8.04381692417593E-16 -9.40376765067130E-14 ...]
+         [  7.74835723433842E-31  2.99945981309767E-28  9.57635302305716E-27 ...]]
         [[  ...                    ]]]
     -> dexc/d_kin: shape = (19616, 2)
-        [[  8.31256652855356E-16  3.22438658440735E-13  1.05346827546379E-11 ...]
-         [  8.31256652855356E-16  3.22438658440735E-13  1.05346827546379E-11 ...]]
+        [[  7.35445499050557E-16  2.85382228628491E-13  9.36659695851134E-12 ...]
+         [  7.35445499050557E-16  2.85382228628491E-13  9.36659695851134E-12 ...]]
     -> dexc/d_grid_coords: shape = (3, 19616)
-        [[ -1.10244039021109E-20 -3.46793732833479E-29  1.44417263443964E-21 ...]
-         [ -3.92941562081365E-17 -1.23603204621552E-25  5.14711125999810E-18 ...]]
+        [[ -1.18742738203596E-20 -4.99830311741504E-29  1.59096762782194E-21 ...]
+         [ -4.23435244490882E-17 -1.78174745984425E-25  5.66422957219616E-18 ...]]
     -> dexc/d_grid_weights: shape = (19616)
-         [ -1.70762973238251E-01 -1.70762851641779E-01 -1.70761433376289E-01 ...]
+         [ -2.27818608240367E-01 -2.27817104148283E-01 -2.27798286191804E-01 ...]
     -> dexc/d_coarse_0_atomic_coords: shape = (3, 2)
-        [[  5.94466622059813E-12 -3.78104062375730E-12  4.36839713298186E-04]
+        [[ -1.68408204319782E-11 -9.23455002109453E-12  7.69511908655255E-04]
          [  ...]]
 
 Summary
