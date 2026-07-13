@@ -82,7 +82,8 @@ def SkalaKS(
     if isinstance(xc, str):
         if with_dftd3:
             raise ValueError(
-                "DFT-D3 dispersion correction is not supported for native PySCF functionals."
+                f"DFT-D3 dispersion correction is not supported for native PySCF functionals (xc={xc!r}). "
+                "Pass with_dftd3=False or use pyscf.dft.RKS/UKS directly."
             )
         return _create_native_pyscf_ks(
             mol,
