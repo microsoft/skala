@@ -110,6 +110,7 @@ def test_skala_class_with_native_functional_and_no_dftd3_is_allowed() -> None:
     assert ks.xc == "b3lyp"
     assert not isinstance(ks, (SkalaRKS, SkalaUKS))
 
+
 def test_grid_alignment_mismatch_raises(
     load_functional_cached: Callable[..., ExcFunctionalBase | str],
 ) -> None:
