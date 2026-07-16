@@ -53,6 +53,16 @@ def test_load_with_correct_hash(dummy_fun_bytes: bytes) -> None:
     assert isinstance(func, TracedFunctional)
 
 
+def test_load_with_one_of_multiple_hashes(dummy_fun_bytes: bytes) -> None:
+    """Loading succeeds when any accepted hash matches."""
+    correct_hash = hashlib.sha256(dummy_fun_bytes).hexdigest()
+    func = TracedFunctional.load(
+        io.BytesIO(dummy_fun_bytes),
+        expected_hash=("0" * 64, correct_hash),
+    )
+    assert isinstance(func, TracedFunctional)
+
+
 def test_load_with_wrong_hash(dummy_fun_bytes: bytes) -> None:
     """Loading raises ValueError when the hash does not match."""
     wrong_hash = "0" * 64
