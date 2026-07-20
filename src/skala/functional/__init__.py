@@ -45,7 +45,9 @@ __all__ = [
 
 _SKALA_VERSIONS = {
     "skala-1.0": ("skala-1.0.fun", "skala-1.0-cuda.fun"),
-    "skala-1.1": ("skala-1.1.fun", "skala-1.1-cuda.fun"),
+    "skala-1.1": ("skala-1.1-rev1.fun", "skala-1.1-rev1-cuda.fun"),
+    "skala-1.1-rev0": ("skala-1.1.fun", "skala-1.1-cuda.fun"),
+    "skala-1.1-rev1": ("skala-1.1-rev1.fun", "skala-1.1-rev1-cuda.fun"),
 }
 
 
@@ -58,6 +60,8 @@ def load_functional(
         name: Name of the functional. Skala-native values:
 
             - ``"skala-1.1"``: Skala 1.1 neural functional (recommended).
+            - ``"skala-1.1-rev1"``: Skala 1.1 pinned to revision 1.
+            - ``"skala-1.1-rev0"``: Skala 1.1 pinned to the original revision.
             - ``"skala-1.0"``: Skala 1.0 neural functional (legacy, traced only).
             - ``"lda"``: Local Density Approximation.
             - ``"spw92"``: SPW92 (LDA with PW92 correlation).
@@ -106,7 +110,7 @@ def load_functional(
             device_type = (
                 torch.get_default_device().type if device is None else device.type
             )
-            repo_id = f"microsoft/{func_name}"
+            repo_id = f"microsoft/{func_name.partition('-rev')[0]}"
             cpu_file, cuda_file = _SKALA_VERSIONS[func_name]
             filename = cpu_file if device_type == "cpu" else cuda_file
             path = hf_hub_download(repo_id=repo_id, filename=filename)

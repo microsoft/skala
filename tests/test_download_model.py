@@ -30,7 +30,7 @@ _SCRIPT_PATH = (
 
 # Functionals downloaded and documented by the script's ``main`` entry point.
 _PUBLISHED_FUNCTIONALS = [
-    ("microsoft/skala-1.1", "skala-1.1.fun"),
+    ("microsoft/skala-1.1", "skala-1.1-rev1.fun"),
     ("microsoft/skala-baselines", "ldax.fun"),
 ]
 

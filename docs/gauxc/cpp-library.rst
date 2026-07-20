@@ -413,8 +413,8 @@ After downloading the model checkpoint we can run our driver again with the new 
 
 .. code-block:: shell
 
-   hf download microsoft/skala-1.1 skala-1.1.fun --local-dir .
-   ./build/Skala He_def2-svp.h5 --model ./skala-1.1.fun
+   hf download microsoft/skala-1.1 skala-1.1-rev1.fun --local-dir .
+   ./build/Skala He_def2-svp.h5 --model ./skala-1.1-rev1.fun
 
 In the output we can see the results for the Skala functional
 
@@ -422,7 +422,7 @@ In the output we can see the results for the Skala functional
 
    Configuration
    -> Input file        : He_def2-svp.h5
-   -> Model             : ./skala-1.1.fun
+   -> Model             : ./skala-1.1-rev1.fun
    -> Grid              : fine
    -> Radial quadrature : muraknowles
    -> Pruning scheme    : robust

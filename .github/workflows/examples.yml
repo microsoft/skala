@@ -23,13 +23,13 @@ jobs:
 
     - name: Download checkpoint
       run: >-
-         hf download microsoft/skala-1.1 skala-1.1.fun --local-dir .
+         hf download microsoft/skala-1.1 skala-1.1-rev1.fun --local-dir .
 
     - name: Upload checkpoint
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
         name: skala-checkpoint
-        path: skala-1.1.fun
+        path: skala-1.1-rev1.fun
 
   pt-features:
     runs-on: ubuntu-latest
@@ -153,7 +153,7 @@ jobs:
       run: >-
          Skala
          ./gauxc/tests/ref_data/onedft_he_def2qzvp_tpss_uks.hdf5
-         --model ./skala-1.1.fun
+         --model ./skala-1.1-rev1.fun
       shell: micromamba-shell {0}
 
   ftorch:
@@ -205,6 +205,6 @@ jobs:
     - name: Run example
       run: >-
          Skala
-         ./skala-1.1.fun
+         ./skala-1.1-rev1.fun
          ./features
       shell: micromamba-shell {0}

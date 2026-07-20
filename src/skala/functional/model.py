@@ -736,11 +736,16 @@ class TensorProduct(nn.Module):
             xw = xw * distance_weights  # broadcasts over B
         # Flatten instruction & channel dims: (B, s, r, w) -> (s, r, B*w)
         xw_flat = xw.permute(1, 2, 0, 3).reshape(xw.shape[1], xw.shape[2], -1)
-        return (
-            xw_flat[:, :, self._tp_down_xw_idx]
-            * x2[:, :, self._tp_down_sph_idx]
-            * self._tp_down_norm.to(x2.dtype)
+        # Use explicit gather to avoid Inductor miscompile observed with advanced indexing.
+        idx_xw = self._tp_down_xw_idx.view(1, 1, -1).expand(
+            xw_flat.shape[0], xw_flat.shape[1], -1
         )
+        idx_x2 = self._tp_down_sph_idx.view(1, 1, -1).expand(
+            x2.shape[0], x2.shape[1], -1
+        )
+        xw_sel = torch.gather(xw_flat, dim=2, index=idx_xw)
+        x2_sel = torch.gather(x2, dim=2, index=idx_x2)
+        return xw_sel * x2_sel * self._tp_down_norm.to(x2.dtype)
 
     def _forward_batched_tp_up(
         self,
