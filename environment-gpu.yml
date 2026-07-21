@@ -26,4 +26,5 @@ dependencies:
   - mypy
   - pip:
     - huggingface_hub
+    - pytorch-pfn-extras
     - gpu4pyscf-cuda12x >=1.6,<1.8,!=1.7.1,!=1.7.2
