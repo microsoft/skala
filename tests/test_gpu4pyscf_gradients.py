@@ -1,7 +1,10 @@
 from collections.abc import Callable
 
+import cupy
 import pytest
+import pytorch_pfn_extras
 import torch
+from gpu4pyscf import dft, scf
 from pyscf import gto
 
 if not torch.cuda.is_available():
@@ -9,9 +12,7 @@ if not torch.cuda.is_available():
         "Skipping gpu4pyscf gradients tests, because CUDA is not available.",
         allow_module_level=True,
     )
-
 from _ridders import num_grad_ridders
-from gpu4pyscf import dft, scf
 from test_pyscf_gradients import FULL_GRAD_REF
 
 from skala.functional.base import ExcFunctionalBase
@@ -398,3 +399,123 @@ def test_full_grad(
         f"Reference: {ref_grad}\n"
         f"Difference: {ana_grad - ref_grad}"
     )
+
+
+def test_cuda_kernel_memory_stability() -> None:
+    """Checks that repeated CUDA kernel calls do not leak allocated GPU memory."""
+
+    mol = mol_min_bas("HF")
+    grid, rdm1 = get_grid_and_rdm1(mol)
+
+    class TestFunc(ExcFunctionalBase):
+        def __init__(self) -> None:
+            super().__init__()
+            self.features = ["grad", "grid_weights"]
+
+        def get_exc(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
+            return (
+                (mol["grad"] ** 2 @ mol["grid_weights"])
+                @ torch.tensor(
+                    [1.0, 2.0, 3.0],
+                    dtype=torch.float64,
+                    device=mol["grad"].device,
+                )
+            ).sum()
+
+    exc_test = TestFunc()
+
+    # Warmup to avoid counting one-time allocations from CUDA runtime/libraries.
+    for _ in range(2):
+        veff = veff_and_expl_nuc_grad(
+            exc_test, mol, grid, rdm1, nuc_grad_feats={"grad"}
+        )[0]
+        _ = 2 * nuc_grad_from_veff(mol, veff, rdm1)
+
+    torch.cuda.synchronize()
+    torch.cuda.empty_cache()
+
+    allocations: list[int] = []
+    torch.cuda.reset_peak_memory_stats()
+    for _ in range(5):
+        veff = veff_and_expl_nuc_grad(
+            exc_test, mol, grid, rdm1, nuc_grad_feats={"grad"}
+        )[0]
+        _ = 2 * nuc_grad_from_veff(mol, veff, rdm1)
+        torch.cuda.synchronize()
+        allocations.append(torch.cuda.memory_allocated())
+
+    max_growth_bytes = max(allocations) - min(allocations)
+    assert max_growth_bytes < 16 * 1024**2, (
+        "CUDA kernel memory use appears unstable across repeated calls. "
+        f"Observed growth: {max_growth_bytes / 1024**2:.2f} MiB"
+    )
+
+
+def test_cuda_allocator_smoke() -> None:
+    """Smoke test that both allocator modes stay numerically consistent."""
+
+    mol = mol_min_bas("HF")
+
+    class TestFunc(ExcFunctionalBase):
+        def __init__(self) -> None:
+            super().__init__()
+            self.features = ["grad", "grid_weights"]
+
+        def get_exc(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
+            return (
+                (mol["grad"] ** 2 @ mol["grid_weights"])
+                @ torch.tensor(
+                    [1.0, 2.0, 3.0],
+                    dtype=torch.float64,
+                    device=mol["grad"].device,
+                )
+            ).sum()
+
+    def run_mode(mode: str) -> tuple[float, int]:
+        cupy.cuda.set_allocator(cupy.get_default_memory_pool().malloc)
+        torch.cuda.synchronize()
+        torch.cuda.empty_cache()
+        cupy.get_default_memory_pool().free_all_blocks()
+
+        if mode == "pfn":
+            pytorch_pfn_extras.cuda.use_torch_mempool_in_cupy()
+        elif mode == "cupy":
+            cupy.cuda.set_allocator(cupy.get_default_memory_pool().malloc)
+        else:
+            raise ValueError(f"Unknown allocator mode: {mode}")
+
+        grid, rdm1 = get_grid_and_rdm1(mol)
+        exc_test = TestFunc()
+
+        for _ in range(2):
+            veff = veff_and_expl_nuc_grad(
+                exc_test, mol, grid, rdm1, nuc_grad_feats={"grad"}
+            )[0]
+            _ = 2 * nuc_grad_from_veff(mol, veff, rdm1)
+
+        torch.cuda.synchronize()
+        torch.cuda.empty_cache()
+        torch.cuda.reset_peak_memory_stats()
+
+        signature = 0.0
+        peak_device_used = 0
+        for _ in range(2):
+            veff = veff_and_expl_nuc_grad(
+                exc_test, mol, grid, rdm1, nuc_grad_feats={"grad"}
+            )[0]
+            grad = 2 * nuc_grad_from_veff(mol, veff, rdm1)
+            signature += float(grad.detach().double().sum().item())
+            free_b, total_b = cupy.cuda.runtime.memGetInfo()
+            peak_device_used = max(peak_device_used, int(total_b - free_b))
+
+        torch.cuda.synchronize()
+        free_f, total_f = cupy.cuda.runtime.memGetInfo()
+        peak_device_used = max(peak_device_used, int(total_f - free_f))
+        return signature, peak_device_used
+
+    pfn_signature, pfn_peak_device = run_mode("pfn")
+    cupy_signature, cupy_peak_device = run_mode("cupy")
+
+    assert pfn_signature == pytest.approx(cupy_signature, rel=1e-10, abs=1e-8)
+    assert pfn_peak_device > 0
+    assert cupy_peak_device > 0

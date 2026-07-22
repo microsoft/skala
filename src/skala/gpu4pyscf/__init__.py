@@ -43,9 +43,10 @@ except ModuleNotFoundError:
         stacklevel=2,
     )
 
-# Reset the default CuPy memory allocator to avoid memory leak issues
-# that seem to arise when combining the custom allocator of gpu4pyscf with DLPack usage.
-cupy.cuda.set_allocator(cupy.get_default_memory_pool().malloc)
+    # Reset the default CuPy memory allocator to avoid memory leak issues
+    # that seem to arise when combining the custom allocator of gpu4pyscf with DLPack usage.
+    cupy.cuda.set_allocator(cupy.get_default_memory_pool().malloc)
+
 
 from pyscf import gto
 
