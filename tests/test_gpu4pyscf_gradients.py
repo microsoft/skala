@@ -8,8 +8,22 @@ if not torch.cuda.is_available():
         "Skipping gpu4pyscf gradients tests, because CUDA is not available.",
         allow_module_level=True,
     )
-import cupy
-import pytorch_pfn_extras
+try:
+    import cupy
+except ModuleNotFoundError:
+    pytest.skip(
+        "Skipping gpu4pyscf gradients tests, because CuPy is not available.",
+        allow_module_level=True,
+    )
+
+try:
+    import pytorch_pfn_extras
+except ModuleNotFoundError:
+    pytest.skip(
+        "Skipping gpu4pyscf gradients tests, because pytorch_pfn_extras is not installed.",
+        allow_module_level=True,
+    )
+
 from _ridders import num_grad_ridders
 from gpu4pyscf import dft, scf
 from pyscf import gto
@@ -402,7 +416,7 @@ def test_full_grad(
 
 
 def test_cuda_kernel_memory_stability() -> None:
-    """Checks that repeated CUDA kernel calls do not leak allocated GPU memory."""
+    """Checks that repeated calls do not increase Torch's allocated CUDA memory."""
 
     mol = mol_min_bas("HF")
     grid, rdm1 = get_grid_and_rdm1(mol)
@@ -513,8 +527,8 @@ def test_cuda_allocator_smoke() -> None:
         peak_device_used = max(peak_device_used, int(total_f - free_f))
         return signature, peak_device_used
 
-    pfn_signature, pfn_peak_device = run_mode("pfn")
     cupy_signature, cupy_peak_device = run_mode("cupy")
+    pfn_signature, pfn_peak_device = run_mode("pfn")
 
     assert pfn_signature == pytest.approx(cupy_signature, rel=1e-10, abs=1e-8)
     assert pfn_peak_device > 0
