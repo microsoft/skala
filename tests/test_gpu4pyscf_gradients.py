@@ -1,18 +1,18 @@
 from collections.abc import Callable
 
-import cupy
 import pytest
-import pytorch_pfn_extras
 import torch
-from gpu4pyscf import dft, scf
-from pyscf import gto
 
 if not torch.cuda.is_available():
     pytest.skip(
         "Skipping gpu4pyscf gradients tests, because CUDA is not available.",
         allow_module_level=True,
     )
+import cupy
+import pytorch_pfn_extras
 from _ridders import num_grad_ridders
+from gpu4pyscf import dft, scf
+from pyscf import gto
 from test_pyscf_gradients import FULL_GRAD_REF
 
 from skala.functional.base import ExcFunctionalBase
