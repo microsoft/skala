@@ -21,10 +21,10 @@ def use_torch_mempool_in_cupy() -> None:
     before calling this function.
 
     Example:
-        >>> torch_stream = torch.cuda.Stream()
-        >>> cupy_stream = cupy.cuda.ExternalStream(
-        ...     torch_stream.cuda_stream,
-        ...     device_id=torch_stream.device.index,
+        >>> cupy_stream = cupy.cuda.Stream(non_blocking=True)
+        >>> torch_stream = torch.cuda.ExternalStream(
+        ...     cupy_stream.ptr,
+        ...     device=cupy_stream.device_id,
         ... )
         >>> with torch.cuda.stream(torch_stream), cupy_stream:
         ...     use_torch_mempool_in_cupy()

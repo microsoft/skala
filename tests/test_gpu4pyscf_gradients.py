@@ -41,10 +41,10 @@ def test_torch_allocator_is_active_after_import() -> None:
 
 
 def test_torch_allocator_uses_shared_non_default_stream() -> None:
-    torch_stream = torch.cuda.Stream()  # type: ignore[no-untyped-call]
-    cupy_stream = cupy.cuda.ExternalStream(
-        torch_stream.cuda_stream,
-        device_id=torch_stream.device.index,
+    cupy_stream = cupy.cuda.Stream(non_blocking=True)
+    torch_stream = torch.cuda.ExternalStream(  # type: ignore[no-untyped-call]
+        cupy_stream.ptr,
+        device=cupy_stream.device_id,
     )
 
     with torch.cuda.stream(torch_stream), cupy_stream:
