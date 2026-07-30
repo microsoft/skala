@@ -1,4 +1,9 @@
 # SPDX-License-Identifier: MIT
+"""Use torch allocator in CuPy.
+
+Adapted from pytorch_pfn_extras.
+https://github.com/pfnet/pytorch-pfn-extras/blob/master/pytorch_pfn_extras/cuda/_allocator.py
+"""
 
 from typing import Any
 
@@ -11,9 +16,20 @@ _allocator = None
 def use_torch_mempool_in_cupy() -> None:
     """Use the PyTorch memory pool in CuPy.
 
-    If you want to use PyTorch's memory pool and non-default CUDA streams,
-    streams must be created and managed using PyTorch (using
-    `torch.cuda.Stream()` and `pytorch_pfn_extras.cuda.stream(stream)`).
+    If non-default streams are used in PyTorch and CuPy,
+    the current stream must be set to the same stream in both libraries
+    before calling this function.
+
+    Example:
+        >>> torch_stream = torch.cuda.Stream()
+        >>> cupy_stream = cupy.cuda.ExternalStream(
+        ...     torch_stream.cuda_stream,
+        ...     device_id=torch_stream.device.index,
+        ... )
+        >>> with torch.cuda.stream(torch_stream), cupy_stream:
+        ...     use_torch_mempool_in_cupy()
+        ...     torch_array = torch.ones(10, device=torch_stream.device)
+        ...     cupy_array = cupy.ones(10)
     """
     global _allocator
 
@@ -22,7 +38,13 @@ def use_torch_mempool_in_cupy() -> None:
 
 
 def _torch_alloc(size: int, device_id: int) -> Any:
-    torch_stream_ptr = torch.cuda.current_stream().cuda_stream
+    torch_stream = torch.cuda.current_stream(device_id)
+    if torch_stream.device.index != device_id:
+        raise RuntimeError(
+            "The current PyTorch stream must match the allocation device."
+        )
+
+    torch_stream_ptr = torch_stream.cuda_stream
     cupy_stream_ptr = cupy.cuda.get_current_stream().ptr
     if torch_stream_ptr != cupy_stream_ptr:
         raise RuntimeError("The current stream set in PyTorch and CuPy must be same.")

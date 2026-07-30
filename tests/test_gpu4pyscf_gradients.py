@@ -34,7 +34,11 @@ from skala.pyscf.features import generate_features
 
 def test_torch_allocator_is_active_after_import() -> None:
     assert torch_allocator._allocator is not None
-    assert getattr(cupy.cuda.get_allocator(), "__self__", None) is torch_allocator._allocator
+    assert (
+        getattr(cupy.cuda.get_allocator(), "__self__", None)
+        is torch_allocator._allocator
+    )
+
 
 @pytest.fixture(params=["HF", "H2O", "H2O+"])
 def mol_name(request: pytest.FixtureRequest) -> str:
