@@ -35,10 +35,6 @@ if TYPE_CHECKING:
     Array = TypeVar("Array", np.ndarray, cupy.ndarray)
     Grid: TypeAlias = dft.Grids | dft_gpu.Grids
     KS: TypeAlias = dft.rks.RKS | dft.uks.UKS | dft_gpu.rks.RKS | dft_gpu.uks.UKS
-
-    # Reset the default CuPy memory allocator to avoid memory leak issues
-    # that seem to arise when combining the custom allocator of gpu4pyscf with DLPack usage.
-    cupy.cuda.set_allocator(cupy.get_default_memory_pool().malloc)
 else:
     try:
         import cupy
@@ -48,9 +44,6 @@ else:
         Grid: TypeAlias = dft.Grids | dft_gpu.Grids
         KS: TypeAlias = dft.rks.RKS | dft.uks.UKS | dft_gpu.rks.RKS | dft_gpu.uks.UKS
 
-        # Reset the default CuPy memory allocator to avoid memory leak issues
-        # that seem to arise when combining the custom allocator of gpu4pyscf with DLPack usage.
-        cupy.cuda.set_allocator(cupy.get_default_memory_pool().malloc)
         GPU_EXCEPTION = None
     except ImportError as e:
         GPU_EXCEPTION = e

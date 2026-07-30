@@ -31,14 +31,13 @@ except ModuleNotFoundError as e:
         "GPU4PySCF is not installed. Please install it with `pip install gpu4pyscf`."
     ) from e
 
-from skala.gpu4pyscf.torch_allocator import use_torch_mempool_in_cupy  # noqa: I001
-
-use_torch_mempool_in_cupy()
-
 from pyscf import gto
 
 from skala.functional import ExcFunctionalBase, load_functional
 from skala.gpu4pyscf import dft
+from skala.gpu4pyscf.torch_allocator import use_torch_mempool_in_cupy
+
+use_torch_mempool_in_cupy()
 
 
 def SkalaKS(

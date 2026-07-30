@@ -62,9 +62,6 @@ from gpu4pyscf import dft
 from gpu4pyscf.df import df_jk
 from pyscf import gto
 
-# Set the default CuPy memory allocator to avoid memory leak issues
-cp.cuda.set_allocator(cp.get_default_memory_pool().malloc)
-
 from skala.functional.base import ExcFunctionalBase
 from skala.gpu4pyscf.gradients import SkalaRKSGradient, SkalaUKSGradient
 from skala.gpu4pyscf.grids import UnsortableGrids
