@@ -40,6 +40,29 @@ def test_torch_allocator_is_active_after_import() -> None:
     )
 
 
+def test_torch_allocator_uses_shared_non_default_stream() -> None:
+    torch_stream = torch.cuda.Stream()  # type: ignore[no-untyped-call]
+    cupy_stream = cupy.cuda.ExternalStream(
+        torch_stream.cuda_stream,
+        device_id=torch_stream.device.index,
+    )
+
+    with torch.cuda.stream(torch_stream), cupy_stream:
+        torch_allocator.use_torch_mempool_in_cupy()
+        array = cupy.empty(1)
+
+    assert array.device.id == torch_stream.device.index
+
+
+def test_torch_allocator_rejects_mismatched_streams() -> None:
+    torch_stream = torch.cuda.Stream()  # type: ignore[no-untyped-call]
+
+    with torch.cuda.stream(torch_stream), cupy.cuda.Stream.null:
+        torch_allocator.use_torch_mempool_in_cupy()
+        with pytest.raises(RuntimeError, match="must be same"):
+            cupy.empty(1)
+
+
 @pytest.fixture(params=["HF", "H2O", "H2O+"])
 def mol_name(request: pytest.FixtureRequest) -> str:
     return request.param

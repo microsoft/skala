@@ -38,13 +38,7 @@ def use_torch_mempool_in_cupy() -> None:
 
 
 def _torch_alloc(size: int, device_id: int) -> Any:
-    torch_stream = torch.cuda.current_stream(device_id)
-    if torch_stream.device.index != device_id:
-        raise RuntimeError(
-            "The current PyTorch stream must match the allocation device."
-        )
-
-    torch_stream_ptr = torch_stream.cuda_stream
+    torch_stream_ptr = torch.cuda.current_stream(device_id).cuda_stream
     cupy_stream_ptr = cupy.cuda.get_current_stream().ptr
     if torch_stream_ptr != cupy_stream_ptr:
         raise RuntimeError("The current stream set in PyTorch and CuPy must be same.")
