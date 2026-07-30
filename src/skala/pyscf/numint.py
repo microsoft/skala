@@ -1,9 +1,8 @@
 # SPDX-License-Identifier: MIT
 
 from collections.abc import Callable
-from typing import Any, Protocol
+from typing import Any, Generic, Protocol
 
-import numpy as np
 import torch
 from pyscf import dft, gto
 from torch import Tensor
@@ -32,9 +31,7 @@ class LibXCSpec(Protocol):
     def is_nlc(xc: str) -> bool: ...
 
 
-class PySCFNumInt(
-    Protocol[Array],
-):
+class PySCFNumInt(Protocol, Generic[Array]):
     """Interface for PySCF-compatible numint functionals."""
 
     libxc: LibXCSpec
@@ -79,7 +76,7 @@ class PySCFNumInt(
         *,
         ks: KS,
         **kwargs: Any,
-    ) -> Callable[[np.ndarray], np.ndarray]:
+    ) -> Callable[[Array], Array]:
         """Generates the response function for the functional."""
         ...
 
