@@ -35,11 +35,6 @@ from pyscf import gto
 
 from skala.functional import ExcFunctionalBase, load_functional
 from skala.gpu4pyscf import dft
-from skala.gpu4pyscf.torch_allocator import use_torch_mempool_in_cupy
-
-# Install this last because GPU4PySCF configures its own CuPy allocator during import.
-# Subsequent CuPy allocations use PyTorch's caching allocator
-use_torch_mempool_in_cupy()
 
 
 def SkalaKS(

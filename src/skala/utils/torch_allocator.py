@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""Use torch allocator in CuPy.
+"""Use the PyTorch allocator in CuPy.
 
 Adapted from pytorch_pfn_extras.
 https://github.com/pfnet/pytorch-pfn-extras/blob/master/pytorch_pfn_extras/cuda/_allocator.py

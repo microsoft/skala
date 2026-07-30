@@ -22,7 +22,7 @@ from pyscf import gto
 from test_pyscf_gradients import FULL_GRAD_REF
 
 from skala.functional.base import ExcFunctionalBase
-from skala.gpu4pyscf import SkalaKS, torch_allocator
+from skala.gpu4pyscf import SkalaKS
 from skala.gpu4pyscf.gradients import (
     SkalaRKSGradient,
     SkalaUKSGradient,
@@ -30,6 +30,7 @@ from skala.gpu4pyscf.gradients import (
     veff_and_expl_nuc_grad,
 )
 from skala.pyscf.features import generate_features
+from skala.utils import torch_allocator
 
 
 def test_torch_allocator_is_active_after_import() -> None:
