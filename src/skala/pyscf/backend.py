@@ -44,7 +44,16 @@ else:
 
         # Install this last because GPU4PySCF configures its own CuPy allocator during import.
         # Subsequent CuPy allocations use PyTorch's caching allocator
-        use_torch_mempool_in_cupy()
+        if not torch.cuda.is_available():
+            raise ImportError(
+                "CUDA is not available; cannot configure CuPy to use the PyTorch allocator."
+            )
+        try:
+            use_torch_mempool_in_cupy()
+        except RuntimeError as e:
+            raise ImportError(
+                "Failed to configure CuPy to use the PyTorch allocator."
+            ) from e
 
         Array = TypeVar("Array", np.ndarray, cupy.ndarray)
         Grid: TypeAlias = dft.Grids | dft_gpu.Grids
