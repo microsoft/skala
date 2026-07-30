@@ -31,26 +31,9 @@ except ModuleNotFoundError as e:
         "GPU4PySCF is not installed. Please install it with `pip install gpu4pyscf`."
     ) from e
 
-try:
-    import pytorch_pfn_extras
-except ModuleNotFoundError as e:
-    if e.name != "pytorch_pfn_extras":
-        raise
+from skala.gpu4pyscf.torch_allocator import use_torch_mempool_in_cupy  # noqa: I001
 
-    import warnings
-
-    warnings.warn(
-        "pytorch_pfn_extras is not installed. This may lead to additional memory usage. "
-        "Please install it with `pip install pytorch-pfn-extras`.",
-        stacklevel=2,
-    )
-
-    # Reset the default CuPy memory allocator to avoid memory leak issues
-    # that seem to arise when combining the custom allocator of gpu4pyscf with DLPack usage.
-    cupy.cuda.set_allocator(cupy.get_default_memory_pool().malloc)
-else:
-    pytorch_pfn_extras.cuda.use_torch_mempool_in_cupy()
-
+use_torch_mempool_in_cupy()
 
 from pyscf import gto
 
