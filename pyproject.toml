@@ -94,7 +94,6 @@ detect-same-package = true
 line-length = 100
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
 filterwarnings = [
     "error",
     # PyTorch 2.11 deprecated `torch.jit.load`; Skala's pretrained checkpoints
