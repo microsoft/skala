@@ -21,3 +21,4 @@ collect_ignore_glob: list[str] = []
 
 if not torch.cuda.is_available():
     collect_ignore_glob.append("gpu4pyscf/*.py")
+    collect_ignore_glob.append("utils/torch_allocator.py")

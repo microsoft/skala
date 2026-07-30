@@ -7,11 +7,9 @@ https://github.com/pfnet/pytorch-pfn-extras/blob/master/pytorch_pfn_extras/cuda/
 
 from typing import Any
 
+import cupy
 import torch
 
-if torch.cuda.is_available():
-    # Test collection can fail otherwise
-    import cupy
 _allocator = None
 
 
