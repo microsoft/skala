@@ -13,6 +13,7 @@ their own ``pytest.skip`` guard.
 
 This file lives in ``src/skala/`` rather than ``src/skala/gpu4pyscf/`` so
 pytest can load it without first importing ``skala.gpu4pyscf``.
+Similar problems arise for torch_allocator and cupy.
 """
 
 import torch
