@@ -40,6 +40,15 @@ _ATOMIC_GRID_FEATURES = {
 
 
 def _active_cpu_aos(mol: gto.Mole, screen_index: np.ndarray) -> np.ndarray:
+    """Expand a PySCF shell-screening mask into active AO indices.
+
+    Args:
+        mol: Molecule defining the shell-to-AO ranges.
+        screen_index: Screening rows whose columns correspond to molecular shells.
+
+    Returns:
+        Sorted indices of AOs belonging to a shell active in any screening row.
+    """
     active_shells = np.any(screen_index, axis=0)
     ao_loc = mol.ao_loc_nr()
     return np.flatnonzero(np.repeat(active_shells, np.diff(ao_loc)))
@@ -48,6 +57,20 @@ def _active_cpu_aos(mol: gto.Mole, screen_index: np.ndarray) -> np.ndarray:
 def _spatially_group_atom_grids(
     mol: gto.Mole, coords: np.ndarray, atomic_grid_sizes: Tensor
 ) -> np.ndarray:
+    """Build a spatial grid permutation independently within each atom.
+
+    Makes screening much more effective as points are spatially grouped
+    within each atom, while preserving the original atom order and atom boundaries.
+
+    Args:
+        mol: Molecule used by PySCF to define the spatial grouping boxes.
+        coords: Atom-major grid coordinates to group.
+        atomic_grid_sizes: Number of consecutive grid points owned by each atom.
+
+    Returns:
+        A permutation that spatially groups each atom's points while preserving
+        atom order and atom boundaries.
+    """
     sort_indices = []
     start = 0
     for size in atomic_grid_sizes.tolist():

@@ -22,6 +22,15 @@ from skala.pyscf.features import chunked_features, generate_features
 
 
 def _should_screen_aos(mol: gto.Mole) -> bool:
+    """Determine whether a molecule is large enough for AO screening.
+
+    Args:
+        mol: Molecule whose AO count is compared with PySCF's sparse-contraction
+            crossover.
+
+    Returns:
+        Whether the molecule has more AOs than PySCF's screening threshold.
+    """
     # Keep the compatibility fallback here, not at call sites. PySCF uses this
     # crossover before selecting sparse density/Vxc contractions.
     switch_size = pyscf_numint.SWITCH_SIZE
