@@ -122,6 +122,25 @@ def test_gpu_screened_skala_matches_cpu_on_carbon_chain(
     monkeypatch: pytest.MonkeyPatch,
     load_functional_cached: Callable[..., ExcFunctionalBase | str],
 ) -> None:
+    """Catch inaccurate GPU AO screening on spatially diffuse grid blocks.
+
+    GPU4PySCF builds one active-shell mask for each fixed-size coordinate block. That
+    screening is reliable only when the points in a block are spatially local enough
+    for the sampled AO values to represent the whole block. Skala currently supplies
+    an unsorted, atom-major grid, so one GPU block can span a large region around an
+    atom. This is especially problematic for the AO derivatives used by Skala: an AO
+    value can be small at the sampled points even though its gradient still makes a
+    significant contribution. The linear carbon chain and large def2-QZVPP basis
+    expose this failure in a reasonably small integration test.
+
+    The CPU and GPU calculations use identical coordinates, weights, density matrix,
+    and Skala 1.1 model. CPU AO evaluation is deliberately forced dense to provide an
+    independent reference, while GPU AO evaluation is deliberately forced through
+    screening. Comparing the particle count, XC energy, and complete XC potential
+    matrix verifies the full feature and VJP path; the potential is particularly
+    sensitive to omitted derivative contributions. The test should pass once GPU
+    blocks are spatially grouped before their screening masks are constructed.
+    """
     mol = gto.M(atom=CARBON_CHAIN, basis="def2-qzvpp", verbose=0)
     cpu_grids = dft.Grids(mol)
     cpu_grids.level = 1
@@ -145,15 +164,17 @@ def test_gpu_screened_skala_matches_cpu_on_carbon_chain(
         rtol=1e-12,
         atol=1e-12,
     )
-    monkeypatch.setattr(pyscf_numint, "SWITCH_SIZE", mol.nao_nr() - 1)
-
     cpu_functional = load_functional_cached("skala-1.1", device=torch.device("cpu"))
     gpu_functional = load_functional_cached("skala-1.1", device=torch.device("cuda:0"))
     assert isinstance(cpu_functional, ExcFunctionalBase)
     assert isinstance(gpu_functional, ExcFunctionalBase)
+
+    monkeypatch.setattr(pyscf_numint, "SWITCH_SIZE", mol.nao_nr())
     cpu_result = SkalaNumInt(cpu_functional, device=torch.device("cpu")).nr_rks(
         mol, cpu_grids, None, dm
     )
+
+    monkeypatch.setattr(pyscf_numint, "SWITCH_SIZE", mol.nao_nr() - 1)
     gpu_result = SkalaNumInt(gpu_functional, device=torch.device("cuda:0")).nr_rks(
         mol, gpu_grids, None, cupy.asarray(dm)
     )
