@@ -33,8 +33,10 @@ optional-dependencies.dev = [
     "pre-commit",
     "mypy",
     "pytest",
+    "pytest-benchmark",
     "pytest-cov",
     "pytest-randomly",
+    "pytest-timeout",
 ]
 optional-dependencies.doc = [
     "ipywidgets",
@@ -94,6 +96,11 @@ detect-same-package = true
 line-length = 100
 
 [tool.pytest.ini_options]
+timeout = 300
+markers = [
+    "benchmark: performance measurements collected by pytest-benchmark",
+    "profiling: single-call performance workloads intended for profilers",
+]
 filterwarnings = [
     "error",
     # PyTorch 2.11 deprecated `torch.jit.load`; Skala's pretrained checkpoints
@@ -116,6 +123,8 @@ filterwarnings = [
     'ignore:using cupy as the tensor contraction engine\.:UserWarning',
     # Deprecation warning in huggingface_hub package
     'ignore:hf_xet\.download_files\(\) is deprecated\. Use XetSession\(\)\.new_file_download_group\(\)\.start_download_file\(\) instead\.:DeprecationWarning',
+    # ASE directly assigns array shapes in `Atoms.new_array`, deprecated by NumPy 2.5.
+    'ignore:Setting the shape on a NumPy array has been deprecated in NumPy 2\.5\.:DeprecationWarning',
     # Upstream deprecations in PySCF / GPU4PySCF are outside this project's control.
     'ignore::DeprecationWarning:pyscf\..*',
     'ignore::DeprecationWarning:gpu4pyscf\..*',

@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: MIT
 
 from collections.abc import Callable
-from typing import Any, Generic, Protocol
+from typing import Any, Generic, Protocol, overload
 
 import torch
 from pyscf import dft, gto
+from pyscf.dft import numint as pyscf_numint
 from torch import Tensor
 
 from skala.functional.base import ExcFunctionalBase
@@ -18,6 +19,13 @@ from skala.pyscf.backend import (
     to_numpy,
 )
 from skala.pyscf.features import chunked_features, generate_features
+
+
+def _should_screen_aos(mol: gto.Mole) -> bool:
+    # Keep the compatibility fallback here, not at call sites. PySCF uses this
+    # crossover before selecting sparse density/Vxc contractions.
+    switch_size = pyscf_numint.SWITCH_SIZE
+    return mol.nao_nr() > switch_size
 
 
 class LibXCSpec(Protocol):
@@ -134,9 +142,15 @@ class SkalaNumInt(PySCFNumInt[Array]):
     ) -> Tensor:
         return from_numpy_or_cupy(x, device=device or self.device, transpose=transpose)
 
+    @overload
+    def to_backend(self, x: Tensor) -> Array: ...
+
+    @overload
+    def to_backend(self, x: list[Tensor]) -> list[Array]: ...
+
     def to_backend(self, x: Tensor | list[Tensor]) -> Array | list[Array]:
         if isinstance(x, list):
-            return [self.to_backend(y) for y in x]  # type: ignore
+            return [self.to_backend(y) for y in x]
 
         if self.device.type == "cuda":
             return to_cupy(x)
@@ -160,7 +174,7 @@ class SkalaNumInt(PySCFNumInt[Array]):
             max_memory=max_memory,
             gpu=self.device.type == "cuda",
         )
-        return self.to_backend(mol_features["density"].sum(0))  # type: ignore
+        return self.to_backend(mol_features["density"].sum(0))
 
     def __call__(
         self,
@@ -192,6 +206,7 @@ class SkalaNumInt(PySCFNumInt[Array]):
 
         if self._functional_supports_atom_chunking():
             dm = dm.detach().requires_grad_()
+            screen_aos = _should_screen_aos(mol)
             tot_dens = torch.tensor((0.0, 0.0), device=self.device, dtype=dm.dtype)
             E_xc = torch.tensor(0.0, device=self.device, dtype=dm.dtype)
             V_xc = torch.zeros_like(dm)
@@ -203,6 +218,7 @@ class SkalaNumInt(PySCFNumInt[Array]):
                 func_deriv=1,
                 max_memory_in_mb=max_memory if dm.device.type == "cpu" else None,
                 safety_fraction=0.8,  # tends to be faster for large chunks
+                screen_aos=screen_aos,
             ):
                 E_xc_chunk = self.func.get_exc(mol_features)
                 (V_xc_chunk,) = torch.autograd.grad(
@@ -260,7 +276,7 @@ class SkalaNumInt(PySCFNumInt[Array]):
         N, E_xc, V_xc = self(
             mol, grids, xc_code, self.from_backend(dm), max_memory=max_memory
         )
-        return N.sum().item(), E_xc.item(), self.to_backend(V_xc)  # type: ignore
+        return N.sum().item(), E_xc.item(), self.to_backend(V_xc)
 
     def nr_uks(
         self,
@@ -275,7 +291,7 @@ class SkalaNumInt(PySCFNumInt[Array]):
         N, E_xc, V_xc = self(
             mol, grids, xc_code, self.from_backend(dm), max_memory=max_memory
         )
-        return self.to_backend(N), E_xc.item(), self.to_backend(V_xc)  # type: ignore
+        return self.to_backend(N), E_xc.item(), self.to_backend(V_xc)
 
     class libxc:
         __version__ = None
@@ -314,6 +330,7 @@ class SkalaNumInt(PySCFNumInt[Array]):
 
         if self._functional_supports_atom_chunking():
             dm0 = dm0.requires_grad_()
+            screen_aos = _should_screen_aos(ks.mol)
 
             def hessian_vector_product_atom_chunked(dm1: Array) -> Array:
                 dm1_tensor = self.from_backend(dm1)
@@ -330,6 +347,7 @@ class SkalaNumInt(PySCFNumInt[Array]):
                     safety_fraction=kwargs.get(
                         "safety_fraction", 0.0
                     ),  # Force small chunks (single atoms) because it's empirically fastest.
+                    screen_aos=screen_aos,
                 ):
                     E_xc_chunk = self.func.get_exc(mol_features)
                     (V_xc_chunk,) = torch.autograd.grad(

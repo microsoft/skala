@@ -20,8 +20,10 @@ dependencies:
   # Testing and development
   - pre-commit
   - pytest
+  - pytest-benchmark
   - pytest-cov
   - pytest-randomly
+  - pytest-timeout
   - ruff
   - mypy
   - pip:
