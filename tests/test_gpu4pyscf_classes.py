@@ -4,6 +4,8 @@ import pytest
 import torch
 from pyscf import gto
 
+pytestmark = pytest.mark.gpu
+
 if not torch.cuda.is_available():
     pytest.skip(
         "Skipping gpu4pyscf classes tests, because CUDA is not available.",

@@ -18,7 +18,11 @@ from skala.pyscf.backend import (
     to_cupy,
     to_numpy,
 )
-from skala.pyscf.features import chunked_features, generate_features
+from skala.pyscf.features import (
+    _global_screened_features,
+    chunked_features,
+    generate_features,
+)
 
 
 def _should_screen_aos(mol: gto.Mole) -> bool:
@@ -219,6 +223,54 @@ class SkalaNumInt(PySCFNumInt[Array]):
             tot_dens = torch.tensor((0.0, 0.0), device=self.device, dtype=dm.dtype)
             E_xc = torch.tensor(0.0, device=self.device, dtype=dm.dtype)
             V_xc = torch.zeros_like(dm)
+
+            if screen_aos:
+                screened_features = _global_screened_features(
+                    mol,
+                    dm,
+                    grids,
+                    features=set(self.func.features),
+                    func_deriv=1,
+                    max_memory_in_mb=max_memory if dm.device.type == "cpu" else None,
+                    safety_fraction=0.8,
+                )
+                atom_major_cotangent = torch.zeros_like(
+                    screened_features.atom_major_raw_features
+                )
+                for atom_slice, grid_slice in screened_features.chunks:
+                    local_raw_features = (
+                        screened_features.atom_major_raw_features[..., grid_slice]
+                        .detach()
+                        .requires_grad_()
+                    )
+                    mol_features = screened_features.build_model_chunk(
+                        local_raw_features, atom_slice, grid_slice
+                    )
+                    E_xc_chunk = self.func.get_exc(mol_features)
+                    (local_cotangent,) = torch.autograd.grad(
+                        E_xc_chunk,
+                        local_raw_features,
+                        torch.ones_like(E_xc_chunk),
+                    )
+                    atom_major_cotangent[..., grid_slice] = local_cotangent.detach()
+                    tot_dens += (
+                        (mol_features["density"] * mol_features["grid_weights"])
+                        .sum(dim=-1)
+                        .detach()
+                    )
+                    E_xc += E_xc_chunk.detach()
+                    del E_xc_chunk, local_cotangent, local_raw_features, mol_features
+
+                sorted_cotangent = atom_major_cotangent.index_select(
+                    -1, screened_features.forward_permutation
+                )
+                (V_xc,) = torch.autograd.grad(
+                    screened_features.sorted_raw_features,
+                    dm,
+                    sorted_cotangent,
+                )
+                return tot_dens, E_xc, V_xc
+
             for mol_features in chunked_features(
                 mol,
                 dm,
@@ -227,7 +279,7 @@ class SkalaNumInt(PySCFNumInt[Array]):
                 func_deriv=1,
                 max_memory_in_mb=max_memory if dm.device.type == "cpu" else None,
                 safety_fraction=0.8,  # tends to be faster for large chunks
-                screen_aos=screen_aos,
+                screen_aos=False,
             ):
                 E_xc_chunk = self.func.get_exc(mol_features)
                 (V_xc_chunk,) = torch.autograd.grad(
@@ -341,10 +393,9 @@ class SkalaNumInt(PySCFNumInt[Array]):
             dm0 = dm0.requires_grad_()
             screen_aos = _should_screen_aos(ks.mol)
 
-            def hessian_vector_product_atom_chunked(dm1: Array) -> Array:
-                dm1_tensor = self.from_backend(dm1)
-                hvp_total = torch.zeros_like(dm0)
-                for mol_features in chunked_features(
+            screened_features = None
+            if screen_aos:
+                screened_features = _global_screened_features(
                     ks.mol,
                     dm0,
                     ks.grids,
@@ -353,27 +404,97 @@ class SkalaNumInt(PySCFNumInt[Array]):
                     max_memory_in_mb=ks.max_memory
                     if dm0.device.type == "cpu"
                     else None,
-                    safety_fraction=kwargs.get(
-                        "safety_fraction", 0.0
-                    ),  # Force small chunks (single atoms) because it's empirically fastest.
-                    screen_aos=screen_aos,
-                ):
-                    E_xc_chunk = self.func.get_exc(mol_features)
-                    (V_xc_chunk,) = torch.autograd.grad(
-                        E_xc_chunk,
-                        dm0,
-                        torch.ones_like(E_xc_chunk),
-                        retain_graph=True,
-                        create_graph=True,
+                    safety_fraction=kwargs.get("safety_fraction", 0.0),
+                )
+                if not screened_features.feature_function.only_linear_feats:
+                    raise NotImplementedError(
+                        "Global screened response requires raw features linear in "
+                        "the density matrix."
                     )
-                    (hvp_chunk,) = torch.autograd.grad(
-                        V_xc_chunk,
+
+            def hessian_vector_product_atom_chunked(dm1: Array) -> Array:
+                dm1_tensor = self.from_backend(dm1)
+                if screened_features is not None:
+                    atom_major_tangent = screened_features.atom_major_jvp(dm1_tensor)
+                    atom_major_hessian_action = torch.zeros_like(
+                        screened_features.atom_major_raw_features
+                    )
+                    for atom_slice, grid_slice in screened_features.chunks:
+                        local_raw_features = (
+                            screened_features.atom_major_raw_features[..., grid_slice]
+                            .detach()
+                            .requires_grad_()
+                        )
+                        mol_features = screened_features.build_model_chunk(
+                            local_raw_features, atom_slice, grid_slice
+                        )
+                        E_xc_chunk = self.func.get_exc(mol_features)
+                        (local_gradient,) = torch.autograd.grad(
+                            E_xc_chunk,
+                            local_raw_features,
+                            torch.ones_like(E_xc_chunk),
+                            create_graph=True,
+                        )
+                        if local_gradient.requires_grad:
+                            (local_hessian_action,) = torch.autograd.grad(
+                                local_gradient,
+                                local_raw_features,
+                                atom_major_tangent[..., grid_slice],
+                            )
+                        else:
+                            local_hessian_action = torch.zeros_like(local_raw_features)
+                        atom_major_hessian_action[..., grid_slice] = (
+                            local_hessian_action.detach()
+                        )
+                        del (
+                            E_xc_chunk,
+                            local_gradient,
+                            local_hessian_action,
+                            local_raw_features,
+                            mol_features,
+                        )
+
+                    sorted_hessian_action = atom_major_hessian_action.index_select(
+                        -1, screened_features.forward_permutation
+                    )
+                    (hvp_total,) = torch.autograd.grad(
+                        screened_features.sorted_raw_features,
                         dm0,
-                        dm1_tensor,
+                        sorted_hessian_action,
                         retain_graph=True,
                     )
-                    hvp_total += hvp_chunk
-                    del E_xc_chunk, V_xc_chunk, hvp_chunk, mol_features
+                else:
+                    hvp_total = torch.zeros_like(dm0)
+                    for mol_features in chunked_features(
+                        ks.mol,
+                        dm0,
+                        ks.grids,
+                        features=set(self.func.features),
+                        func_deriv=2,
+                        max_memory_in_mb=ks.max_memory
+                        if dm0.device.type == "cpu"
+                        else None,
+                        safety_fraction=kwargs.get(
+                            "safety_fraction", 0.0
+                        ),  # Force small chunks (single atoms) because it's empirically fastest.
+                        screen_aos=False,
+                    ):
+                        E_xc_chunk = self.func.get_exc(mol_features)
+                        (V_xc_chunk,) = torch.autograd.grad(
+                            E_xc_chunk,
+                            dm0,
+                            torch.ones_like(E_xc_chunk),
+                            retain_graph=True,
+                            create_graph=True,
+                        )
+                        (hvp_chunk,) = torch.autograd.grad(
+                            V_xc_chunk,
+                            dm0,
+                            dm1_tensor,
+                            retain_graph=True,
+                        )
+                        hvp_total += hvp_chunk
+                        del E_xc_chunk, V_xc_chunk, hvp_chunk, mol_features
 
                 v1 = self.to_backend(hvp_total)
                 vj = ks.get_j(ks.mol, dm1, hermi=1)

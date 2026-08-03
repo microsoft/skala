@@ -9,6 +9,7 @@ def estimate_max_grid_chunk_size(
     max_memory_in_mb: int | None = None,
     safety_fraction: float = 0.8,
     func_deriv: int = 1,
+    reserved_memory_in_bytes: int = 0,
 ) -> int:
     """Heuristically pick a grid chunk size for :func:`chunked_features`.
 
@@ -40,6 +41,9 @@ def estimate_max_grid_chunk_size(
             (``exc_only``), ``1`` first order (``__call__``/``V_xc``), ``2``
             second order (``gen_response``/Hessian-vector product). Selects the
             calibrated coefficients.
+        reserved_memory_in_bytes: Memory already committed to allocations whose
+            size does not depend on the model chunk, such as global raw-feature
+            and cotangent buffers.
 
     Returns:
         Maximum number of grid points per chunk whose predicted peak memory fits
@@ -71,7 +75,7 @@ def estimate_max_grid_chunk_size(
                 )
     else:
         free_bytes = int(max_memory_in_mb * 1000**2)
-    free_bytes = int(free_bytes * safety_fraction)
+    free_bytes = int(free_bytes * safety_fraction) - reserved_memory_in_bytes
 
     bytes_per_point, fixed_overhead = linear_peak_memory_model(
         nao=dm.shape[-1],
@@ -81,6 +85,42 @@ def estimate_max_grid_chunk_size(
     chunk_size = int((free_bytes - fixed_overhead) / bytes_per_point)
 
     return chunk_size
+
+
+def estimate_global_raw_feature_buffer_memory(
+    dm: torch.Tensor,
+    nfeatures: int,
+    ngrids: int,
+    func_deriv: int,
+) -> int:
+    """Estimate full-grid raw-feature storage for global screened evaluation.
+
+    First order keeps sorted and atom-major feature values plus atom-major and
+    sorted cotangents. Second order additionally keeps an atom-major feature JVP,
+    an atom-major model Hessian action, and its sorted copy.
+
+    Args:
+        dm: Density matrix whose leading dimensions determine the spin batches.
+        nfeatures: Number of raw AO-derived features per grid point.
+        ngrids: Total number of molecular grid points.
+        func_deriv: Functional derivative order, either first or second.
+
+    Returns:
+        Estimated bytes occupied by global raw-feature buffers.
+
+    Raises:
+        ValueError: If ``func_deriv`` is not first or second order.
+    """
+    match func_deriv:
+        case 1:
+            buffer_count = 4
+        case 2:
+            buffer_count = 5
+        case _:
+            raise ValueError("Global screened features support func_deriv 1 or 2")
+
+    batch_size = dm.numel() // (dm.shape[-2] * dm.shape[-1])
+    return buffer_count * batch_size * nfeatures * ngrids * 8
 
 
 def linear_peak_memory_model(

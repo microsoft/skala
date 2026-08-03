@@ -97,8 +97,10 @@ line-length = 100
 
 [tool.pytest.ini_options]
 timeout = 300
+addopts = "--benchmark-skip -m 'not profiling'"
 markers = [
     "benchmark: performance measurements collected by pytest-benchmark",
+    "gpu: requires a CUDA-capable GPU and GPU test dependencies",
     "profiling: single-call performance workloads intended for profilers",
 ]
 filterwarnings = [

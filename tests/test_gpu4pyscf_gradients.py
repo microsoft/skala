@@ -3,6 +3,8 @@ from collections.abc import Callable
 import pytest
 import torch
 
+pytestmark = pytest.mark.gpu
+
 if not torch.cuda.is_available():
     pytest.skip(
         "Skipping gpu4pyscf gradients tests, because CUDA is not available.",
