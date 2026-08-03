@@ -111,7 +111,7 @@ class Irrep:
 
 
 class MulIr:
-    __slots__ = ("_mul", "_ir")
+    __slots__ = ("_ir", "_mul")
     _mul: int
     _ir: Irrep
 

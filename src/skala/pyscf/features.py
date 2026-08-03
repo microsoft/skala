@@ -289,7 +289,7 @@ def chunked_features(
         raise ValueError("Grids must be built before generating chunked features.")
 
     # if dm is a 3D tensor, then we have a spin-polarized system
-    with_spin = True if len(dm.shape) == 3 else False
+    with_spin = len(dm.shape) == 3
 
     grid_features = get_grid_features(mol, dm, grids, features)
     with_mgga_feature = (
@@ -495,7 +495,7 @@ def generate_features(
     features = features or DEFAULT_FEATURES_SET
 
     # if dm is a 3D tensor, then we have a spin-polarized system
-    with_spin = True if len(dm.shape) == 3 else False
+    with_spin = len(dm.shape) == 3
 
     if gpu and dm.device.type != "cuda":
         raise ValueError("Density matrix must be on the GPU when gpu=True.")

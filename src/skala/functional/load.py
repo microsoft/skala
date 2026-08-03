@@ -125,7 +125,7 @@ class TracedFunctional(ExcFunctionalBase):
             raise RuntimeError(
                 "metadata in traced functional extra_files does not have the correct format (dict)."
             )
-        if not all([isinstance(key, str) for key in _metadata]):
+        if not all(isinstance(key, str) for key in _metadata):
             raise RuntimeError("metadata keys in traced functional must be strings.")
         metadata = cast(dict[str, Any], _metadata)
 
@@ -134,7 +134,7 @@ class TracedFunctional(ExcFunctionalBase):
             raise RuntimeError(
                 "features in traced functional extra_files does not have the correct format (list)."
             )
-        if not all([isinstance(feat, str) for feat in _features]):
+        if not all(isinstance(feat, str) for feat in _features):
             raise RuntimeError(
                 "features in traced functional must be a list of strings."
             )

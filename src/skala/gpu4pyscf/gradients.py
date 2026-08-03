@@ -93,7 +93,7 @@ def veff_and_expl_nuc_grad(
     nuc_feat_names = list(nuc_grad_feats)  # ensure specific order
     nuc_feat_tensors = [mol_feats[feat] for feat in nuc_feat_names]
     other_feats = {
-        feat: mol_feats[feat] for feat in mol_feats.keys() if feat not in nuc_grad_feats
+        feat: mol_feats[feat] for feat in mol_feats if feat not in nuc_grad_feats
     }
 
     def exc_feat_func(*nuc_feat_tensors: torch.Tensor) -> torch.Tensor:

@@ -24,15 +24,15 @@ except ModuleNotFoundError:
         allow_module_level=True,
     )
 
-from skala.functional.base import ExcFunctionalBase
-from skala.gpu4pyscf import SkalaKS
-from skala.pyscf.backend import dft_gpu
-from skala.pyscf.features import (
+from skala.functional.base import ExcFunctionalBase  # noqa: E402
+from skala.gpu4pyscf import SkalaKS  # noqa: E402
+from skala.pyscf.backend import dft_gpu  # noqa: E402
+from skala.pyscf.features import (  # noqa: E402
     ChunkEvalForward,
     MGGAFeatureFunction,
     _prepare_spatially_sorted_grids,
 )
-from skala.pyscf.numint import SkalaNumInt
+from skala.pyscf.numint import SkalaNumInt  # noqa: E402
 
 CARBON_CHAIN = """
 C 0.0 0.0 0.0

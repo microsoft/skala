@@ -30,9 +30,6 @@ from skala.functional.traditional import (
 )
 
 __all__ = [
-    "ExcFunctionalBase",
-    "SkalaFunctional",
-    "TracedFunctional",
     "LDA",
     "PBE",
     "R2SCAN",
@@ -40,6 +37,9 @@ __all__ = [
     "SCAN",
     "SPW92",
     "TPSS",
+    "ExcFunctionalBase",
+    "SkalaFunctional",
+    "TracedFunctional",
     "load_functional",
 ]
 

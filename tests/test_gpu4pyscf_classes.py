@@ -12,11 +12,11 @@ if not torch.cuda.is_available():
         allow_module_level=True,
     )
 
-from skala.functional.base import ExcFunctionalBase
-from skala.gpu4pyscf import SkalaKS
-from skala.gpu4pyscf.dft import SkalaRKS, SkalaUKS
-from skala.gpu4pyscf.gradients import SkalaRKSGradient, SkalaUKSGradient
-from skala.gpu4pyscf.grids import UnsortableGrids
+from skala.functional.base import ExcFunctionalBase  # noqa: E402
+from skala.gpu4pyscf import SkalaKS  # noqa: E402
+from skala.gpu4pyscf.dft import SkalaRKS, SkalaUKS  # noqa: E402
+from skala.gpu4pyscf.gradients import SkalaRKSGradient, SkalaUKSGradient  # noqa: E402
+from skala.gpu4pyscf.grids import UnsortableGrids  # noqa: E402
 
 
 @pytest.fixture(params=["skala-1.0", "skala-1.1"])

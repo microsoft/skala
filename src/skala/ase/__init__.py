@@ -8,6 +8,6 @@ except ModuleNotFoundError as e:
     ) from e
 
 
-from skala.ase.calculator import Skala  # noqa: F401
+from skala.ase.calculator import Skala
 
 __all__ = ["Skala"]
