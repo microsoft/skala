@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import multiprocessing as mp
+import tempfile
+import traceback
 from collections.abc import Callable, Iterator
+from multiprocessing.connection import Connection
+from pathlib import Path
 from typing import NamedTuple, cast
 
 import numpy as np
@@ -10,11 +15,13 @@ from pyscf import dft, gto, lib
 from pyscf.dft import numint as pyscf_numint
 from pytest_benchmark.fixture import BenchmarkFixture
 
+from skala.functional import load_functional
 from skala.functional.base import ExcFunctionalBase
 from skala.pyscf.numint import SkalaNumInt, _should_screen_aos
 
 THREAD_COUNT = 4
 MAX_MEMORY_MB = 2000
+MEMORY_WORKER_TIMEOUT_SECONDS = 240
 
 NAPHTHALENE = """
 C -1.2280  0.7090 0.0
@@ -110,6 +117,24 @@ class BenchmarkCase(NamedTuple):
     numint: SkalaNumInt[np.ndarray]
 
 
+BENCHMARK_SPECS = [
+    pytest.param(BenchmarkSpec("naphthalene", NAPHTHALENE), id="naphthalene"),
+    pytest.param(BenchmarkSpec("anthracene", ANTHRACENE), id="anthracene"),
+    pytest.param(BenchmarkSpec("tetracene", TETRACENE), id="tetracene"),
+]
+
+
+def _make_benchmark_case(
+    spec: BenchmarkSpec, functional: ExcFunctionalBase
+) -> BenchmarkCase:
+    mol = gto.M(atom=spec.atoms, basis="def2-qzvpp", verbose=0)
+    grids = dft.Grids(mol)
+    grids.level = 1
+    grids.build(sort_grids=False)
+    dm = dft.RKS(mol).get_init_guess()
+    return BenchmarkCase(mol, grids, dm, SkalaNumInt(functional))
+
+
 @pytest.fixture(scope="module")
 def fixed_cpu_threads() -> Iterator[None]:
     previous_pyscf_threads = lib.num_threads()
@@ -125,11 +150,7 @@ def fixed_cpu_threads() -> Iterator[None]:
 
 @pytest.fixture(
     scope="module",
-    params=[
-        pytest.param(BenchmarkSpec("naphthalene", NAPHTHALENE), id="naphthalene"),
-        pytest.param(BenchmarkSpec("anthracene", ANTHRACENE), id="anthracene"),
-        pytest.param(BenchmarkSpec("tetracene", TETRACENE), id="tetracene"),
-    ],
+    params=BENCHMARK_SPECS,
 )
 def benchmark_case(
     request: pytest.FixtureRequest,
@@ -137,14 +158,9 @@ def benchmark_case(
     load_functional_cached: Callable[..., ExcFunctionalBase | str],
 ) -> BenchmarkCase:
     spec = cast(BenchmarkSpec, request.param)
-    mol = gto.M(atom=spec.atoms, basis="def2-qzvpp", verbose=0)
-    grids = dft.Grids(mol)
-    grids.level = 1
-    grids.build(sort_grids=False)
-    dm = dft.RKS(mol).get_init_guess()
     functional = load_functional_cached("skala-1.1")
     assert isinstance(functional, ExcFunctionalBase)
-    return BenchmarkCase(mol, grids, dm, SkalaNumInt(functional))
+    return _make_benchmark_case(spec, functional)
 
 
 @pytest.fixture
@@ -180,6 +196,100 @@ def _benchmark_xc(benchmark: BenchmarkFixture, case: BenchmarkCase) -> None:
         rounds=1,
         iterations=2,
     )
+
+
+def _run_gpu_xc(spec: BenchmarkSpec, screened: bool) -> int:
+    from skala.gpu4pyscf import SkalaKS
+
+    mol = gto.M(atom=spec.atoms, basis="def2-qzvpp", verbose=0)
+    functional = load_functional("skala-1.1", device=torch.device("cuda:0"))
+    assert isinstance(functional, ExcFunctionalBase)
+    ks = SkalaKS(mol, xc=functional, with_dftd3=False)
+    ks.grids.level = 1
+    ks.grids.alignment = 1
+    ks.grids.build(sort_grids=False)
+    dm = ks.get_init_guess()
+    if not screened:
+        pyscf_numint.SWITCH_SIZE = mol.nao_nr()
+    assert _should_screen_aos(mol) is screened
+
+    torch.cuda.synchronize()
+    torch.cuda.empty_cache()
+    baseline_bytes = torch.cuda.memory_allocated()
+    torch.cuda.reset_peak_memory_stats()
+    ks._numint.nr_rks(mol, ks.grids, None, dm, max_memory=MAX_MEMORY_MB)
+    torch.cuda.synchronize()
+    return torch.cuda.max_memory_allocated() - baseline_bytes
+
+
+def _memory_worker(
+    spec: BenchmarkSpec,
+    screened: bool,
+    backend: str,
+    control: Connection,
+) -> None:
+    """Measure one route in an isolated process and return its allocation peak."""
+    try:
+        lib.num_threads(THREAD_COUNT)
+        torch.set_num_threads(THREAD_COUNT)
+        if backend == "cpu":
+            import memray
+
+            functional = load_functional("skala-1.1")
+            assert isinstance(functional, ExcFunctionalBase)
+            case = _make_benchmark_case(spec, functional)
+            if not screened:
+                pyscf_numint.SWITCH_SIZE = case.mol.nao_nr()
+            assert _should_screen_aos(case.mol) is screened
+
+            with tempfile.TemporaryDirectory() as tmpdir:
+                profile_path = Path(tmpdir) / "allocations.bin"
+                with memray.Tracker(profile_path):
+                    _run_xc(case)
+                peak_bytes = memray.FileReader(profile_path).metadata.peak_memory
+        elif backend == "cuda":
+            peak_bytes = _run_gpu_xc(spec, screened)
+        else:
+            raise ValueError(f"Unknown memory benchmark backend: {backend}")
+        control.send(("done", peak_bytes))
+    except Exception:  # noqa: BLE001 - forward worker failures to the parent
+        control.send(("error", traceback.format_exc()))
+    finally:
+        control.close()
+
+
+def _measure_peak_memory(spec: BenchmarkSpec, screened: bool, backend: str) -> int:
+    """Return peak allocations for one isolated CPU or CUDA evaluation."""
+    context = mp.get_context("spawn")
+    control, worker_control = context.Pipe()
+    worker = context.Process(
+        target=_memory_worker,
+        args=(spec, screened, backend, worker_control),
+    )
+    worker.start()
+    worker_control.close()
+
+    try:
+        if not control.poll(MEMORY_WORKER_TIMEOUT_SECONDS):
+            raise TimeoutError("Memory benchmark worker timed out")
+        status, detail = cast(tuple[str, int | str], control.recv())
+        if status == "error":
+            raise RuntimeError(f"Memory benchmark worker failed:\n{detail}")
+        if status != "done":
+            raise RuntimeError(f"Unexpected memory benchmark status: {status}")
+
+        worker.join()
+        if worker.exitcode != 0:
+            raise RuntimeError(
+                f"Memory benchmark worker exited with code {worker.exitcode}"
+            )
+        assert isinstance(detail, int)
+        return detail
+    finally:
+        if worker.is_alive():
+            worker.terminate()
+            worker.join()
+        control.close()
 
 
 @pytest.mark.profiling
@@ -222,6 +332,41 @@ def test_without_ao_screening_by_patching_threshold(
     benchmark: BenchmarkFixture, dense_case: BenchmarkCase
 ) -> None:
     _benchmark_xc(benchmark, dense_case)
+
+
+@pytest.mark.profiling
+@pytest.mark.parametrize("spec", BENCHMARK_SPECS)
+@pytest.mark.parametrize(
+    "backend",
+    ["cpu", pytest.param("cuda", marks=pytest.mark.gpu)],
+)
+def test_screened_and_dense_peak_memory(
+    spec: BenchmarkSpec,
+    backend: str,
+    record_property: Callable[[str, object], None],
+) -> None:
+    if backend == "cuda":
+        if not torch.cuda.is_available():
+            pytest.skip("CUDA is not available")
+        pytest.importorskip("cupy")
+        pytest.importorskip("gpu4pyscf")
+
+    screened_peak_bytes = _measure_peak_memory(spec, screened=True, backend=backend)
+    dense_peak_bytes = _measure_peak_memory(spec, screened=False, backend=backend)
+    mib = 1024**2
+    screened_peak_mib = screened_peak_bytes / mib
+    dense_peak_mib = dense_peak_bytes / mib
+    peak_ratio = screened_peak_bytes / dense_peak_bytes
+
+    record_property("backend", backend)
+    record_property("screened_peak_allocations_mib", screened_peak_mib)
+    record_property("dense_peak_allocations_mib", dense_peak_mib)
+    record_property("screened_to_dense_peak_ratio", peak_ratio)
+    print(
+        f"\n{spec.name} {backend} peak allocations: "
+        f"screened={screened_peak_mib:.1f} MiB, dense={dense_peak_mib:.1f} MiB, "
+        f"ratio={peak_ratio:.3f}"
+    )
 
 
 @pytest.mark.profiling

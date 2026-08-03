@@ -234,10 +234,12 @@ class SkalaNumInt(PySCFNumInt[Array]):
                     max_memory_in_mb=max_memory if dm.device.type == "cpu" else None,
                     safety_fraction=0.8,
                 )
+                # Store only full-grid feature cotangents; model activations remain chunk-local.
                 atom_major_cotangent = torch.zeros_like(
                     screened_features.atom_major_raw_features
                 )
                 for atom_slice, grid_slice in screened_features.chunks:
+                    # Break the reorder graph so model backprop retains only this chunk.
                     local_raw_features = (
                         screened_features.atom_major_raw_features[..., grid_slice]
                         .detach()
@@ -261,9 +263,11 @@ class SkalaNumInt(PySCFNumInt[Array]):
                     E_xc += E_xc_chunk.detach()
                     del E_xc_chunk, local_cotangent, local_raw_features, mol_features
 
+                # Reorder detached cotangents explicitly instead of backpropagating through it.
                 sorted_cotangent = atom_major_cotangent.index_select(
                     -1, screened_features.forward_permutation
                 )
+                # The custom VJP reevaluates AO blocks sequentially without a full-grid AO graph.
                 (V_xc,) = torch.autograd.grad(
                     screened_features.sorted_raw_features,
                     dm,
@@ -416,10 +420,12 @@ class SkalaNumInt(PySCFNumInt[Array]):
                 dm1_tensor = self.from_backend(dm1)
                 if screened_features is not None:
                     atom_major_tangent = screened_features.atom_major_jvp(dm1_tensor)
+                    # Store the full-grid model Hessian action, not per-chunk model graphs.
                     atom_major_hessian_action = torch.zeros_like(
                         screened_features.atom_major_raw_features
                     )
                     for atom_slice, grid_slice in screened_features.chunks:
+                        # Isolate the second-order model graph to the current atomic chunk.
                         local_raw_features = (
                             screened_features.atom_major_raw_features[..., grid_slice]
                             .detach()
@@ -454,9 +460,11 @@ class SkalaNumInt(PySCFNumInt[Array]):
                             mol_features,
                         )
 
+                    # Restore box order after all chunk-local Hessian actions are detached.
                     sorted_hessian_action = atom_major_hessian_action.index_select(
                         -1, screened_features.forward_permutation
                     )
+                    # The custom VJP traverses AO blocks sequentially and retains no AO graph.
                     (hvp_total,) = torch.autograd.grad(
                         screened_features.sorted_raw_features,
                         dm0,
