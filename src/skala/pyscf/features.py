@@ -212,33 +212,6 @@ def _prepare_spatially_sorted_grids(
     return sorted_grids, forward, inverse
 
 
-def _spatially_group_atom_grids(
-    mol: gto.Mole, coords: np.ndarray, atomic_grid_sizes: Tensor
-) -> np.ndarray:
-    """Build a spatial grid permutation independently within each atom.
-
-    Makes screening much more effective as points are spatially grouped
-    within each atom, while preserving the original atom order and atom boundaries.
-
-    Args:
-        mol: Molecule used by PySCF to define the spatial grouping boxes.
-        coords: Atom-major grid coordinates to group.
-        atomic_grid_sizes: Number of consecutive grid points owned by each atom.
-
-    Returns:
-        A permutation that spatially groups each atom's points while preserving
-        atom order and atom boundaries.
-    """
-    sort_indices = []
-    start = 0
-    for size in atomic_grid_sizes.tolist():
-        stop = start + size
-        atom_sort_indices = dft.gen_grid.arg_group_grids(mol, coords[start:stop])
-        sort_indices.append(start + atom_sort_indices)
-        start = stop
-    return np.concatenate(sort_indices)
-
-
 def maybe_expand_and_divide(
     feature: torch.Tensor, expand: bool, divisor: float
 ) -> torch.Tensor:
@@ -249,162 +222,6 @@ def maybe_expand_and_divide(
         return torch.stack([feature / divisor, feature / divisor], dim=0)
     else:
         return feature
-
-
-def chunked_features(
-    mol: gto.Mole,
-    dm: Tensor,
-    grids: Grid,
-    features: set[str],
-    func_deriv: int,
-    max_memory_in_mb: int | None = None,
-    safety_fraction: float = 0.8,
-    compile_feature_function: bool = False,
-    screen_aos: bool = False,
-) -> Iterator[dict[str, Tensor]]:
-    """
-    Chunked feature generation for a given molecule. The density features are generated in chunks to avoid memory issues.
-
-    Input:
-        mol: The molecule for which to generate features.
-        dm: The density matrix.
-        grids: The grid points.
-        features: The set of features to generate.
-        func_deriv: The order of the functional derivative.
-        max_memory_in_mb: The maximum memory to use for each chunk in megabytes (MB). If None, the maximum memory is determined automatically.
-        safety_fraction: The fraction of the available memory to use for each chunk.
-        compile_feature_function: Whether to compile the feature function.
-        screen_aos: Whether to evaluate each atom chunk through backend AO screening.
-
-    Yields:
-        A dictionary of features for each chunk.
-    """
-
-    features = features or DEFAULT_FEATURES_SET
-    if "atomic_grid_sizes" not in features:
-        raise ValueError(
-            "The current implementation of chunked_features requires 'atomic_grid_sizes' to be in the requested features."
-        )
-    if grids.coords is None or grids.weights is None:
-        raise ValueError("Grids must be built before generating chunked features.")
-
-    # if dm is a 3D tensor, then we have a spin-polarized system
-    with_spin = len(dm.shape) == 3
-
-    grid_features = get_grid_features(mol, dm, grids, features)
-    with_mgga_feature = (
-        "density" in features
-        or "grad" in features
-        or "kin" in features
-        or "lapl" in features
-    )
-
-    # Build the feature function once; it is reused for every chunk.
-    ff = None
-    if with_mgga_feature:
-        ff = MGGAFeatureFunction(
-            with_density="density" in features,
-            with_grad="grad" in features,
-            with_kin="kin" in features,
-            with_lapl="lapl" in features,
-        )
-
-    # Determine the chunk size automatically when not explicitly provided.
-    if ff is not None:
-        max_grid_chunk_size = estimate_max_grid_chunk_size(
-            dm=dm,
-            deriv=ff.deriv,
-            max_memory_in_mb=max_memory_in_mb,
-            safety_fraction=safety_fraction,
-            func_deriv=func_deriv,
-        )
-        if max_grid_chunk_size < (
-            max_atom_grid := int(grid_features["atomic_grid_sizes"].max().item())
-        ):
-            LOG.warning(
-                f"Adjusted chunk size {max_grid_chunk_size} to match the largest atomic grid {max_atom_grid}. Hope for no OOM."
-            )
-            max_grid_chunk_size = max_atom_grid
-    else:  # no feature function is available, use the full grid.
-        max_grid_chunk_size = grid_features["grid_weights"].shape[0]
-
-    for atom_slice, grid_slice in make_chunks(
-        grid_features["atomic_grid_sizes"], max_grid_chunk_size
-    ):
-        feature_chunk = {}
-        for feat_name in ["grid_coords", "grid_weights", "atomic_grid_weights"]:
-            if feat_name in features:
-                feature_chunk[feat_name] = grid_features[feat_name][grid_slice]
-
-        for feat_name in ["coarse_0_atomic_coords", "atomic_grid_sizes"]:
-            if feat_name in features:
-                feature_chunk[feat_name] = grid_features[feat_name][atom_slice]
-
-        if "atomic_grid_size_bound_shape" in features:
-            max_size = int(feature_chunk["atomic_grid_sizes"].max().item())
-            feature_chunk["atomic_grid_size_bound_shape"] = torch.zeros(
-                max_size, 0, dtype=torch.long, device=dm.device
-            )
-
-        if with_mgga_feature:
-            assert ff is not None
-            gpu = dm.device.type == "cuda"
-            if screen_aos:
-                chunk_grids = copy(grids)
-                chunk_grids.coords = grids.coords[grid_slice]
-                chunk_grids.weights = grids.weights[grid_slice]
-                if gpu:
-                    chunk_grids._non0ao_idx = None
-                else:
-                    grid_sort_indices = _spatially_group_atom_grids(
-                        mol,
-                        chunk_grids.coords,
-                        feature_chunk["atomic_grid_sizes"],
-                    )
-                    chunk_grids.coords = chunk_grids.coords[grid_sort_indices]
-                    chunk_grids.weights = chunk_grids.weights[grid_sort_indices]
-                    grid_sort_indices_t = torch.as_tensor(
-                        grid_sort_indices, device=dm.device
-                    )
-                    for feat_name in (
-                        "grid_coords",
-                        "grid_weights",
-                        "atomic_grid_weights",
-                    ):
-                        if feat_name in feature_chunk:
-                            feature_chunk[feat_name] = feature_chunk[feat_name][
-                                grid_sort_indices_t
-                            ]
-                    chunk_grids.non0tab = dft.gen_grid.make_screen_index(
-                        mol,
-                        chunk_grids.coords,
-                        cutoff=chunk_grids.cutoff,
-                    )
-                feat_tensor = ChunkEvalForward.apply(
-                    dm.double(),
-                    mol,
-                    chunk_grids,
-                    ff,
-                    None if gpu else CPU_AO_SCREENING_BLOCK_SIZE,
-                    compile_feature_function,
-                    gpu,
-                )
-                mgga_features = ff.to_dict(feat_tensor)
-            else:
-                feat_tensor = non_chunk(
-                    dm.double(),
-                    mol,
-                    grids.coords[grid_slice],
-                    ff,
-                    compile_feature_function=compile_feature_function,
-                    gpu=gpu,
-                )
-                mgga_features = ff.to_dict(feat_tensor)
-
-            for k, v in mgga_features.items():
-                feature_chunk[k] = maybe_expand_and_divide(v, not with_spin, 2)
-
-        yield feature_chunk
 
 
 def make_chunks(
@@ -1003,6 +820,107 @@ def _global_screened_features(
     )
 
 
+@dataclass(frozen=True)
+class _AOBlock:
+    ao: Tensor
+    active_aos: Tensor | None
+    grid_slice: slice
+
+    def select_aos(self, matrix: Tensor) -> Tensor:
+        if self.active_aos is None:
+            return matrix
+        return matrix[..., self.active_aos[:, None], self.active_aos[None, :]]
+
+    def add_to(self, matrix: Tensor, block_result: Tensor) -> None:
+        if self.active_aos is None:
+            matrix += block_result
+        else:
+            matrix[..., self.active_aos[:, None], self.active_aos[None, :]] += (
+                block_result
+            )
+
+
+class _AOBlockLoop:
+    def __init__(
+        self,
+        dm: Tensor,
+        mol: gto.Mole,
+        grids: Grid,
+        feature_function: FeatureFunction,
+        blksize: int | None,
+        gpu: bool,
+    ) -> None:
+        self.dm = dm
+        self.mol = mol
+        self.grids = grids
+        self.feature_function = feature_function
+        self.blksize = blksize
+        self.gpu = gpu
+        self.sort_idx: Tensor | None
+        self.unsort_idx: Tensor | None
+
+        if gpu:
+            check_gpu_imports_were_successful()
+            self.numint = dft_gpu.numint.NumInt().build(mol, grids.coords)
+            self.numint.grid_blksize = blksize
+            self.sort_idx = torch.as_tensor(
+                self.numint.gdftopt._ao_idx, device=dm.device
+            )
+            self.unsort_idx = torch.argsort(self.sort_idx)
+        else:
+            self.numint = dft.numint.NumInt()
+            self.sort_idx = None
+            self.unsort_idx = None
+
+    def order_aos(self, matrix: Tensor) -> Tensor:
+        if self.sort_idx is None:
+            return matrix
+        return matrix[..., self.sort_idx, :][..., self.sort_idx]
+
+    def restore_ao_order(self, matrix: Tensor) -> Tensor:
+        if self.unsort_idx is None:
+            return matrix
+        return matrix[..., self.unsort_idx, :][..., self.unsort_idx]
+
+    def __iter__(self) -> Iterator[_AOBlock]:
+        end = 0
+        for ao_block, mask, weights, _ in self.numint.block_loop(
+            mol=self.mol,
+            grids=self.grids,
+            nao=self.mol.nao,
+            deriv=self.feature_function.deriv,
+            blksize=self.blksize,
+            non0tab=(None if self.gpu else getattr(self.grids, "non0tab", None)),
+        ):
+            start, end = end, end + weights.size
+            ao = from_numpy_or_cupy(
+                ao_block,
+                device=self.dm.device,
+                dtype=self.dm.dtype,
+                transpose=not self.gpu,
+            )
+            active_aos: Tensor | None
+            if mask is None:
+                active_aos = None
+            elif self.gpu:
+                active_aos = from_numpy_or_cupy(
+                    mask, device=self.dm.device, dtype=torch.long
+                )
+            else:
+                num_screen_rows = (
+                    weights.size + dft.gen_grid.BLKSIZE - 1
+                ) // dft.gen_grid.BLKSIZE
+                active_aos = torch.as_tensor(
+                    _active_cpu_aos(self.mol, mask[:num_screen_rows]),
+                    device=self.dm.device,
+                    dtype=torch.long,
+                )
+                ao = ao[..., active_aos, :]
+            if active_aos is not None and active_aos.numel() == 0:
+                continue
+            yield _AOBlock(ao, active_aos, slice(start, end))
+
+
 class ChunkEvalForward(Function):
     @staticmethod
     def setup_context(
@@ -1044,20 +962,9 @@ class ChunkEvalForward(Function):
         *vectors_jvp: torch.Tensor,
     ) -> torch.Tensor:
         ngrids = grids.weights.size
-        block_loop_args = (mol, grids, mol.nao)
-        block_loop_kwargs = {
-            "deriv": feature_function.deriv,
-            "blksize": blksize,
-            "non0tab": None if gpu else getattr(grids, "non0tab", None),
-        }
-        if gpu:
-            check_gpu_imports_were_successful()
-            ni = dft_gpu.numint.NumInt().build(mol, grids.coords)
-            ni.grid_blksize = blksize
-            sort_idx = ni.gdftopt._ao_idx
-        else:
-            ni = dft.numint.NumInt()
-            sort_idx = np.arange(mol.nao_nr())
+        block_loop = _AOBlockLoop(dm, mol, grids, feature_function, blksize, gpu)
+        dm_ordered = block_loop.order_aos(dm)
+        vectors_jvp_ordered = [block_loop.order_aos(vector) for vector in vectors_jvp]
 
         features = torch.zeros(
             *dm.shape[:-2],
@@ -1069,62 +976,26 @@ class ChunkEvalForward(Function):
         if len(vectors_jvp) > 1 and feature_function.only_linear_feats:
             return features
 
-        # Pre-sort DM and JVP vectors once (sort_idx is constant across blocks)
-        sort_idx_t = torch.as_tensor(sort_idx, device=dm.device)
-        dm_sorted = dm[..., sort_idx_t, :][..., sort_idx_t]
-        vectors_jvp_sorted = [
-            v[..., sort_idx_t, :][..., sort_idx_t] for v in vectors_jvp
-        ]
-
-        end = 0
-        for ao_block, mask, weights, _ in ni.block_loop(
-            *block_loop_args, **block_loop_kwargs
-        ):
-            start, end = end, end + weights.size
-            ao = from_numpy_or_cupy(
-                ao_block, device=dm.device, dtype=dm.dtype, transpose=not gpu
-            )
-            if gpu and mask is not None:
-                mask = from_numpy_or_cupy(mask, device=dm.device, dtype=torch.long)
-            elif not gpu and mask is not None:
-                num_screen_rows = (
-                    weights.size + dft.gen_grid.BLKSIZE - 1
-                ) // dft.gen_grid.BLKSIZE
-                mask = mask[:num_screen_rows]
-                mask = torch.as_tensor(
-                    _active_cpu_aos(mol, mask), device=dm.device, dtype=torch.long
-                )
-                ao = ao[..., mask, :]
-            if mask is not None and mask.numel() == 0:
-                continue
-            masked_dm = (
-                dm_sorted
-                if mask is None
-                else dm_sorted[..., mask[:, None], mask[None, :]]
-            )
-
+        for block in block_loop:
             # Apply chain rule for this particular block
             partial_func = partial_feature_function_over_aos(
                 feature_function,
-                ao,
+                block.ao,
             )
-            for v_sorted in vectors_jvp_sorted:
+            for vector in vectors_jvp_ordered:
                 partial_func = partial_jvp_function_over_tangents(
                     partial_func,
-                    (
-                        v_sorted
-                        if mask is None
-                        else v_sorted[..., mask[:, None], mask[None, :]]
-                    ),
+                    block.select_aos(vector),
                 )
 
             # Compute feature (or its jvp) for this block with masked dm
+            active_dm = block.select_aos(dm_ordered)
             if compile_feature_function:
-                temp_feature = torch.compile(partial_func)(masked_dm)
+                temp_feature = torch.compile(partial_func)(active_dm)
             else:
-                temp_feature = partial_func(masked_dm)
+                temp_feature = partial_func(active_dm)
 
-            features[..., start:end] = temp_feature
+            features[..., block.grid_slice] = temp_feature
         return features
 
     @staticmethod
@@ -1237,107 +1108,54 @@ class ChunkEvalBackward(Function):
         gpu: bool,
         *vectors: torch.Tensor,
     ) -> torch.Tensor:
-        block_loop_args = (mol, grids, mol.nao)
-        block_loop_kwargs = {
-            "deriv": feature_function.deriv,
-            "blksize": blksize if not gpu else None,
-            "non0tab": None if gpu else getattr(grids, "non0tab", None),
-        }
-        if gpu:
-            check_gpu_imports_were_successful()
-            ni = dft_gpu.numint.NumInt().build(mol, grids.coords)
-            ni.grid_blksize = blksize
-            sort_idx = ni.gdftopt._ao_idx
-        else:
-            ni = dft.numint.NumInt()
-            sort_idx = np.arange(mol.nao_nr())
+        block_loop = _AOBlockLoop(dm, mol, grids, feature_function, blksize, gpu)
+        dm_ordered = block_loop.order_aos(dm)
+        vectors_ordered = [
+            block_loop.order_aos(vector)
+            if derivative_type in ("jvp", "vjp")
+            else vector
+            for derivative_type, vector in zip(derivative_types, vectors, strict=True)
+        ]
 
-        end: int = 0
         out = torch.zeros_like(dm)
         if len(vectors) > 1 and feature_function.only_linear_feats:
             return out
 
-        # Pre-sort DM and derivative vectors once (sort_idx is constant across blocks)
-        sort_idx_t = torch.as_tensor(sort_idx, device=dm.device)
-        unsort_idx = torch.argsort(sort_idx_t)
-        dm_sorted = dm[..., sort_idx_t, :][..., sort_idx_t]
-        vectors_sorted = [
-            v[..., sort_idx_t, :][..., sort_idx_t] if dt in ("jvp", "vjp") else v
-            for dt, v in zip(derivative_types, vectors, strict=True)
-        ]
-
-        for ao_block, mask, weights, _ in ni.block_loop(
-            *block_loop_args,
-            **block_loop_kwargs,
-        ):
-            start, end = end, end + weights.size
-
-            ao = from_numpy_or_cupy(
-                ao_block, device=dm.device, dtype=dm.dtype, transpose=not gpu
-            )
-            if gpu and mask is not None:
-                mask = from_numpy_or_cupy(mask, device=dm.device, dtype=torch.long)
-            elif not gpu and mask is not None:
-                num_screen_rows = (
-                    weights.size + dft.gen_grid.BLKSIZE - 1
-                ) // dft.gen_grid.BLKSIZE
-                mask = mask[:num_screen_rows]
-                mask = torch.as_tensor(
-                    _active_cpu_aos(mol, mask), device=dm.device, dtype=torch.long
-                )
-                ao = ao[..., mask, :]
-            if mask is not None and mask.numel() == 0:
-                continue
-
+        for block in block_loop:
             # Apply chain rule for this particular block
             # but be careful with signature change upon first vjp
             partial_func = partial_feature_function_over_aos(
                 feature_function,
-                ao,
+                block.ao,
             )
-            for derivative_type, vector, v_sorted in zip(
-                derivative_types, vectors, vectors_sorted, strict=True
+            for derivative_type, vector, vector_ordered in zip(
+                derivative_types, vectors, vectors_ordered, strict=True
             ):
                 if derivative_type == "jvp":
                     partial_func = partial_jvp_function_over_tangents(
                         partial_func,
-                        (
-                            v_sorted
-                            if mask is None
-                            else v_sorted[..., mask[:, None], mask[None, :]]
-                        ),
+                        block.select_aos(vector_ordered),
                     )
                 elif derivative_type == "vjp":
                     partial_func = partial_vjp_function_over_tangents(
                         partial_func,
-                        (
-                            v_sorted
-                            if mask is None
-                            else v_sorted[..., mask[:, None], mask[None, :]]
-                        ),
+                        block.select_aos(vector_ordered),
                     )
                 elif derivative_type == "first_vjp":
                     partial_func = partial_vjp_function_over_tangents(
-                        partial_func, vector[..., start:end]
+                        partial_func, vector[..., block.grid_slice]
                     )
                 else:
                     raise ValueError(
                         f"Unknown derivative {derivative_type} (must be one of 'jvp', 'vjp', 'first_vjp')"
                     )
-            masked_dm = (
-                dm_sorted
-                if mask is None
-                else dm_sorted[..., mask[:, None], mask[None, :]]
-            )
+            active_dm = block.select_aos(dm_ordered)
             if compile_feature_function:
-                block_result = torch.compile(partial_func)(masked_dm)
+                block_result = torch.compile(partial_func)(active_dm)
             else:
-                block_result = partial_func(masked_dm)
-            if mask is None:
-                out += block_result
-            else:
-                out[..., mask[:, None], mask[None, :]] += block_result
-        return out[..., unsort_idx, :][..., unsort_idx]
+                block_result = partial_func(active_dm)
+            block.add_to(out, block_result)
+        return block_loop.restore_ao_order(out)
 
     @staticmethod
     def jvp(ctx: FunctionCtx, *grad_input: torch.Tensor) -> torch.Tensor:

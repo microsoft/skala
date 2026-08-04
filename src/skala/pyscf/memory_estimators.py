@@ -11,7 +11,7 @@ def estimate_max_grid_chunk_size(
     func_deriv: int = 1,
     reserved_memory_in_bytes: int = 0,
 ) -> int:
-    """Heuristically pick a grid chunk size for :func:`chunked_features`.
+    """Heuristically pick a model grid chunk size for screened feature evaluation.
 
     The dominant per-chunk allocation is the atomic-orbital matrix evaluated by
     ``non_chunk`` (shape ``(ncomp, nao, n)`` in float64, with no AO screening),

@@ -6,7 +6,7 @@ import traceback
 from collections.abc import Callable, Iterator
 from multiprocessing.connection import Connection
 from pathlib import Path
-from typing import NamedTuple, cast
+from typing import Any, NamedTuple, cast
 
 import numpy as np
 import pytest
@@ -14,6 +14,7 @@ import torch
 from pyscf import dft, gto, lib
 from pyscf.dft import numint as pyscf_numint
 from pytest_benchmark.fixture import BenchmarkFixture
+from torch.utils.dlpack import from_dlpack
 
 from skala.functional import load_functional
 from skala.functional.base import ExcFunctionalBase
@@ -117,6 +118,16 @@ class BenchmarkCase(NamedTuple):
     numint: SkalaNumInt[np.ndarray]
 
 
+DeviceResult = tuple[float, float, object]
+
+
+class DeviceBenchmarkCase(NamedTuple):
+    backend: str
+    mol: gto.Mole
+    run: Callable[[], DeviceResult]
+    synchronize: Callable[[], None]
+
+
 BENCHMARK_SPECS = [
     pytest.param(BenchmarkSpec("naphthalene", NAPHTHALENE), id="naphthalene"),
     pytest.param(BenchmarkSpec("anthracene", ANTHRACENE), id="anthracene"),
@@ -135,6 +146,35 @@ def _make_benchmark_case(
     return BenchmarkCase(mol, grids, dm, SkalaNumInt(functional))
 
 
+def _make_gpu_benchmark_case(
+    spec: BenchmarkSpec, functional: ExcFunctionalBase
+) -> DeviceBenchmarkCase:
+    import cupy
+
+    from skala.gpu4pyscf import SkalaKS
+
+    mol = gto.M(atom=spec.atoms, basis="def2-qzvpp", verbose=0)
+    ks = SkalaKS(mol, xc=functional, with_dftd3=False)
+    ks.grids.level = 1
+    ks.grids.alignment = 1
+    ks.grids.build(sort_grids=False)
+    dm = cupy.asarray(dft.RKS(mol).get_init_guess())
+    assert _should_screen_aos(mol)
+
+    def run() -> DeviceResult:
+        result = ks._numint.nr_rks(
+            mol,
+            ks.grids,
+            None,
+            dm,
+            max_memory=MAX_MEMORY_MB,
+        )
+        torch.cuda.synchronize()
+        return cast(DeviceResult, result)
+
+    return DeviceBenchmarkCase("cuda", mol, run, torch.cuda.synchronize)
+
+
 @pytest.fixture(scope="module")
 def fixed_cpu_threads() -> Iterator[None]:
     previous_pyscf_threads = lib.num_threads()
@@ -148,19 +188,48 @@ def fixed_cpu_threads() -> Iterator[None]:
         lib.num_threads(previous_pyscf_threads)
 
 
-@pytest.fixture(
-    scope="module",
-    params=BENCHMARK_SPECS,
-)
+@pytest.fixture(scope="module", params=BENCHMARK_SPECS)
+def benchmark_spec(request: pytest.FixtureRequest) -> BenchmarkSpec:
+    return cast(BenchmarkSpec, request.param)
+
+
+@pytest.fixture(scope="module")
 def benchmark_case(
+    benchmark_spec: BenchmarkSpec,
     request: pytest.FixtureRequest,
     fixed_cpu_threads: None,
     load_functional_cached: Callable[..., ExcFunctionalBase | str],
 ) -> BenchmarkCase:
-    spec = cast(BenchmarkSpec, request.param)
     functional = load_functional_cached("skala-1.1")
     assert isinstance(functional, ExcFunctionalBase)
-    return _make_benchmark_case(spec, functional)
+    return _make_benchmark_case(benchmark_spec, functional)
+
+
+@pytest.fixture(
+    scope="module",
+    params=["cpu", pytest.param("cuda", marks=pytest.mark.gpu)],
+)
+def device_benchmark_case(
+    request: pytest.FixtureRequest,
+    benchmark_spec: BenchmarkSpec,
+    fixed_cpu_threads: None,
+    load_functional_cached: Callable[..., ExcFunctionalBase | str],
+) -> DeviceBenchmarkCase:
+    backend = cast(str, request.param)
+    if backend == "cpu":
+        functional = load_functional_cached("skala-1.1")
+        assert isinstance(functional, ExcFunctionalBase)
+        case = _make_benchmark_case(benchmark_spec, functional)
+        assert _should_screen_aos(case.mol)
+        return DeviceBenchmarkCase("cpu", case.mol, lambda: _run_xc(case), lambda: None)
+
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA is not available")
+    pytest.importorskip("cupy")
+    pytest.importorskip("gpu4pyscf")
+    functional = load_functional_cached("skala-1.1", device=torch.device("cuda:0"))
+    assert isinstance(functional, ExcFunctionalBase)
+    return _make_gpu_benchmark_case(benchmark_spec, functional)
 
 
 @pytest.fixture
@@ -198,26 +267,30 @@ def _benchmark_xc(benchmark: BenchmarkFixture, case: BenchmarkCase) -> None:
     )
 
 
-def _run_gpu_xc(spec: BenchmarkSpec, screened: bool) -> int:
-    from skala.gpu4pyscf import SkalaKS
+def _benchmark_device_xc(
+    benchmark: BenchmarkFixture, case: DeviceBenchmarkCase
+) -> None:
+    case.synchronize()
+    pedantic = cast(Callable[..., object], benchmark.pedantic)
+    pedantic(
+        case.run,
+        rounds=1,
+        iterations=2,
+    )
 
-    mol = gto.M(atom=spec.atoms, basis="def2-qzvpp", verbose=0)
+
+def _run_gpu_xc(spec: BenchmarkSpec, screened: bool) -> int:
     functional = load_functional("skala-1.1", device=torch.device("cuda:0"))
     assert isinstance(functional, ExcFunctionalBase)
-    ks = SkalaKS(mol, xc=functional, with_dftd3=False)
-    ks.grids.level = 1
-    ks.grids.alignment = 1
-    ks.grids.build(sort_grids=False)
-    dm = ks.get_init_guess()
+    case = _make_gpu_benchmark_case(spec, functional)
     if not screened:
-        pyscf_numint.SWITCH_SIZE = mol.nao_nr()
-    assert _should_screen_aos(mol) is screened
+        pyscf_numint.SWITCH_SIZE = 10**9
 
     torch.cuda.synchronize()
     torch.cuda.empty_cache()
     baseline_bytes = torch.cuda.memory_allocated()
     torch.cuda.reset_peak_memory_stats()
-    ks._numint.nr_rks(mol, ks.grids, None, dm, max_memory=MAX_MEMORY_MB)
+    case.run()
     torch.cuda.synchronize()
     return torch.cuda.max_memory_allocated() - baseline_bytes
 
@@ -294,23 +367,50 @@ def _measure_peak_memory(spec: BenchmarkSpec, screened: bool, backend: str) -> i
 
 @pytest.mark.profiling
 def test_screened_and_dense_values_agree(
-    benchmark_case: BenchmarkCase, monkeypatch: pytest.MonkeyPatch
+    device_benchmark_case: DeviceBenchmarkCase,
+    benchmark_spec: BenchmarkSpec,
+    load_functional_cached: Callable[..., ExcFunctionalBase | str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    assert _should_screen_aos(benchmark_case.mol)
-    screened = _run_xc(benchmark_case)
+    case = device_benchmark_case
+    assert _should_screen_aos(case.mol)
+    screened = case.run()
 
-    monkeypatch.setattr(pyscf_numint, "SWITCH_SIZE", benchmark_case.mol.nao_nr())
-    assert not _should_screen_aos(benchmark_case.mol)
-    dense = _run_xc(benchmark_case)
+    monkeypatch.setattr(pyscf_numint, "SWITCH_SIZE", case.mol.nao_nr())
+    assert not _should_screen_aos(case.mol)
+    if case.backend == "cpu":
+        dense = case.run()
+    else:
+        cpu_functional = load_functional_cached("skala-1.1", device=torch.device("cpu"))
+        assert isinstance(cpu_functional, ExcFunctionalBase)
+        dense = _run_xc(_make_benchmark_case(benchmark_spec, cpu_functional))
 
-    assert np.allclose(dense[0], screened[0], rtol=1e-10, atol=1e-11)
-    assert np.isclose(dense[1], screened[1], rtol=1e-10, atol=1e-11)
-    vxc_difference = dense[2] - screened[2]
+    scalar_rtol = 2e-10 if case.backend == "cpu" else 1e-8
+    density_close = np.allclose(dense[0], screened[0], rtol=scalar_rtol, atol=1e-11)
+    energy_close = np.isclose(dense[1], screened[1], rtol=scalar_rtol, atol=1e-10)
+    dense_vxc = (
+        dense[2]
+        if isinstance(dense[2], np.ndarray)
+        else from_dlpack(cast(Any, dense[2])).cpu().numpy()
+    )
+    screened_vxc = (
+        screened[2]
+        if isinstance(screened[2], np.ndarray)
+        else from_dlpack(cast(Any, screened[2])).cpu().numpy()
+    )
+    vxc_difference = dense_vxc - screened_vxc
     vxc_max_abs_difference = np.max(np.abs(vxc_difference))
     vxc_relative_l2_difference = np.linalg.norm(vxc_difference) / np.linalg.norm(
-        dense[2]
+        dense_vxc
     )
-    assert vxc_max_abs_difference < 5e-8 and vxc_relative_l2_difference < 1e-8, (
+    vxc_max_atol = 5e-8 if case.backend == "cpu" else 2e-7
+    vxc_relative_rtol = 1e-8 if case.backend == "cpu" else 1e-7
+    assert (
+        density_close
+        and energy_close
+        and vxc_max_abs_difference < vxc_max_atol
+        and vxc_relative_l2_difference < vxc_relative_rtol
+    ), (
         f"N: dense={dense[0]:.16g}, screened={screened[0]:.16g}, "
         f"abs_diff={abs(dense[0] - screened[0]):.3e}; "
         f"E_xc: dense={dense[1]:.16g}, screened={screened[1]:.16g}, "
@@ -332,6 +432,14 @@ def test_without_ao_screening_by_patching_threshold(
     benchmark: BenchmarkFixture, dense_case: BenchmarkCase
 ) -> None:
     _benchmark_xc(benchmark, dense_case)
+
+
+@pytest.mark.benchmark(group="device-def2-qzvpp-screened")
+def test_screened_runtime_by_device(
+    benchmark: BenchmarkFixture,
+    device_benchmark_case: DeviceBenchmarkCase,
+) -> None:
+    _benchmark_device_xc(benchmark, device_benchmark_case)
 
 
 @pytest.mark.profiling
@@ -371,13 +479,21 @@ def test_screened_and_dense_peak_memory(
 
 @pytest.mark.profiling
 def test_profile_with_natural_ao_screening(
-    screened_case: BenchmarkCase,
+    device_benchmark_case: DeviceBenchmarkCase,
 ) -> None:
-    _run_xc(screened_case)
+    assert _should_screen_aos(device_benchmark_case.mol)
+    device_benchmark_case.run()
 
 
 @pytest.mark.profiling
 def test_profile_without_ao_screening_by_patching_threshold(
-    dense_case: BenchmarkCase,
+    device_benchmark_case: DeviceBenchmarkCase,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _run_xc(dense_case)
+    monkeypatch.setattr(
+        pyscf_numint,
+        "SWITCH_SIZE",
+        device_benchmark_case.mol.nao_nr(),
+    )
+    assert not _should_screen_aos(device_benchmark_case.mol)
+    device_benchmark_case.run()
