@@ -300,6 +300,7 @@ def test_cpu_screening_slices_and_scatters_full_derivatives(
             self, *args: object, **kwargs: object
         ) -> Iterator[tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]:
             assert kwargs["non0tab"] is screen_index
+            assert "strict_grid_order" not in kwargs
             yield ao, screen_index, grids.weights, grids.coords
 
     monkeypatch.setattr(dft.numint, "NumInt", FakeNumInt)
@@ -461,12 +462,12 @@ def test_global_screened_ao_traversals_are_independent_of_model_chunks(
     def counting_forward_apply(*args: object) -> torch.Tensor:
         nonlocal forward_calls
         forward_calls += 1
-        return original_forward_apply(*args)
+        return original_forward_apply(*args)  # type: ignore[no-untyped-call]
 
     def counting_backward_apply(*args: object) -> torch.Tensor:
         nonlocal backward_calls
         backward_calls += 1
-        return original_backward_apply(*args)
+        return original_backward_apply(*args)  # type: ignore[no-untyped-call]
 
     monkeypatch.setattr(ChunkEvalForward, "apply", counting_forward_apply)
     monkeypatch.setattr(ChunkEvalBackward, "apply", counting_backward_apply)

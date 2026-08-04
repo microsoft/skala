@@ -556,7 +556,7 @@ def test_explicit_nuc_grad_feats_with_integer_features(mol_name: str) -> None:
 
     exc_test = TestFunc()
     # Explicitly pass all features including integer ones — should auto-discard them
-    veff, nuc_grad = veff_and_expl_nuc_grad(
+    _vexc, nuc_grad = veff_and_expl_nuc_grad(
         exc_test, mol, grid, rdm1, nuc_grad_feats=set(exc_test.features)
     )
     assert nuc_grad.shape == (mol.natm, 3)

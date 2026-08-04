@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator
 from copy import copy
 from dataclasses import dataclass
-from typing import Literal, TypeAlias
+from typing import TypeAlias
 
 import numpy as np
 import torch
@@ -43,9 +43,7 @@ _ATOMIC_GRID_FEATURES = {
     "atomic_grid_size_bound_shape",
 }
 
-_Float64Coordinates: TypeAlias = np.ndarray[
-    tuple[int, Literal[3]], np.dtype[np.float64]
-]
+_Float64Coordinates: TypeAlias = np.ndarray[tuple[int, int], np.dtype[np.float64]]
 _Int64Permutation: TypeAlias = np.ndarray[tuple[int], np.dtype[np.int64]]
 _SPATIAL_GRID_CACHE_ATTRIBUTE = "_skala_spatial_grid_cache"
 
@@ -883,6 +881,11 @@ class _AOBlockLoop:
         return matrix[..., self.unsort_idx, :][..., self.unsort_idx]
 
     def __iter__(self) -> Iterator[_AOBlock]:
+        block_loop_options: dict[str, bool] = {}
+        if self.gpu:
+            # GPU4PySCF otherwise omits zero-AO blocks, shifting all later grid slices.
+            block_loop_options["strict_grid_order"] = True
+
         end = 0
         for ao_block, mask, weights, _ in self.numint.block_loop(
             mol=self.mol,
@@ -891,6 +894,7 @@ class _AOBlockLoop:
             deriv=self.feature_function.deriv,
             blksize=self.blksize,
             non0tab=(None if self.gpu else getattr(self.grids, "non0tab", None)),
+            **block_loop_options,
         ):
             start, end = end, end + weights.size
             ao = from_numpy_or_cupy(

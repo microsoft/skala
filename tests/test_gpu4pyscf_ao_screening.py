@@ -31,6 +31,7 @@ from skala.pyscf.features import (  # noqa: E402
     ChunkEvalForward,
     MGGAFeatureFunction,
     _prepare_spatially_sorted_grids,
+    non_chunk,
 )
 from skala.pyscf.numint import SkalaNumInt  # noqa: E402
 
@@ -326,15 +327,66 @@ def test_gpu_screened_skala_matches_cpu_on_carbon_chain(
     )
 
 
+def test_gpu_empty_ao_block_matches_dense_reference() -> None:
+    """Preserve grid alignment when GPU4PySCF finds no AOs in a block.
+
+    GPU4PySCF normally omits fixed-size grid blocks whose screening mask contains
+    no active atomic orbitals. Skala assigns each yielded result to a cumulative
+    grid slice, so omitting an empty block would shift every later result into the
+    wrong positions. ``strict_grid_order=True`` makes the backend yield the empty
+    block and allows Skala to advance that slice before processing active blocks.
+
+    The first block is placed far from the molecule to make its active-AO set
+    empty, while the second block samples the molecular region. Comparing MGGA
+    features and their density-matrix VJP with dense AO evaluation verifies both
+    forward placement and backward slicing through the real GPU backend.
+    """
+    mol = gto.M(atom="C 0 0 0", basis="sto-3g", spin=2, verbose=0)
+    assert dft_gpu is not None
+    block_size = int(dft_gpu.numint.MIN_BLK_SIZE)
+    far_coords = cupy.full((block_size, 3), 100.0, dtype=cupy.float64)
+    near_coords = cupy.linspace(-0.5, 0.5, block_size * 3, dtype=cupy.float64).reshape(
+        block_size, 3
+    )
+    coords = cupy.concatenate((far_coords, near_coords))
+    grids = dft_gpu.Grids(mol)
+    grids.coords = coords
+    grids.weights = cupy.ones(coords.shape[0], dtype=cupy.float64)
+
+    screening_numint = dft_gpu.numint.NumInt().build(mol, coords)
+    active_ao_counts = [
+        len(block[1]) for block in grids.get_non0ao_idx(screening_numint.gdftopt)
+    ]
+    assert active_ao_counts[0] == 0
+    assert active_ao_counts[1] > 0
+    grids._non0ao_idx = None
+
+    feature_function = MGGAFeatureFunction(
+        with_density=True, with_grad=True, with_kin=True
+    )
+    dm = torch.eye(mol.nao_nr(), dtype=torch.float64, device="cuda", requires_grad=True)
+    screened = ChunkEvalForward.apply(  # type: ignore[no-untyped-call]
+        dm, mol, grids, feature_function, block_size, False, True
+    )
+    dense = non_chunk(dm, mol, coords, feature_function, gpu=True)
+
+    torch.testing.assert_close(screened, dense, rtol=1e-12, atol=1e-12)
+    (screened_vjp,) = torch.autograd.grad(screened.square().sum(), dm)
+    (dense_vjp,) = torch.autograd.grad(dense.square().sum(), dm)
+    torch.testing.assert_close(screened_vjp, dense_vjp, rtol=1e-12, atol=5e-8)
+
+
 def test_gpu_sparse_mask_sorts_scatters_and_unsorts(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     mol = gto.M(atom="C 0 0 0", basis="sto-3g", spin=2, verbose=0)
-    ngrids = 32
+    assert dft_gpu is not None
+    block_size = int(dft_gpu.numint.MIN_BLK_SIZE)
+    ngrids = 2 * block_size
     sort_idx = np.array([2, 0, 4, 1, 3])
     active_sorted_aos = np.array([0, 2, 4])
-    ao = cupy.arange(active_sorted_aos.size * ngrids, dtype=cupy.float64).reshape(
-        active_sorted_aos.size, ngrids
+    ao = cupy.arange(active_sorted_aos.size * block_size, dtype=cupy.float64).reshape(
+        active_sorted_aos.size, block_size
     )
     weights = cupy.ones(ngrids)
     coords = cupy.zeros((ngrids, 3))
@@ -348,9 +400,20 @@ def test_gpu_sparse_mask_sorts_scatters_and_unsorts(
         def block_loop(
             self, *args: object, **kwargs: object
         ) -> Iterator[tuple[object, object, object, object]]:
-            yield ao, cupy.asarray(active_sorted_aos), weights, coords
+            assert kwargs["strict_grid_order"] is True
+            yield (
+                cupy.empty((0, block_size), dtype=cupy.float64),
+                cupy.empty(0, dtype=cupy.int64),
+                weights[:block_size],
+                coords[:block_size],
+            )
+            yield (
+                ao,
+                cupy.asarray(active_sorted_aos),
+                weights[block_size:],
+                coords[block_size:],
+            )
 
-    assert dft_gpu is not None
     monkeypatch.setattr(dft_gpu.numint, "NumInt", FakeGpuNumInt)
 
     feature_function = MGGAFeatureFunction(
@@ -368,7 +431,10 @@ def test_gpu_sparse_mask_sorts_scatters_and_unsorts(
     dm_sorted = dm[..., sort_idx_t, :][..., sort_idx_t]
     dm_active = dm_sorted[..., active_t[:, None], active_t[None, :]]
     ao_t = from_dlpack(ao)
-    expected = torch.sum((dm_active @ ao_t) * ao_t, dim=0).unsqueeze(0)
+    expected = torch.zeros_like(features)
+    expected[..., block_size:] = torch.sum((dm_active @ ao_t) * ao_t, dim=0).unsqueeze(
+        0
+    )
     assert torch.allclose(features, expected)
 
     energy = features.square().sum()

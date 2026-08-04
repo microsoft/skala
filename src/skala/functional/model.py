@@ -9,7 +9,7 @@ layers and symmetric contraction for higher-order body correlations.
 """
 
 import math
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 import torch
 from e3nn import o3
@@ -57,7 +57,7 @@ def _prepare_features_raw(
 class SemiLocalFeatures(nn.Module):
     """Compute semi-local (ab, ba) feature pairs with a pre-buffered permutation index."""
 
-    _PERM = [1, 0, 3, 2, 5, 4, 6]
+    _PERM: ClassVar[list[int]] = [1, 0, 3, 2, 5, 4, 6]
     _feature_perm: torch.Tensor
 
     def __init__(self) -> None:
@@ -912,7 +912,7 @@ def _o3_linear_codegen(
         for i_in, i_out in instr
     ]
 
-    outs: list[Any] = list()
+    outs: list[Any] = []
     for (i_in, i_out), w in zip(instr, weights, strict=True):
         x1_i = x1[:, slices[0][i_in][0] : slices[0][i_in][1]]  # type: ignore
         outs.append(
