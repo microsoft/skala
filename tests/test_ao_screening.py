@@ -436,9 +436,6 @@ def test_cpu_response_dense_screened_equivalence(
     assert np.allclose(
         dense_response(dm1), screened_response(dm1), rtol=1e-10, atol=1e-11
     )
-    assert np.allclose(
-        dense_response(dm1), screened_response(dm1), rtol=1e-10, atol=1e-11
-    )
 
 
 @pytest.mark.parametrize("func_deriv", [1, 2])

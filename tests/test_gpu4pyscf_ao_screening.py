@@ -187,12 +187,6 @@ def test_gpu_response_dense_screened_equivalence(
         rtol=1e-9,
         atol=1e-10,
     )
-    assert np.allclose(
-        _to_numpy(dense_response(dm1)),
-        _to_numpy(screened_response(dm1)),
-        rtol=1e-9,
-        atol=1e-10,
-    )
 
 
 def test_gpu_uks_response_dense_screened_equivalence(

@@ -421,7 +421,7 @@ class SkalaNumInt(PySCFNumInt[Array]):
                         mol_features,
                     )
 
-                # Restore box order after all chunk-local Hessian actions are detached.
+                # Restore block order after all chunk-local Hessian actions are detached.
                 sorted_hessian_action = atom_major_hessian_action.index_select(
                     -1, screened_features.forward_permutation
                 )
