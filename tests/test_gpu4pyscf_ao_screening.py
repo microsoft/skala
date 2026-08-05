@@ -28,9 +28,9 @@ from skala.functional.base import ExcFunctionalBase  # noqa: E402
 from skala.gpu4pyscf import SkalaKS  # noqa: E402
 from skala.pyscf.backend import dft_gpu  # noqa: E402
 from skala.pyscf.evaluation import FeatureSpec  # noqa: E402
+from skala.pyscf.feature_math import MGGAFeatureFunction  # noqa: E402
 from skala.pyscf.features import (  # noqa: E402
     ChunkEvalForward,
-    MGGAFeatureFunction,
     _prepare_spatially_sorted_grids,
     non_chunk,
 )

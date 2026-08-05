@@ -10,10 +10,10 @@ from skala.functional.base import ExcFunctionalBase
 from skala.pyscf import features as features_module
 from skala.pyscf import numint as numint_module
 from skala.pyscf.evaluation import FeatureSpec
+from skala.pyscf.feature_math import MGGAFeatureFunction
 from skala.pyscf.features import (
     ChunkEvalBackward,
     ChunkEvalForward,
-    MGGAFeatureFunction,
     _active_cpu_aos,
     _AOBlock,
     _evaluate_feature_block,

@@ -5,7 +5,6 @@ Methods for generating and manipulating density features.
 """
 
 import logging
-from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator
 from copy import copy
 from dataclasses import dataclass
@@ -14,10 +13,11 @@ from typing import TypeAlias
 import numpy as np
 import torch
 from pyscf import dft, gto
-from torch import Tensor, nn
+from torch import Tensor
 from torch.autograd import Function
 from torch.autograd.function import FunctionCtx
 
+from skala.pyscf import feature_math
 from skala.pyscf.backend import (
     Array,
     Grid,
@@ -204,18 +204,6 @@ def _prepare_spatially_sorted_grids(
     return sorted_grids, forward, inverse
 
 
-def maybe_expand_and_divide(
-    feature: torch.Tensor, expand: bool, divisor: float
-) -> torch.Tensor:
-    """
-    Expand feature along spin channels and divide its value by divisor if expand is True.
-    """
-    if expand:
-        return torch.stack([feature / divisor, feature / divisor], dim=0)
-    else:
-        return feature
-
-
 def make_chunks(
     atomic_grid_sizes: Tensor, max_grid_chunk_size: int
 ) -> list[tuple[slice, slice]]:
@@ -317,7 +305,7 @@ def generate_features(
             dm,
             mol,
             grids,
-            MGGAFeatureFunction(feature_spec),
+            feature_math.MGGAFeatureFunction(feature_spec),
             block_size=evaluation_policy.ao_block_size,
             max_memory=max_memory,
             fix_block_size=evaluation_policy.ao_block_size is None,
@@ -325,7 +313,7 @@ def generate_features(
         )
 
         for feature in mgga_features:
-            mol_features[feature] = maybe_expand_and_divide(
+            mol_features[feature] = feature_math.maybe_expand_and_divide(
                 mgga_features[feature], not with_spin, 2
             )
 
@@ -393,10 +381,6 @@ def get_grid_features(
     return grid_features
 
 
-def is_density_feature(feature: str) -> bool:
-    return feature in {"density", "grad", "kin"}
-
-
 def partial_feature_function_over_aos(
     feature_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
     ao: torch.Tensor,
@@ -428,111 +412,6 @@ def partial_vjp_function_over_tangents(
     return reduced_vjp
 
 
-class FeatureFunction(nn.Module, ABC):
-    deriv: int
-    nfeats: int
-
-    @abstractmethod
-    def forward(self, dm: torch.Tensor, ao: torch.Tensor) -> torch.Tensor: ...
-
-    @abstractmethod
-    def to_dict(self, features: torch.Tensor) -> dict[str, torch.Tensor]: ...
-
-
-class MGGAFeatureFunction(FeatureFunction):
-    def __init__(self, feature_spec: FeatureSpec):
-        super().__init__()
-
-        if not feature_spec.requires_mgga:
-            raise ValueError("At least one feature must be selected.")
-        self.feature_spec = feature_spec
-        self.deriv = feature_spec.ao_derivative_order
-        self.nfeats = feature_spec.mgga_feature_count
-
-    def to_dict(self, features: torch.Tensor) -> dict[str, torch.Tensor]:
-        """Convert the features to a dictionary with the keys being the feature names."""
-        feature_index = 0
-        feature_dict: dict[str, torch.Tensor] = {}
-        if self.feature_spec.with_density:
-            feature_dict["density"] = features[..., feature_index, :]
-            feature_index += 1
-        if self.feature_spec.with_grad:
-            feature_dict["grad"] = features[..., feature_index : feature_index + 3, :]
-            feature_index += 3
-        if self.feature_spec.with_kin:
-            feature_dict["kin"] = features[..., feature_index, :]
-            feature_index += 1
-        if self.feature_spec.with_lapl:
-            feature_dict["lapl"] = features[..., feature_index, :]
-            feature_index += 1
-        return feature_dict
-
-    def forward(self, dm: torch.Tensor, ao: torch.Tensor) -> torch.Tensor:
-        # Flatten all but the last two dimensions
-        # then restore the original shape at the end
-        dm_view = dm.view(-1, dm.shape[-2], dm.shape[-1])
-        # Explicit symmetrization for autodiff
-        dm_view = 0.5 * (dm_view + dm_view.transpose(-1, -2))
-
-        features = torch.zeros(
-            (dm_view.shape[0], self.nfeats, ao.shape[-1]),
-            device=dm.device,
-            dtype=dm.dtype,
-        )
-
-        # Handle the density only case, where ao has one dim less
-        if self.deriv == 0:
-            c0 = dm_view @ ao
-            features[..., 0, :] = torch.sum(c0 * ao[None, :, :], dim=-2)
-            if len(dm.shape) == 2:
-                return features.reshape((self.nfeats, -1))
-            else:
-                return features.reshape((*dm.shape[:-2], self.nfeats, -1))
-
-        c0 = dm_view @ ao[0]
-
-        feat_idx = 0
-        if self.feature_spec.with_density:
-            features[..., feat_idx, :] = torch.sum(c0 * ao[0][None, :, :], dim=-2)
-            feat_idx += 1
-
-        if self.feature_spec.with_grad:
-            for i in range(3):
-                features[..., feat_idx, :] = 2 * torch.sum(
-                    c0 * ao[i + 1][None, :, :], dim=-2
-                )
-                feat_idx += 1
-
-        if self.feature_spec.with_kin or self.feature_spec.with_lapl:
-            for i in range(3):
-                ci = dm_view @ ao[i + 1]
-                features[..., feat_idx, :] += 0.5 * torch.sum(
-                    ci * ao[i + 1][None, :, :], dim=-2
-                )
-
-            if self.feature_spec.with_kin:
-                feat_idx += 1
-                if self.feature_spec.with_lapl:
-                    features[..., feat_idx, :] = 4 * features[..., feat_idx - 1, :]
-            else:
-                # Multiply times four for the laplacian
-                features[..., feat_idx, :] *= 4.0
-
-            if self.feature_spec.with_lapl:
-                # 0 is without derivative
-                # 1 2 3 are x y z derivatives
-                # 4 5 6 are xx xy xz derivatives
-                # 7 8 9 are yy yz zz derivatives
-                for i in (4, 7, 9):
-                    features[..., feat_idx, :] += 2 * torch.sum(
-                        c0 * ao[i][None, :, :], dim=-2
-                    )
-        if len(dm.shape) == 2:
-            return features.reshape((self.nfeats, -1))
-        else:
-            return features.reshape((*dm.shape[:-2], self.nfeats, -1))
-
-
 @dataclass
 class _GlobalScreenedFeatures:
     dm: Tensor
@@ -542,7 +421,7 @@ class _GlobalScreenedFeatures:
     atom_major_raw_features: Tensor
     forward_permutation: Tensor
     inverse_permutation: Tensor
-    feature_function: MGGAFeatureFunction
+    feature_function: feature_math.MGGAFeatureFunction
     block_size: int
     compile_feature_function: bool
     gpu: bool
@@ -597,7 +476,7 @@ class _GlobalScreenedFeatures:
         for feature_name, feature in self.feature_function.to_dict(
             raw_features
         ).items():
-            feature_chunk[feature_name] = maybe_expand_and_divide(
+            feature_chunk[feature_name] = feature_math.maybe_expand_and_divide(
                 feature, not self.with_spin, 2
             )
         return feature_chunk
@@ -624,7 +503,7 @@ def _global_screened_features(
     if grids.coords is None or grids.weights is None:
         raise ValueError("Grids must be built before generating screened features.")
 
-    feature_function = MGGAFeatureFunction(feature_spec)
+    feature_function = feature_math.MGGAFeatureFunction(feature_spec)
     grid_features = get_grid_features(mol, dm, grids, feature_spec)
     max_grid_chunk_size = estimate_max_grid_chunk_size(
         dm=dm,
@@ -709,7 +588,7 @@ class _AOBlock:
 
 
 def _evaluate_feature_block(
-    feature_function: FeatureFunction,
+    feature_function: feature_math.FeatureFunction,
     block: _AOBlock,
     active_dm: Tensor,
     compile_feature_function: bool,
@@ -733,7 +612,7 @@ class _AOBlockLoop:
         dm: Tensor,
         mol: gto.Mole,
         grids: Grid,
-        feature_function: FeatureFunction,
+        feature_function: feature_math.FeatureFunction,
         blksize: int | None,
         gpu: bool,
     ) -> None:
@@ -822,7 +701,7 @@ class ChunkEvalForward(Function):
             torch.Tensor,
             gto.Mole,
             Grid,
-            FeatureFunction,
+            feature_math.FeatureFunction,
             int | None,
             int,
             bool,
@@ -848,7 +727,7 @@ class ChunkEvalForward(Function):
         dm: torch.Tensor,
         mol: gto.Mole,
         grids: Grid,
-        feature_function: FeatureFunction,
+        feature_function: feature_math.FeatureFunction,
         blksize: int | None,
         compile_feature_function: bool,
         gpu: bool,
@@ -969,7 +848,7 @@ class ChunkEvalBackward(Function):
             torch.Tensor,
             gto.Mole,
             Grid,
-            FeatureFunction,
+            feature_math.FeatureFunction,
             int | None,
             bool,
             bool,
@@ -994,7 +873,7 @@ class ChunkEvalBackward(Function):
         dm: torch.Tensor,
         mol: gto.Mole,
         grids: Grid,
-        feature_function: FeatureFunction,
+        feature_function: feature_math.FeatureFunction,
         blksize: int | None,
         compile_feature_function: bool,
         gpu: bool,
@@ -1064,7 +943,7 @@ def non_chunk(
     dm: torch.Tensor,
     mol: gto.Mole,
     coords: Array,
-    feature_function: FeatureFunction,
+    feature_function: feature_math.FeatureFunction,
     compile_feature_function: bool = False,
     gpu: bool = False,
 ) -> torch.Tensor:
@@ -1089,7 +968,7 @@ def auto_chunk(
     dm: torch.Tensor,
     mol: gto.Mole,
     grids: Grid,
-    feature_function: FeatureFunction,
+    feature_function: feature_math.FeatureFunction,
     block_size: int | None = None,
     max_memory: int = 2000,
     fix_block_size: bool = True,
