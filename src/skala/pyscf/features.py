@@ -463,7 +463,6 @@ def partial_vjp_function_over_tangents(
 class FeatureFunction(nn.Module, ABC):
     deriv: int
     nfeats: int
-    only_linear_feats: bool
 
     @abstractmethod
     def forward(self, dm: torch.Tensor, ao: torch.Tensor) -> torch.Tensor: ...
@@ -477,8 +476,6 @@ class MGGAFeatureFunction(FeatureFunction):
     with_grad: bool
     with_kin: bool
     with_lapl: bool
-    with_ked_var: bool
-    with_ked_det: bool
 
     def __init__(
         self,
@@ -486,8 +483,6 @@ class MGGAFeatureFunction(FeatureFunction):
         with_grad: bool = True,
         with_kin: bool = True,
         with_lapl: bool = False,
-        with_ked_var: bool = False,
-        with_ked_det: bool = False,
     ):
         super().__init__()
 
@@ -495,28 +490,17 @@ class MGGAFeatureFunction(FeatureFunction):
         self.with_grad = with_grad
         self.with_kin = with_kin
         self.with_lapl = with_lapl
-        self.with_ked_var = with_ked_var
-        self.with_ked_det = with_ked_det
 
         self.deriv = 0
-        if with_grad or with_kin or with_ked_var or with_ked_det:
+        if with_grad or with_kin:
             self.deriv = 1
         if with_lapl:
             self.deriv = 2
 
-        self.nfeats = (
-            with_density
-            + with_grad * 3
-            + with_kin
-            + with_lapl
-            + with_ked_var
-            + with_ked_det
-        )
+        self.nfeats = with_density + with_grad * 3 + with_kin + with_lapl
 
         if self.nfeats == 0:
             raise ValueError("At least one feature must be selected.")
-
-        self.only_linear_feats = not (with_ked_var or with_ked_det)
 
     def to_dict(self, features: torch.Tensor) -> dict[str, torch.Tensor]:
         """Convert the features to a dictionary with the keys being the feature names."""
@@ -534,17 +518,9 @@ class MGGAFeatureFunction(FeatureFunction):
         if self.with_lapl:
             feature_dict["lapl"] = features[..., feature_index, :]
             feature_index += 1
-        if self.with_ked_var:
-            feature_dict["ked_var"] = features[..., feature_index, :]
-            feature_index += 1
-        if self.with_ked_det:
-            feature_dict["ked_det"] = features[..., feature_index, :]
-            feature_index += 1
         return feature_dict
 
     def forward(self, dm: torch.Tensor, ao: torch.Tensor) -> torch.Tensor:
-        with_Q: bool = self.with_ked_var or self.with_ked_det
-
         # Flatten all but the last two dimensions
         # then restore the original shape at the end
         dm_view = dm.view(-1, dm.shape[-2], dm.shape[-1])
@@ -580,7 +556,7 @@ class MGGAFeatureFunction(FeatureFunction):
                 )
                 feat_idx += 1
 
-        if (self.with_kin or self.with_lapl) and not with_Q:
+        if self.with_kin or self.with_lapl:
             for i in range(3):
                 ci = dm_view @ ao[i + 1]
                 features[..., feat_idx, :] += 0.5 * torch.sum(
@@ -604,52 +580,6 @@ class MGGAFeatureFunction(FeatureFunction):
                     features[..., feat_idx, :] += 2 * torch.sum(
                         c0 * ao[i][None, :, :], dim=-2
                     )
-
-        if with_Q:
-            Q = torch.zeros(
-                (dm_view.shape[0], ao.shape[-1], 3, 3), device=dm.device, dtype=dm.dtype
-            )
-
-            for i in range(3):
-                ci = dm_view @ ao[i + 1]
-                for j in range(i, 3):
-                    Q = torch.sum(ci * ao[j + 1][None, :, :], dim=-2)
-
-            if self.with_kin:
-                features[..., feat_idx, :] = 0.5 * torch.einsum("...ii->...", Q)
-                feat_idx += 1
-
-            if self.with_lapl:
-                features[..., feat_idx, :] = 2 * torch.einsum("...ii->...", Q)
-                # 0 is without derivative
-                # 1 2 3 are x y z derivatives
-                # 4 5 6 are xx xy xz derivatives
-                # 7 8 9 are yy yz zz derivatives
-                for i in (4, 7, 9):
-                    features[..., feat_idx, :] += 2 * torch.sum(
-                        c0 * ao[i][None, :, :], dim=-2
-                    )
-                feat_idx += 1
-
-            if self.with_ked_var:
-                if not self.with_kin:
-                    trace = torch.einsum("...ii->...", Q)
-                else:
-                    trace = 2 * features[:, feat_idx - 1, :]
-                features[..., feat_idx, :] = 0.5 * torch.sum(
-                    (
-                        trace[:, None, None]
-                        * torch.eye(3, device=dm.device, dtype=dm.dtype)[None, :, :]
-                        - Q
-                    )
-                    ** 2,
-                    dim=(-2, -1),
-                )
-                feat_idx += 1
-
-            if self.with_ked_det:
-                features[..., feat_idx, :] = torch.det(Q)
-                feat_idx += 1
         if len(dm.shape) == 2:
             return features.reshape((self.nfeats, -1))
         else:
@@ -676,11 +606,6 @@ class _GlobalScreenedFeatures:
 
     def atom_major_jvp(self, dm_tangent: Tensor) -> Tensor:
         """Apply the global raw-feature Jacobian and restore atom-major order."""
-        if not self.feature_function.only_linear_feats:
-            raise NotImplementedError(
-                "Global screened response requires raw features linear in the density "
-                "matrix."
-            )
         sorted_tangent = ChunkEvalForward.apply(
             self.dm,
             self.mol,
@@ -977,7 +902,8 @@ class ChunkEvalForward(Function):
             device=dm.device,
             dtype=dm.dtype,
         )
-        if len(vectors_jvp) > 1 and feature_function.only_linear_feats:
+        # Raw AO features are linear in dm, so derivatives above first order vanish.
+        if len(vectors_jvp) > 1:
             return features
 
         for block in block_loop:
@@ -1122,7 +1048,8 @@ class ChunkEvalBackward(Function):
         ]
 
         out = torch.zeros_like(dm)
-        if len(vectors) > 1 and feature_function.only_linear_feats:
+        # Raw AO features are linear in dm, so derivatives above first order vanish.
+        if len(vectors) > 1:
             return out
 
         for block in block_loop:

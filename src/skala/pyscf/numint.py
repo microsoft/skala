@@ -372,11 +372,6 @@ class SkalaNumInt(PySCFNumInt[Array]):
                 max_memory_in_mb=ks.max_memory if dm0.device.type == "cpu" else None,
                 safety_fraction=kwargs.get("safety_fraction", 0.8),
             )
-            if not screened_features.feature_function.only_linear_feats:
-                raise NotImplementedError(
-                    "Global screened response requires raw features linear in "
-                    "the density matrix."
-                )
 
             def hessian_vector_product_atom_chunked(dm1: Array) -> Array:
                 dm1_tensor = self.from_backend(dm1)

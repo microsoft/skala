@@ -26,6 +26,123 @@ def carbon() -> gto.Mole:
 
 
 @pytest.mark.parametrize(
+    ("options", "expected_deriv", "expected_nfeats", "expected_names"),
+    [
+        (
+            {
+                "with_density": True,
+                "with_grad": False,
+                "with_kin": False,
+                "with_lapl": False,
+            },
+            0,
+            1,
+            {"density"},
+        ),
+        (
+            {
+                "with_density": False,
+                "with_grad": True,
+                "with_kin": False,
+                "with_lapl": False,
+            },
+            1,
+            3,
+            {"grad"},
+        ),
+        (
+            {
+                "with_density": False,
+                "with_grad": False,
+                "with_kin": True,
+                "with_lapl": False,
+            },
+            1,
+            1,
+            {"kin"},
+        ),
+        (
+            {
+                "with_density": False,
+                "with_grad": False,
+                "with_kin": False,
+                "with_lapl": True,
+            },
+            2,
+            1,
+            {"lapl"},
+        ),
+        (
+            {
+                "with_density": True,
+                "with_grad": True,
+                "with_kin": True,
+                "with_lapl": True,
+            },
+            2,
+            6,
+            {"density", "grad", "kin", "lapl"},
+        ),
+    ],
+)
+def test_mgga_supported_features_are_linear_in_density_matrix(
+    options: dict[str, bool],
+    expected_deriv: int,
+    expected_nfeats: int,
+    expected_names: set[str],
+) -> None:
+    """Check each supported feature layout and its linear dependence on ``dm``.
+
+    Linearity requires the first JVP to equal direct feature evaluation on the
+    tangent and the second JVP to vanish.
+    """
+    feature_function = MGGAFeatureFunction(**options)
+    ncomp = (expected_deriv + 1) * (expected_deriv + 2) * (expected_deriv + 3) // 6
+    ao = torch.arange(1, ncomp * 2 * 3 + 1, dtype=torch.float64).reshape(ncomp, 2, 3)
+    if expected_deriv == 0:
+        ao = ao[0]
+    dm = torch.tensor([[2.0, 0.5], [0.5, 1.0]], dtype=torch.float64)
+    tangent = torch.tensor([[0.2, -0.1], [-0.1, 0.3]], dtype=torch.float64)
+
+    features = feature_function(dm, ao)
+    _, feature_jvp = torch.func.jvp(
+        lambda value: feature_function(value, ao),
+        (dm,),
+        (tangent,),
+    )
+
+    def first_jvp(value: torch.Tensor) -> torch.Tensor:
+        return torch.func.jvp(
+            lambda inner: feature_function(inner, ao),
+            (value,),
+            (tangent,),
+        )[1]
+
+    _, second_jvp = torch.func.jvp(
+        first_jvp,
+        (dm,),
+        (torch.ones_like(dm),),
+    )
+
+    assert feature_function.deriv == expected_deriv
+    assert feature_function.nfeats == expected_nfeats
+    assert features.shape == (expected_nfeats, 3)
+    assert set(feature_function.to_dict(features)) == expected_names
+    torch.testing.assert_close(feature_jvp, feature_function(tangent, ao))
+    torch.testing.assert_close(second_jvp, torch.zeros_like(second_jvp))
+
+
+def test_mgga_requires_at_least_one_feature() -> None:
+    with pytest.raises(ValueError, match="At least one feature must be selected"):
+        MGGAFeatureFunction(
+            with_density=False,
+            with_grad=False,
+            with_kin=False,
+            with_lapl=False,
+        )
+
+
+@pytest.mark.parametrize(
     ("switch_offset", "expected"), [(1, False), (0, False), (-1, True)]
 )
 def test_should_screen_aos_at_crossover(
