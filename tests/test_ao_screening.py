@@ -23,8 +23,9 @@ from skala.pyscf.feature_math import MGGAFeatureFunction
 from skala.pyscf.model_chunking import ModelFeatureChunk
 from skala.pyscf.numint import SkalaNumInt, _should_screen_aos
 from skala.pyscf.screening import (
+    SpatialGridLayout,
     _decompose_grid_into_spatial_blocks,
-    _prepare_spatially_sorted_grids,
+    prepare_spatial_grid_layout,
 )
 
 
@@ -211,14 +212,15 @@ def test_prepare_spatially_sorted_cpu_grids(
     inverse = np.argsort(forward)
     non0tab = np.ones((1, carbon.nbas), dtype=np.uint8)
     partition_calls = 0
+    decomposition_block_sizes: list[int] = []
 
     def fake_decompose_grid_into_spatial_blocks(
         coords_arg: np.ndarray, block_size: int
     ) -> tuple[np.ndarray, np.ndarray]:
         nonlocal partition_calls
         partition_calls += 1
+        decomposition_block_sizes.append(block_size)
         assert coords_arg is grids.coords
-        assert block_size == 2
         return forward, inverse
 
     monkeypatch.setattr(
@@ -228,22 +230,23 @@ def test_prepare_spatially_sorted_cpu_grids(
     )
 
     screen_index_calls = 0
+    screened_molecules: list[gto.Mole] = []
 
     def fake_make_screen_index(
         mol_arg: gto.Mole, sorted_coords: np.ndarray, cutoff: float
     ) -> np.ndarray:
         nonlocal screen_index_calls
         screen_index_calls += 1
-        assert mol_arg is carbon
+        screened_molecules.append(mol_arg)
         assert np.array_equal(sorted_coords, coords[forward])
         assert cutoff == grids.cutoff
         return non0tab
 
     monkeypatch.setattr(dft.gen_grid, "make_screen_index", fake_make_screen_index)
 
-    sorted_grids, actual_forward, actual_inverse = _prepare_spatially_sorted_grids(
-        carbon, grids, block_size=2, gpu=False
-    )
+    device = torch.device("cpu")
+    layout = prepare_spatial_grid_layout(carbon, grids, block_size=2, device=device)
+    sorted_grids = layout.sorted_grids
 
     assert sorted_grids is not grids
     assert np.array_equal(grids.coords, coords)
@@ -251,27 +254,17 @@ def test_prepare_spatially_sorted_cpu_grids(
     assert np.array_equal(sorted_grids.coords, coords[forward])
     assert np.array_equal(sorted_grids.weights, weights[forward])
     assert sorted_grids.non0tab is non0tab
-    assert actual_forward is forward
-    assert actual_inverse is inverse
-
-    cached_grids, cached_forward, cached_inverse = _prepare_spatially_sorted_grids(
-        carbon, grids, block_size=2, gpu=False
+    torch.testing.assert_close(
+        layout.forward_permutation, torch.as_tensor(forward, device=device)
     )
-
-    assert cached_grids is sorted_grids
-    assert cached_forward is forward
-    assert cached_inverse is inverse
+    torch.testing.assert_close(
+        layout.inverse_permutation, torch.as_tensor(inverse, device=device)
+    )
     assert partition_calls == 1
     assert screen_index_calls == 1
-
-    grids.coords = grids.coords.copy()
-    rebuilt_grids, _, _ = _prepare_spatially_sorted_grids(
-        carbon, grids, block_size=2, gpu=False
-    )
-
-    assert rebuilt_grids is not sorted_grids
-    assert partition_calls == 2
-    assert screen_index_calls == 2
+    assert decomposition_block_sizes == [2]
+    assert screened_molecules == [carbon]
+    assert not hasattr(grids, "_skala_spatial_grid_layout")
 
 
 class QuadraticDensityFunctional(ExcFunctionalBase):
@@ -281,6 +274,54 @@ class QuadraticDensityFunctional(ExcFunctionalBase):
 
     def get_exc(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
         return (mol["density"].square() * mol["grid_weights"]).sum()
+
+
+def test_grid_reuses_spatial_grid_layout_across_numints(
+    carbon: gto.Mole, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    grids = dft.Grids(carbon)
+    grids.coords = np.arange(18, dtype=np.float64).reshape(6, 3)
+    grids.weights = np.arange(6, dtype=np.float64)
+    other_grids = dft.Grids(carbon)
+    other_grids.coords = grids.coords.copy()
+    other_grids.weights = grids.weights.copy()
+    layouts: list[SpatialGridLayout] = []
+
+    def fake_prepare_spatial_grid_layout(
+        mol: gto.Mole,
+        grids: object,
+        block_size: int,
+        device: torch.device,
+    ) -> SpatialGridLayout:
+        layout = SpatialGridLayout(
+            block_size=block_size,
+            sorted_grids=grids,
+            forward_permutation=torch.arange(6, device=device),
+            inverse_permutation=torch.arange(6, device=device),
+        )
+        layouts.append(layout)
+        return layout
+
+    monkeypatch.setattr(
+        numint_module,
+        "prepare_spatial_grid_layout",
+        fake_prepare_spatial_grid_layout,
+    )
+    numint = SkalaNumInt(QuadraticDensityFunctional())
+    other_numint = SkalaNumInt(QuadraticDensityFunctional())
+
+    layout = numint._get_spatial_grid_layout(carbon, grids)
+    assert other_numint._get_spatial_grid_layout(carbon, grids) is layout
+    assert vars(grids)["_skala_spatial_grid_layout"] is layout
+    assert len(layouts) == 1
+
+    numint.reset()
+    assert numint._get_spatial_grid_layout(carbon, grids) is layout
+
+    other_layout = numint._get_spatial_grid_layout(carbon, other_grids)
+    assert other_layout is not layout
+    assert vars(other_grids)["_skala_spatial_grid_layout"] is other_layout
+    assert len(layouts) == 2
 
 
 class FakeKS:
@@ -294,6 +335,19 @@ class FakeKS:
 
     def get_j(self, mol: gto.Mole, dm: np.ndarray, hermi: int) -> np.ndarray:
         return np.zeros_like(dm)
+
+
+def test_call_rejects_second_order_evaluation(carbon: gto.Mole) -> None:
+    numint = SkalaNumInt(QuadraticDensityFunctional())
+
+    with pytest.raises(NotImplementedError, match="second-order evaluation"):
+        numint(
+            carbon,
+            dft.Grids(carbon),
+            None,
+            torch.eye(carbon.nao_nr(), dtype=torch.float64),
+            second_order=True,
+        )
 
 
 @pytest.mark.parametrize("expected", [False, True])
@@ -324,16 +378,13 @@ def test_first_and_second_order_use_same_screening_decision(
             "grid_weights": torch.ones(1, dtype=dm.dtype),
         }
 
-    class FakeScreenedFeatureBuffer:
-        def __init__(self, dm: torch.Tensor) -> None:
-            raw_features = dm.sum().reshape(1, 1)
-            self.feature_function = MGGAFeatureFunction(FeatureSpec(["density"]))
-            self.sorted_raw_features = raw_features
-            self.atom_major_raw_features = raw_features
-            self.forward_permutation = torch.tensor([0])
+    class FakeSpatialGridLayout:
+        block_size = 1
+        forward_permutation = torch.tensor([0])
+        inverse_permutation = torch.tensor([0])
 
-        def atom_major_jvp(self, dm_tangent: torch.Tensor) -> torch.Tensor:
-            return dm_tangent.sum().reshape(1, 1)
+        def __init__(self, sorted_grids: object) -> None:
+            self.sorted_grids = sorted_grids
 
     class FakeModelFeatureChunks:
         def __init__(self, raw_features: torch.Tensor) -> None:
@@ -351,15 +402,29 @@ def test_first_and_second_order_use_same_screening_decision(
                 },
             )
 
-    def fake_prepare_screened_feature_buffer(
+    def fake_prepare_spatial_grid_layout(
         mol: gto.Mole,
-        dm: torch.Tensor,
         grids: object,
-        features: set[str],
-        **kwargs: object,
-    ) -> FakeScreenedFeatureBuffer:
+        block_size: int,
+        device: torch.device,
+    ) -> FakeSpatialGridLayout:
+        return FakeSpatialGridLayout(grids)
+
+    def fake_chunk_eval_forward(
+        dm: torch.Tensor,
+        *args: object,
+    ) -> torch.Tensor:
         routes.append("screened")
-        return FakeScreenedFeatureBuffer(dm)
+        return dm.sum().reshape(1, 1)
+
+    def fake_screened_feature_jvp(
+        dm: torch.Tensor,
+        dm_tangent: torch.Tensor,
+        mol: gto.Mole,
+        spatial_grid_layout: object,
+        feature_function: MGGAFeatureFunction,
+    ) -> torch.Tensor:
+        return dm_tangent.sum().reshape(1, 1)
 
     def fake_prepare_model_feature_chunks(
         mol: gto.Mole,
@@ -378,13 +443,23 @@ def test_first_and_second_order_use_same_screening_decision(
     monkeypatch.setattr(numint_module, "generate_features", fake_generate_features)
     monkeypatch.setattr(
         numint_module,
-        "prepare_screened_feature_buffer",
-        fake_prepare_screened_feature_buffer,
+        "prepare_spatial_grid_layout",
+        fake_prepare_spatial_grid_layout,
+    )
+    monkeypatch.setattr(
+        ChunkEvalForward,
+        "apply",
+        staticmethod(fake_chunk_eval_forward),
     )
     monkeypatch.setattr(
         numint_module,
         "prepare_model_feature_chunks",
         fake_prepare_model_feature_chunks,
+    )
+    monkeypatch.setattr(
+        numint_module,
+        "screened_feature_jvp",
+        fake_screened_feature_jvp,
     )
     numint = SkalaNumInt(QuadraticDensityFunctional())
     dm = torch.eye(carbon.nao_nr(), dtype=torch.float64)
@@ -589,6 +664,21 @@ def _minimal_atom_grid(mol: gto.Mole) -> dft.Grids:
     grids.level = 0
     grids.alignment = 1
     return grids.build(sort_grids=False)
+
+
+def test_numint_reset_does_not_clear_grid_spatial_layout(carbon: gto.Mole) -> None:
+    numint = SkalaNumInt(QuadraticDensityFunctional())
+    grids = _minimal_atom_grid(carbon)
+    spatial_grid_layout = prepare_spatial_grid_layout(
+        carbon,
+        grids,
+        block_size=dft.gen_grid.BLKSIZE,
+        device=torch.device("cpu"),
+    )
+    vars(grids)["_skala_spatial_grid_layout"] = spatial_grid_layout
+
+    assert numint.reset() is numint
+    assert vars(grids)["_skala_spatial_grid_layout"] is spatial_grid_layout
 
 
 @pytest.mark.parametrize("unrestricted", [False, True])

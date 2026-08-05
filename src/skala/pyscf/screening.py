@@ -8,23 +8,23 @@ screening metadata. This module is the extension layer interposed between those
 backend-owned grid objects and Skala's feature evaluation. It deliberately avoids
 subclassing either grid implementation so the same screened path can serve both.
 
-Grid preparation attaches a :class:`SpatialGridLayout` cache to the source grid.
-The source coordinate and weight arrays retain their order, but the extra cache
-attribute modifies the grid object. A shallow grid copy receives spatially reordered
-coordinates and weights. For PySCF, its ``non0tab`` shell-screening table is rebuilt;
-for GPU4PySCF, ``_non0ao_idx`` is cleared so the backend can rebuild it for the new
-order. The cached forward and inverse permutations bridge spatial AO evaluation and
-the atom-major layout expected by model features.
+Grid preparation produces a :class:`SpatialGridLayout`, which is cached on the source
+grid for later evaluations. The source grid's integration data remains unchanged. A
+shallow grid copy receives spatially reordered coordinates and weights. For PySCF,
+its ``non0tab`` shell-screening table is rebuilt; for GPU4PySCF, ``_non0ao_idx`` is
+cleared so the backend can rebuild it for the new order. The cached forward and
+inverse permutations bridge spatial AO evaluation and the atom-major layout expected
+by model features.
 
-:func:`prepare_screened_feature_buffer` orchestrates this grid extension and one
-global raw-feature evaluation. The returned :class:`ScreenedFeatureBuffer` retains
-the spatial ordering needed for Jacobian and adjoint AO passes. Atom-aligned model
-batching is a separate process owned by :mod:`skala.pyscf.model_chunking`.
+:func:`prepare_spatial_grid_layout` owns this reusable grid extension. The integrator
+attaches it to the source grid and owns density-dependent feature evaluation.
+Atom-aligned model batching is a separate process owned by
+:mod:`skala.pyscf.model_chunking`.
 """
 
 from copy import copy
 from dataclasses import dataclass
-from typing import Generic, TypeAlias, cast
+from typing import TypeAlias, cast
 
 import numpy as np
 import torch
@@ -32,48 +32,22 @@ from pyscf import dft, gto
 from torch import Tensor
 
 from skala.pyscf import ao_evaluation, feature_math
-from skala.pyscf.backend import (
-    Array,
-    Grid,
-    check_gpu_imports_were_successful,
-)
-from skala.pyscf.evaluation import FeatureSpec
+from skala.pyscf.backend import Grid, check_gpu_imports_were_successful
 
 CPU_AO_SCREENING_BLOCK_SIZE = 9 * dft.gen_grid.BLKSIZE
 
 _Float64Coordinates: TypeAlias = np.ndarray[tuple[int, int], np.dtype[np.float64]]
 _Int64Permutation: TypeAlias = np.ndarray[tuple[int], np.dtype[np.int64]]
-_SPATIAL_GRID_CACHE_ATTRIBUTE = "_skala_spatial_grid_cache"
 
 
 @dataclass(frozen=True)
-class SpatialGridLayout(Generic[Array]):
-    """Cached spatial ordering derived from an atom-major integration grid."""
+class SpatialGridLayout:
+    """Evaluation-ready spatial ordering derived from an atom-major grid."""
 
-    mol: gto.Mole
-    source_coords: Array
-    source_weights: Array
     block_size: int
-    gpu: bool
     sorted_grids: Grid
-    forward: _Int64Permutation
-    inverse: _Int64Permutation
-
-    def matches(
-        self,
-        mol: gto.Mole,
-        grids: Grid,
-        block_size: int,
-        gpu: bool,
-    ) -> bool:
-        """Return whether this layout belongs to the current built grid."""
-        return (
-            self.mol is mol
-            and self.source_coords is grids.coords
-            and self.source_weights is grids.weights
-            and self.block_size == block_size
-            and self.gpu is gpu
-        )
+    forward_permutation: Tensor
+    inverse_permutation: Tensor
 
 
 def _decompose_grid_into_spatial_blocks(
@@ -125,35 +99,27 @@ def _decompose_grid_into_spatial_blocks(
     return forward, inverse
 
 
-def _prepare_spatially_sorted_grids(
+def prepare_spatial_grid_layout(
     mol: gto.Mole,
     grids: Grid,
     block_size: int,
-    gpu: bool,
-) -> tuple[Grid, _Int64Permutation, _Int64Permutation]:
-    """Copy and spatially order a grid for backend AO screening.
-
-    Preparation is cached on the source grid and reused while its coordinate and
-    weight arrays, molecule, backend, and evaluator block size remain unchanged.
+    device: torch.device,
+) -> SpatialGridLayout:
+    """Build a spatially ordered grid layout for backend AO screening.
 
     Args:
         mol: Molecule used to rebuild CPU shell-screening data.
         grids: Built CPU or GPU integration grid in atom-major order.
         block_size: Fixed number of points consumed by each backend block.
-        gpu: Whether ``grids`` belongs to GPU4PySCF.
+        device: Torch device used for permutation tensors.
 
     Returns:
-        The sorted grid copy, atom-major-to-spatial permutation, and inverse.
+        An evaluation-ready layout containing the sorted grid and both permutations.
     """
     if grids.coords is None or grids.weights is None:
         raise ValueError("Grids must be built before spatial sorting.")
 
-    cache = getattr(grids, _SPATIAL_GRID_CACHE_ATTRIBUTE, None)
-    if isinstance(cache, SpatialGridLayout) and cache.matches(
-        mol, grids, block_size, gpu
-    ):
-        return cache.sorted_grids, cache.forward, cache.inverse
-
+    gpu = device.type == "cuda"
     if gpu:
         check_gpu_imports_were_successful()
         import cupy
@@ -164,7 +130,6 @@ def _prepare_spatially_sorted_grids(
 
     forward, inverse = _decompose_grid_into_spatial_blocks(host_coords, block_size)
     sorted_grids = copy(grids)
-    vars(sorted_grids).pop(_SPATIAL_GRID_CACHE_ATTRIBUTE, None)
     if gpu:
         import cupy
 
@@ -180,114 +145,36 @@ def _prepare_spatially_sorted_grids(
             sorted_grids.coords,
             cutoff=sorted_grids.cutoff,
         )
-    setattr(
-        grids,
-        _SPATIAL_GRID_CACHE_ATTRIBUTE,
-        SpatialGridLayout(
-            mol=mol,
-            source_coords=grids.coords,
-            source_weights=grids.weights,
-            block_size=block_size,
-            gpu=gpu,
-            sorted_grids=sorted_grids,
-            forward=forward,
-            inverse=inverse,
-        ),
+    return SpatialGridLayout(
+        block_size=block_size,
+        sorted_grids=sorted_grids,
+        forward_permutation=torch.as_tensor(forward, device=device),
+        inverse_permutation=torch.as_tensor(inverse, device=device),
     )
-    return sorted_grids, forward, inverse
 
 
-@dataclass
-class ScreenedFeatureBuffer:
-    """Globally screened raw features and transformations between grid orders."""
-
-    dm: Tensor
-    mol: gto.Mole
-    sorted_grids: Grid
-    sorted_raw_features: Tensor
-    atom_major_raw_features: Tensor
-    forward_permutation: Tensor
-    inverse_permutation: Tensor
-    feature_function: feature_math.MGGAFeatureFunction
-    block_size: int
-    compile_feature_function: bool
-    gpu: bool
-
-    def atom_major_jvp(self, dm_tangent: Tensor) -> Tensor:
-        """Apply the global raw-feature Jacobian and restore atom-major order."""
-        sorted_tangent = cast(
-            Tensor,
-            ao_evaluation.ChunkEvalForward.apply(
-                self.dm,
-                self.mol,
-                self.sorted_grids,
-                self.feature_function,
-                self.block_size,
-                self.compile_feature_function,
-                self.gpu,
-                dm_tangent,
-            ),
-        )
-        return sorted_tangent.index_select(-1, self.inverse_permutation).detach()
-
-
-def prepare_screened_feature_buffer(
-    mol: gto.Mole,
+def screened_feature_jvp(
     dm: Tensor,
-    grids: Grid,
-    features: FeatureSpec | set[str],
+    dm_tangent: Tensor,
+    mol: gto.Mole,
+    spatial_grid_layout: SpatialGridLayout,
+    feature_function: feature_math.MGGAFeatureFunction,
     compile_feature_function: bool = False,
-) -> ScreenedFeatureBuffer:
-    """Prepare the backend grid extension and its screened feature buffer.
-
-    The source grid receives a cached :class:`SpatialGridLayout`; its coordinate and
-    weight arrays remain atom-major. Feature evaluation runs once on a spatially
-    reordered grid copy, and the resulting buffer restores atom-major order for model
-    chunk construction.
-    """
-    feature_spec = (
-        features if isinstance(features, FeatureSpec) else FeatureSpec(features)
-    )
-    if grids.coords is None or grids.weights is None:
-        raise ValueError("Grids must be built before generating screened features.")
-
-    feature_function = feature_math.MGGAFeatureFunction(feature_spec)
-    gpu = dm.device.type == "cuda"
-    if gpu:
-        check_gpu_imports_were_successful()
-        from gpu4pyscf.dft import numint as dft_gpu_numint
-
-        block_size = int(dft_gpu_numint.MIN_BLK_SIZE)
-    else:
-        block_size = CPU_AO_SCREENING_BLOCK_SIZE
-    sorted_grids, forward, inverse = _prepare_spatially_sorted_grids(
-        mol, grids, block_size, gpu
-    )
-    sorted_raw_features = cast(
+) -> Tensor:
+    """Apply the raw-feature Jacobian and restore atom-major grid order."""
+    sorted_tangent = cast(
         Tensor,
         ao_evaluation.ChunkEvalForward.apply(
-            dm.double(),
+            dm,
             mol,
-            sorted_grids,
+            spatial_grid_layout.sorted_grids,
             feature_function,
-            block_size,
+            spatial_grid_layout.block_size,
             compile_feature_function,
-            gpu,
+            dm.device.type == "cuda",
+            dm_tangent,
         ),
     )
-    forward_permutation = torch.as_tensor(forward, device=dm.device)
-    inverse_permutation = torch.as_tensor(inverse, device=dm.device)
-    atom_major_raw_features = sorted_raw_features.index_select(-1, inverse_permutation)
-    return ScreenedFeatureBuffer(
-        dm=dm,
-        mol=mol,
-        sorted_grids=sorted_grids,
-        sorted_raw_features=sorted_raw_features,
-        atom_major_raw_features=atom_major_raw_features,
-        forward_permutation=forward_permutation,
-        inverse_permutation=inverse_permutation,
-        feature_function=feature_function,
-        block_size=block_size,
-        compile_feature_function=compile_feature_function,
-        gpu=gpu,
-    )
+    return sorted_tangent.index_select(
+        -1, spatial_grid_layout.inverse_permutation
+    ).detach()

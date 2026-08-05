@@ -34,7 +34,7 @@ from skala.pyscf.backend import dft_gpu  # noqa: E402
 from skala.pyscf.evaluation import FeatureSpec  # noqa: E402
 from skala.pyscf.feature_math import MGGAFeatureFunction  # noqa: E402
 from skala.pyscf.numint import SkalaNumInt  # noqa: E402
-from skala.pyscf.screening import _prepare_spatially_sorted_grids  # noqa: E402
+from skala.pyscf.screening import prepare_spatial_grid_layout  # noqa: E402
 
 CARBON_CHAIN = """
 C 0.0 0.0 0.0
@@ -89,9 +89,11 @@ def test_prepare_spatially_sorted_gpu_grids() -> None:
     original_screening_cache = cupy.arange(1)
     grids._non0ao_idx = original_screening_cache
 
-    sorted_grids, forward, inverse = _prepare_spatially_sorted_grids(
-        mol, grids, block_size=2, gpu=True
-    )
+    device = torch.device("cuda")
+    layout = prepare_spatial_grid_layout(mol, grids, block_size=2, device=device)
+    sorted_grids = layout.sorted_grids
+    forward = layout.forward_permutation.cpu().numpy()
+    inverse = layout.inverse_permutation.cpu().numpy()
 
     assert sorted_grids is not grids
     assert grids.coords is coords
@@ -109,17 +111,8 @@ def test_prepare_spatially_sorted_gpu_grids() -> None:
     assert np.array_equal(
         cupy.asnumpy(sorted_grids.coords)[inverse], cupy.asnumpy(coords)
     )
-
-    sorted_screening_cache = object()
-    sorted_grids._non0ao_idx = sorted_screening_cache
-    cached_grids, cached_forward, cached_inverse = _prepare_spatially_sorted_grids(
-        mol, grids, block_size=2, gpu=True
-    )
-
-    assert cached_grids is sorted_grids
-    assert cached_forward is forward
-    assert cached_inverse is inverse
-    assert cached_grids._non0ao_idx is sorted_screening_cache
+    assert layout.forward_permutation.device.type == "cuda"
+    assert layout.inverse_permutation.device.type == "cuda"
 
 
 @pytest.mark.parametrize("unrestricted", [False, True])

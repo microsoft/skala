@@ -1,14 +1,15 @@
 # SPDX-License-Identifier: MIT
 
 from collections.abc import Callable
-from typing import Any, Generic, Protocol, overload
+from typing import Any, Generic, Protocol, cast, overload
 
 import torch
-from pyscf import dft, gto
+from pyscf import gto
 from pyscf.dft import numint as pyscf_numint
 from torch import Tensor
 
 from skala.functional.base import ExcFunctionalBase
+from skala.pyscf import ao_evaluation, feature_math
 from skala.pyscf.backend import (
     KS,
     Array,
@@ -21,7 +22,12 @@ from skala.pyscf.backend import (
 from skala.pyscf.evaluation import EvaluationPolicy, FeatureSpec
 from skala.pyscf.features import generate_features
 from skala.pyscf.model_chunking import prepare_model_feature_chunks
-from skala.pyscf.screening import prepare_screened_feature_buffer
+from skala.pyscf.screening import (
+    CPU_AO_SCREENING_BLOCK_SIZE,
+    SpatialGridLayout,
+    prepare_spatial_grid_layout,
+    screened_feature_jvp,
+)
 
 
 def _should_screen_aos(mol: gto.Mole) -> bool:
@@ -135,10 +141,7 @@ class SkalaNumInt(PySCFNumInt[Array]):
         chunk_size: int | None = None,
         device: torch.device | None = None,
     ):
-        if device is None:
-            self.device = torch.get_default_device()
-        else:
-            self.device = device
+        self.device = device or torch.get_default_device()
 
         if self.device.type == "cuda":
             check_gpu_imports_were_successful()
@@ -146,6 +149,40 @@ class SkalaNumInt(PySCFNumInt[Array]):
         self.func = functional.to(device=self.device)
         self.feature_spec = FeatureSpec(self.func.features)
         self.evaluation_policy = EvaluationPolicy(ao_block_size=chunk_size)
+
+    def reset(self) -> "SkalaNumInt[Array]":
+        """Return this integrator; spatial layouts are owned by grid objects."""
+        return self
+
+    def _get_spatial_grid_layout(
+        self,
+        mol: gto.Mole,
+        grids: Grid,
+    ) -> SpatialGridLayout:
+        grid_state = vars(grids)
+        spatial_grid_layout = cast(
+            SpatialGridLayout | None,
+            grid_state.get("_skala_spatial_grid_layout"),
+        )
+        if spatial_grid_layout is not None:
+            return spatial_grid_layout
+
+        if self.device.type == "cuda":
+            check_gpu_imports_were_successful()
+            from gpu4pyscf.dft import numint as dft_gpu_numint
+
+            block_size = int(dft_gpu_numint.MIN_BLK_SIZE)
+        else:
+            block_size = CPU_AO_SCREENING_BLOCK_SIZE
+
+        spatial_grid_layout = prepare_spatial_grid_layout(
+            mol,
+            grids,
+            block_size,
+            self.device,
+        )
+        grid_state["_skala_spatial_grid_layout"] = spatial_grid_layout
+        return spatial_grid_layout
 
     def from_backend(
         self,
@@ -192,25 +229,17 @@ class SkalaNumInt(PySCFNumInt[Array]):
     def __call__(
         self,
         mol: gto.Mole,
-        grids: dft.Grids,
+        grids: Grid,
         xc_code: str | None,
         dm: Tensor,
         second_order: bool = False,
         max_memory: int = 2000,
     ) -> tuple[Tensor, Tensor, Tensor]:
-        """
-        Evaluate the XC functional for the given molecule and density matrix.
-        Input:
-            mol: The molecule.
-            grids: The grid.
-            xc_code: The XC code (not used in the reimplementation).
-            dm: The density matrix.
-            second_order: Whether to compute second-order derivatives.
-            max_memory: The maximum memory to use for each chunk in megabytes (MB). If None, the maximum memory is determined automatically.
-
-        Returns:
-            A tuple of the total integrated density, the XC energy, and the XC potential.
-        """
+        """Evaluate the XC functional for a molecule and density matrix."""
+        if second_order:
+            raise NotImplementedError(
+                "Direct second-order evaluation is not supported; use gen_response()."
+            )
 
         if self.device != dm.device:
             raise ValueError(
@@ -218,58 +247,87 @@ class SkalaNumInt(PySCFNumInt[Array]):
             )
 
         if self.feature_spec.supports_screened_evaluation and _should_screen_aos(mol):
-            dm = dm.detach().requires_grad_()
-            tot_dens = torch.tensor((0.0, 0.0), device=self.device, dtype=dm.dtype)
-            E_xc = torch.tensor(0.0, device=self.device, dtype=dm.dtype)
-            screened_features = prepare_screened_feature_buffer(
-                mol,
-                dm,
-                grids,
-                features=self.feature_spec,
-            )
-            model_chunks = prepare_model_feature_chunks(
-                mol,
-                dm,
-                grids,
-                atom_major_raw_features=screened_features.atom_major_raw_features,
-                feature_function=screened_features.feature_function,
-                func_deriv=1,
-                max_memory_in_mb=max_memory if dm.device.type == "cpu" else None,
-                safety_fraction=self.evaluation_policy.safety_fraction,
-            )
-            # Store only full-grid feature cotangents; model activations remain chunk-local.
-            atom_major_cotangent = torch.zeros_like(
-                screened_features.atom_major_raw_features
-            )
-            for chunk in model_chunks:
-                local_raw_features = chunk.raw_features
-                mol_features = chunk.model_features
-                E_xc_chunk = self.func.get_exc(mol_features)
-                (local_cotangent,) = torch.autograd.grad(
-                    E_xc_chunk,
-                    local_raw_features,
-                    torch.ones_like(E_xc_chunk),
-                )
-                atom_major_cotangent[..., chunk.grid_slice] = local_cotangent.detach()
-                tot_dens += (
-                    (mol_features["density"] * mol_features["grid_weights"])
-                    .sum(dim=-1)
-                    .detach()
-                )
-                E_xc += E_xc_chunk.detach()
-                del E_xc_chunk, local_cotangent, local_raw_features, mol_features
+            return self._call_screened(mol, grids, dm, max_memory)
+        return self._call_dense(mol, grids, dm, max_memory)
 
-            # Reorder detached cotangents explicitly instead of backpropagating through it.
-            sorted_cotangent = atom_major_cotangent.index_select(
-                -1, screened_features.forward_permutation
+    def _call_screened(
+        self,
+        mol: gto.Mole,
+        grids: Grid,
+        dm: Tensor,
+        max_memory: int,
+    ) -> tuple[Tensor, Tensor, Tensor]:
+        dm = dm.detach().requires_grad_()
+        tot_dens = torch.tensor((0.0, 0.0), device=self.device, dtype=dm.dtype)
+        E_xc = torch.tensor(0.0, device=self.device, dtype=dm.dtype)
+        feature_function = feature_math.MGGAFeatureFunction(self.feature_spec)
+        spatial_grid_layout = self._get_spatial_grid_layout(mol, grids)
+        sorted_raw_features = cast(
+            Tensor,
+            ao_evaluation.ChunkEvalForward.apply(  # type: ignore[no-untyped-call]
+                dm.double(),
+                mol,
+                spatial_grid_layout.sorted_grids,
+                feature_function,
+                spatial_grid_layout.block_size,
+                False,
+                dm.device.type == "cuda",
+            ),
+        )
+        atom_major_raw_features = sorted_raw_features.index_select(
+            -1, spatial_grid_layout.inverse_permutation
+        )
+        model_chunks = prepare_model_feature_chunks(
+            mol,
+            dm,
+            grids,
+            atom_major_raw_features=atom_major_raw_features,
+            feature_function=feature_function,
+            func_deriv=1,
+            max_memory_in_mb=max_memory if dm.device.type == "cpu" else None,
+            safety_fraction=self.evaluation_policy.safety_fraction,
+        )
+        # Store only full-grid feature cotangents; model activations remain chunk-local.
+        atom_major_cotangent = torch.zeros_like(atom_major_raw_features)
+        for chunk in model_chunks:
+            local_raw_features = chunk.raw_features
+            mol_features = chunk.model_features
+            E_xc_chunk = self.func.get_exc(mol_features)
+            (local_cotangent,) = torch.autograd.grad(
+                E_xc_chunk,
+                local_raw_features,
+                torch.ones_like(E_xc_chunk),
             )
-            # The custom VJP reevaluates AO blocks sequentially without a full-grid AO graph.
-            (V_xc,) = torch.autograd.grad(
-                screened_features.sorted_raw_features,
-                dm,
-                sorted_cotangent,
+            atom_major_cotangent[..., chunk.grid_slice] = local_cotangent.detach()
+            tot_dens += (
+                (mol_features["density"] * mol_features["grid_weights"])
+                .sum(dim=-1)
+                .detach()
             )
-            return tot_dens, E_xc, V_xc
+            E_xc += E_xc_chunk.detach()
+            del E_xc_chunk, local_cotangent, local_raw_features, mol_features
+
+        # Reorder detached cotangents explicitly instead of backpropagating through it.
+        sorted_cotangent = atom_major_cotangent.index_select(
+            -1, spatial_grid_layout.forward_permutation
+        )
+        # The custom VJP reevaluates AO blocks sequentially without a full-grid AO graph.
+        (V_xc,) = torch.autograd.grad(
+            sorted_raw_features,
+            dm,
+            sorted_cotangent,
+        )
+        return tot_dens, E_xc, V_xc
+
+    def _call_dense(
+        self,
+        mol: gto.Mole,
+        grids: Grid,
+        dm: Tensor,
+        max_memory: int,
+        *,
+        create_graph: bool = False,
+    ) -> tuple[Tensor, Tensor, Tensor]:
 
         dm = dm.requires_grad_()
         mol_features = generate_features(
@@ -286,8 +344,8 @@ class SkalaNumInt(PySCFNumInt[Array]):
             E_xc,
             dm,
             torch.ones_like(E_xc),
-            retain_graph=second_order,
-            create_graph=second_order,
+            retain_graph=create_graph,
+            create_graph=create_graph,
         )
 
         rho = mol_features["density"]
@@ -365,87 +423,126 @@ class SkalaNumInt(PySCFNumInt[Array]):
         if self.feature_spec.supports_screened_evaluation and _should_screen_aos(
             ks.mol
         ):
-            dm0 = dm0.requires_grad_()
-            screened_features = prepare_screened_feature_buffer(
-                ks.mol,
+            return self._gen_response_screened(
+                ks,
                 dm0,
-                ks.grids,
-                features=self.feature_spec,
-            )
-            model_chunks = prepare_model_feature_chunks(
-                ks.mol,
-                dm0,
-                ks.grids,
-                atom_major_raw_features=screened_features.atom_major_raw_features,
-                feature_function=screened_features.feature_function,
-                func_deriv=2,
-                max_memory_in_mb=ks.max_memory if dm0.device.type == "cpu" else None,
                 safety_fraction=kwargs.get(
                     "safety_fraction", self.evaluation_policy.safety_fraction
                 ),
             )
+        return self._gen_response_dense(ks, dm0)
 
-            def hessian_vector_product_atom_chunked(dm1: Array) -> Array:
-                dm1_tensor = self.from_backend(dm1)
-                atom_major_tangent = screened_features.atom_major_jvp(dm1_tensor)
-                # Store the full-grid model Hessian action, not per-chunk model graphs.
-                atom_major_hessian_action = torch.zeros_like(
-                    screened_features.atom_major_raw_features
-                )
-                for chunk in model_chunks:
-                    local_raw_features = chunk.raw_features
-                    mol_features = chunk.model_features
-                    E_xc_chunk = self.func.get_exc(mol_features)
-                    (local_gradient,) = torch.autograd.grad(
-                        E_xc_chunk,
-                        local_raw_features,
-                        torch.ones_like(E_xc_chunk),
-                        create_graph=True,
-                    )
-                    if local_gradient.requires_grad:
-                        (local_hessian_action,) = torch.autograd.grad(
-                            local_gradient,
-                            local_raw_features,
-                            atom_major_tangent[..., chunk.grid_slice],
-                        )
-                    else:
-                        local_hessian_action = torch.zeros_like(local_raw_features)
-                    atom_major_hessian_action[..., chunk.grid_slice] = (
-                        local_hessian_action.detach()
-                    )
-                    del (
-                        E_xc_chunk,
-                        local_gradient,
-                        local_hessian_action,
-                        local_raw_features,
-                        mol_features,
-                    )
-
-                # Restore block order after all chunk-local Hessian actions are detached.
-                sorted_hessian_action = atom_major_hessian_action.index_select(
-                    -1, screened_features.forward_permutation
-                )
-                # The custom VJP traverses AO blocks sequentially and retains no AO graph.
-                (hvp_total,) = torch.autograd.grad(
-                    screened_features.sorted_raw_features,
-                    dm0,
-                    sorted_hessian_action,
-                    retain_graph=True,
-                )
-
-                v1 = self.to_backend(hvp_total)
-                vj = ks.get_j(ks.mol, dm1, hermi=1)
-                if ks.mol.spin == 0:
-                    v1 += vj
-                else:
-                    v1 += vj[0] + vj[1]
-                return v1
-
-            return hessian_vector_product_atom_chunked
-
-        # caching V_xc saves a forward pass in each iteration
+    def _gen_response_screened(
+        self,
+        ks: KS,
+        dm0: Tensor,
+        *,
+        safety_fraction: float,
+    ) -> Callable[[Array], Array]:
         dm0 = dm0.requires_grad_()
-        V_xc = self(ks.mol, ks.grids, None, dm0, second_order=True)[2]
+        feature_function = feature_math.MGGAFeatureFunction(self.feature_spec)
+        spatial_grid_layout = self._get_spatial_grid_layout(ks.mol, ks.grids)
+        sorted_raw_features = cast(
+            Tensor,
+            ao_evaluation.ChunkEvalForward.apply(  # type: ignore[no-untyped-call]
+                dm0.double(),
+                ks.mol,
+                spatial_grid_layout.sorted_grids,
+                feature_function,
+                spatial_grid_layout.block_size,
+                False,
+                dm0.device.type == "cuda",
+            ),
+        )
+        atom_major_raw_features = sorted_raw_features.index_select(
+            -1, spatial_grid_layout.inverse_permutation
+        )
+        model_chunks = prepare_model_feature_chunks(
+            ks.mol,
+            dm0,
+            ks.grids,
+            atom_major_raw_features=atom_major_raw_features,
+            feature_function=feature_function,
+            func_deriv=2,
+            max_memory_in_mb=ks.max_memory if dm0.device.type == "cpu" else None,
+            safety_fraction=safety_fraction,
+        )
+
+        def hessian_vector_product_atom_chunked(dm1: Array) -> Array:
+            dm1_tensor = self.from_backend(dm1)
+            atom_major_tangent = screened_feature_jvp(
+                dm0,
+                dm1_tensor,
+                ks.mol,
+                spatial_grid_layout,
+                feature_function,
+            )
+            # Store the full-grid model Hessian action, not per-chunk model graphs.
+            atom_major_hessian_action = torch.zeros_like(atom_major_raw_features)
+            for chunk in model_chunks:
+                local_raw_features = chunk.raw_features
+                mol_features = chunk.model_features
+                E_xc_chunk = self.func.get_exc(mol_features)
+                (local_gradient,) = torch.autograd.grad(
+                    E_xc_chunk,
+                    local_raw_features,
+                    torch.ones_like(E_xc_chunk),
+                    create_graph=True,
+                )
+                if local_gradient.requires_grad:
+                    (local_hessian_action,) = torch.autograd.grad(
+                        local_gradient,
+                        local_raw_features,
+                        atom_major_tangent[..., chunk.grid_slice],
+                    )
+                else:
+                    local_hessian_action = torch.zeros_like(local_raw_features)
+                atom_major_hessian_action[..., chunk.grid_slice] = (
+                    local_hessian_action.detach()
+                )
+                del (
+                    E_xc_chunk,
+                    local_gradient,
+                    local_hessian_action,
+                    local_raw_features,
+                    mol_features,
+                )
+
+            # Restore block order after all chunk-local Hessian actions are detached.
+            sorted_hessian_action = atom_major_hessian_action.index_select(
+                -1, spatial_grid_layout.forward_permutation
+            )
+            # The custom VJP traverses AO blocks sequentially and retains no AO graph.
+            (hvp_total,) = torch.autograd.grad(
+                sorted_raw_features,
+                dm0,
+                sorted_hessian_action,
+                retain_graph=True,
+            )
+
+            v1 = self.to_backend(hvp_total)
+            vj = ks.get_j(ks.mol, dm1, hermi=1)
+            if ks.mol.spin == 0:
+                v1 += vj
+            else:
+                v1 += vj[0] + vj[1]
+            return v1
+
+        return hessian_vector_product_atom_chunked
+
+    def _gen_response_dense(
+        self,
+        ks: KS,
+        dm0: Tensor,
+    ) -> Callable[[Array], Array]:
+        dm0 = dm0.requires_grad_()
+        _, _, V_xc = self._call_dense(
+            ks.mol,
+            ks.grids,
+            dm0,
+            ks.max_memory,
+            create_graph=True,
+        )
 
         def hessian_vector_product(dm1: Array) -> Array:
             v1 = self.to_backend(
