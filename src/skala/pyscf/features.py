@@ -5,7 +5,6 @@ Methods for generating and manipulating density features.
 """
 
 import logging
-from collections.abc import Callable, Iterator
 from copy import copy
 from dataclasses import dataclass
 from typing import TypeAlias
@@ -14,12 +13,9 @@ import numpy as np
 import torch
 from pyscf import dft, gto
 from torch import Tensor
-from torch.autograd import Function
-from torch.autograd.function import FunctionCtx
 
-from skala.pyscf import feature_math
+from skala.pyscf import ao_evaluation, feature_math
 from skala.pyscf.backend import (
-    Array,
     Grid,
     check_gpu_imports_were_successful,
     dft_gpu,
@@ -68,21 +64,6 @@ class _SpatialGridCache:
             and self.block_size == block_size
             and self.gpu is gpu
         )
-
-
-def _active_cpu_aos(mol: gto.Mole, screen_index: np.ndarray) -> np.ndarray:
-    """Expand a PySCF shell-screening mask into active AO indices.
-
-    Args:
-        mol: Molecule defining the shell-to-AO ranges.
-        screen_index: Screening rows whose columns correspond to molecular shells.
-
-    Returns:
-        Sorted indices of AOs belonging to a shell active in any screening row.
-    """
-    active_shells = np.any(screen_index, axis=0)
-    ao_loc = mol.ao_loc_nr()
-    return np.flatnonzero(np.repeat(active_shells, np.diff(ao_loc)))
 
 
 def _spatial_grid_permutations(
@@ -301,14 +282,13 @@ def generate_features(
     mol_features = get_grid_features(mol, dm, grids, feature_spec)
 
     if feature_spec.requires_mgga:
-        mgga_features = auto_chunk(
+        mgga_features = ao_evaluation.auto_chunk(
             dm,
             mol,
             grids,
             feature_math.MGGAFeatureFunction(feature_spec),
             block_size=evaluation_policy.ao_block_size,
             max_memory=max_memory,
-            fix_block_size=evaluation_policy.ao_block_size is None,
             gpu=gpu,
         )
 
@@ -381,37 +361,6 @@ def get_grid_features(
     return grid_features
 
 
-def partial_feature_function_over_aos(
-    feature_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-    ao: torch.Tensor,
-) -> Callable[[torch.Tensor], torch.Tensor]:
-    """Returns a function that computes the feature function with the given ao,
-    but not the dm already passed to the function.
-
-    Purpose is to allow evaluating a block-local VJP.
-    """
-
-    def partial_feature_function(dm: torch.Tensor) -> torch.Tensor:
-        return feature_function(dm, ao)
-
-    return partial_feature_function
-
-
-def partial_vjp_function_over_tangents(
-    func: Callable[[torch.Tensor], torch.Tensor],
-    tangents: torch.Tensor,
-) -> Callable[[torch.Tensor], torch.Tensor]:
-    """Returns a function that computes the vjp of the given function with tangents,
-    but not primals already passed to the function.
-
-    Purpose is to evaluate the feature-space adjoint for one AO block."""
-
-    def reduced_vjp(primals: torch.Tensor) -> torch.Tensor:
-        return torch.func.vjp(func, primals)[1](tangents)[0]
-
-    return reduced_vjp
-
-
 @dataclass
 class _GlobalScreenedFeatures:
     dm: Tensor
@@ -432,7 +381,7 @@ class _GlobalScreenedFeatures:
 
     def atom_major_jvp(self, dm_tangent: Tensor) -> Tensor:
         """Apply the global raw-feature Jacobian and restore atom-major order."""
-        sorted_tangent = ChunkEvalForward.apply(
+        sorted_tangent = ao_evaluation.ChunkEvalForward.apply(
             self.dm,
             self.mol,
             self.sorted_grids,
@@ -535,7 +484,7 @@ def _global_screened_features(
     sorted_grids, forward, inverse = _prepare_spatially_sorted_grids(
         mol, grids, block_size, gpu
     )
-    sorted_raw_features = ChunkEvalForward.apply(
+    sorted_raw_features = ao_evaluation.ChunkEvalForward.apply(
         dm.double(),
         mol,
         sorted_grids,
@@ -565,501 +514,3 @@ def _global_screened_features(
         chunks=chunks,
         with_spin=dm.ndim == 3,
     )
-
-
-@dataclass(frozen=True)
-class _AOBlock:
-    ao: Tensor
-    active_aos: Tensor | None
-    grid_slice: slice
-
-    def select_aos(self, matrix: Tensor) -> Tensor:
-        if self.active_aos is None:
-            return matrix
-        return matrix[..., self.active_aos[:, None], self.active_aos[None, :]]
-
-    def add_to(self, matrix: Tensor, block_result: Tensor) -> None:
-        if self.active_aos is None:
-            matrix += block_result
-        else:
-            matrix[..., self.active_aos[:, None], self.active_aos[None, :]] += (
-                block_result
-            )
-
-
-def _evaluate_feature_block(
-    feature_function: feature_math.FeatureFunction,
-    block: _AOBlock,
-    active_dm: Tensor,
-    compile_feature_function: bool,
-    feature_cotangent: Tensor | None = None,
-) -> Tensor:
-    """Evaluate one active-AO feature block or its feature-space VJP."""
-    partial_func = partial_feature_function_over_aos(feature_function, block.ao)
-    if feature_cotangent is not None:
-        partial_func = partial_vjp_function_over_tangents(
-            partial_func, feature_cotangent[..., block.grid_slice]
-        )
-
-    if compile_feature_function:
-        return torch.compile(partial_func)(active_dm)
-    return partial_func(active_dm)
-
-
-class _AOBlockLoop:
-    def __init__(
-        self,
-        dm: Tensor,
-        mol: gto.Mole,
-        grids: Grid,
-        feature_function: feature_math.FeatureFunction,
-        blksize: int | None,
-        gpu: bool,
-    ) -> None:
-        self.dm = dm
-        self.mol = mol
-        self.grids = grids
-        self.feature_function = feature_function
-        self.blksize = blksize
-        self.gpu = gpu
-        self.sort_idx: Tensor | None
-        self.unsort_idx: Tensor | None
-
-        if gpu:
-            check_gpu_imports_were_successful()
-            self.numint = dft_gpu.numint.NumInt().build(mol, grids.coords)
-            self.numint.grid_blksize = blksize
-            self.sort_idx = torch.as_tensor(
-                self.numint.gdftopt._ao_idx, device=dm.device
-            )
-            self.unsort_idx = torch.argsort(self.sort_idx)
-        else:
-            self.numint = dft.numint.NumInt()
-            self.sort_idx = None
-            self.unsort_idx = None
-
-    def order_aos(self, matrix: Tensor) -> Tensor:
-        if self.sort_idx is None:
-            return matrix
-        return matrix[..., self.sort_idx, :][..., self.sort_idx]
-
-    def restore_ao_order(self, matrix: Tensor) -> Tensor:
-        if self.unsort_idx is None:
-            return matrix
-        return matrix[..., self.unsort_idx, :][..., self.unsort_idx]
-
-    def __iter__(self) -> Iterator[_AOBlock]:
-        block_loop_options: dict[str, bool] = {}
-        if self.gpu:
-            # GPU4PySCF otherwise omits zero-AO blocks, shifting all later grid slices.
-            block_loop_options["strict_grid_order"] = True
-
-        end = 0
-        for ao_block, mask, weights, _ in self.numint.block_loop(
-            mol=self.mol,
-            grids=self.grids,
-            nao=self.mol.nao,
-            deriv=self.feature_function.deriv,
-            blksize=self.blksize,
-            non0tab=(None if self.gpu else getattr(self.grids, "non0tab", None)),
-            **block_loop_options,
-        ):
-            start, end = end, end + weights.size
-            ao = from_numpy_or_cupy(
-                ao_block,
-                device=self.dm.device,
-                dtype=self.dm.dtype,
-                transpose=not self.gpu,
-            )
-            active_aos: Tensor | None
-            if mask is None:
-                active_aos = None
-            elif self.gpu:
-                active_aos = from_numpy_or_cupy(
-                    mask, device=self.dm.device, dtype=torch.long
-                )
-            else:
-                num_screen_rows = (
-                    weights.size + dft.gen_grid.BLKSIZE - 1
-                ) // dft.gen_grid.BLKSIZE
-                active_aos = torch.as_tensor(
-                    _active_cpu_aos(self.mol, mask[:num_screen_rows]),
-                    device=self.dm.device,
-                    dtype=torch.long,
-                )
-                ao = ao[..., active_aos, :]
-            if active_aos is not None and active_aos.numel() == 0:
-                continue
-            yield _AOBlock(ao, active_aos, slice(start, end))
-
-
-class ChunkEvalForward(Function):
-    @staticmethod
-    def setup_context(
-        ctx: FunctionCtx,
-        inputs: tuple[
-            torch.Tensor,
-            gto.Mole,
-            Grid,
-            feature_math.FeatureFunction,
-            int | None,
-            int,
-            bool,
-            bool,
-            torch.Tensor,
-        ],
-        output: torch.Tensor,
-    ) -> None:
-        (
-            ctx.dm,
-            ctx.mol,
-            ctx.grids,
-            ctx.feature_function,
-            ctx.blksize,
-            ctx.compile_feature_function,
-            ctx.gpu,
-            *ctx.vectors_jvp,
-        ) = inputs
-        ctx.save_for_backward(ctx.dm)
-
-    @staticmethod
-    def forward(
-        dm: torch.Tensor,
-        mol: gto.Mole,
-        grids: Grid,
-        feature_function: feature_math.FeatureFunction,
-        blksize: int | None,
-        compile_feature_function: bool,
-        gpu: bool,
-        *vectors_jvp: torch.Tensor,
-    ) -> torch.Tensor:
-        ngrids = grids.weights.size
-        block_loop = _AOBlockLoop(dm, mol, grids, feature_function, blksize, gpu)
-
-        features = torch.zeros(
-            *dm.shape[:-2],
-            feature_function.nfeats,
-            ngrids,
-            device=dm.device,
-            dtype=dm.dtype,
-        )
-        # Raw AO features are linear in dm, so derivatives above first order vanish.
-        if len(vectors_jvp) > 1:
-            return features
-
-        # Since the raw feature map is linear, its JVP is direct evaluation on
-        # the tangent density matrix.
-        evaluation_dm = vectors_jvp[0] if vectors_jvp else dm
-        evaluation_dm_ordered = block_loop.order_aos(evaluation_dm)
-        for block in block_loop:
-            active_dm = block.select_aos(evaluation_dm_ordered)
-            temp_feature = _evaluate_feature_block(
-                feature_function,
-                block,
-                active_dm,
-                compile_feature_function,
-            )
-
-            features[..., block.grid_slice] = temp_feature
-        return features
-
-    @staticmethod
-    def jvp(ctx: FunctionCtx, *grad_inputs: torch.Tensor | None) -> torch.Tensor:
-        if len(ctx.vectors_jvp) > 1:
-            return torch.zeros(
-                *ctx.dm.shape[:-2],
-                ctx.feature_function.nfeats,
-                ctx.grids.weights.size,
-                device=ctx.dm.device,
-                dtype=ctx.dm.dtype,
-            )
-        vector_tangent = grad_inputs[7] if ctx.vectors_jvp else grad_inputs[0]
-        if vector_tangent is None:
-            return torch.zeros(
-                *ctx.dm.shape[:-2],
-                ctx.feature_function.nfeats,
-                ctx.grids.weights.size,
-                device=ctx.dm.device,
-                dtype=ctx.dm.dtype,
-            )
-        return ChunkEvalForward.apply(
-            ctx.dm,
-            ctx.mol,
-            ctx.grids,
-            ctx.feature_function,
-            ctx.blksize,
-            ctx.compile_feature_function,
-            ctx.gpu,
-            vector_tangent,
-        )
-
-    @staticmethod
-    def backward(
-        ctx: FunctionCtx, *grad_outputs: torch.Tensor
-    ) -> tuple[torch.Tensor | None, ...]:
-        feature_cotangent = grad_outputs[0]
-        if ctx.vectors_jvp:
-            dm_grad = ctx.dm * 0
-        else:
-            dm_grad = ChunkEvalBackward.apply(
-                ctx.dm,
-                ctx.mol,
-                ctx.grids,
-                ctx.feature_function,
-                ctx.blksize,
-                ctx.compile_feature_function,
-                ctx.gpu,
-                feature_cotangent,
-            )
-        grads = [dm_grad]
-
-        # We need to provide None for the gradients of the non-differentiable inputs
-        # these are mol (1), grids (2), feature_function (3), blksize (4),
-        # compile_feature_function (5), gpu (6)
-        num_non_differentiable_inputs = 6
-
-        grads += [None] * num_non_differentiable_inputs
-
-        # A first JVP is linear in its tangent; higher JVPs are identically zero.
-        for vector in ctx.vectors_jvp:
-            if len(ctx.vectors_jvp) == 1:
-                vector_grad = ChunkEvalBackward.apply(
-                    ctx.dm,
-                    ctx.mol,
-                    ctx.grids,
-                    ctx.feature_function,
-                    ctx.blksize,
-                    ctx.compile_feature_function,
-                    ctx.gpu,
-                    feature_cotangent,
-                )
-            else:
-                vector_grad = vector * 0
-            grads.append(vector_grad)
-
-        return tuple(grads)
-
-
-class ChunkEvalBackward(Function):
-    @staticmethod
-    def setup_context(
-        ctx: FunctionCtx,
-        inputs: tuple[
-            torch.Tensor,
-            gto.Mole,
-            Grid,
-            feature_math.FeatureFunction,
-            int | None,
-            bool,
-            bool,
-            torch.Tensor,
-        ],
-        output: torch.Tensor,
-    ) -> None:
-        (
-            ctx.dm,
-            ctx.mol,
-            ctx.grids,
-            ctx.feature_function,
-            ctx.blksize,
-            ctx.compile_feature_function,
-            ctx.gpu,
-            ctx.feature_cotangent,
-        ) = inputs
-        ctx.save_for_backward(ctx.dm)
-
-    @staticmethod
-    def forward(
-        dm: torch.Tensor,
-        mol: gto.Mole,
-        grids: Grid,
-        feature_function: feature_math.FeatureFunction,
-        blksize: int | None,
-        compile_feature_function: bool,
-        gpu: bool,
-        feature_cotangent: torch.Tensor,
-    ) -> torch.Tensor:
-        block_loop = _AOBlockLoop(dm, mol, grids, feature_function, blksize, gpu)
-        dm_ordered = block_loop.order_aos(dm)
-
-        out = torch.zeros_like(dm)
-        for block in block_loop:
-            active_dm = block.select_aos(dm_ordered)
-            block_result = _evaluate_feature_block(
-                feature_function,
-                block,
-                active_dm,
-                compile_feature_function,
-                feature_cotangent,
-            )
-            block.add_to(out, block_result)
-        return block_loop.restore_ao_order(out)
-
-    @staticmethod
-    def jvp(ctx: FunctionCtx, *grad_inputs: torch.Tensor | None) -> torch.Tensor:
-        feature_cotangent_tangent = grad_inputs[7]
-        if feature_cotangent_tangent is None:
-            return torch.zeros_like(ctx.dm)
-        return ChunkEvalBackward.apply(
-            ctx.dm,
-            ctx.mol,
-            ctx.grids,
-            ctx.feature_function,
-            ctx.blksize,
-            ctx.compile_feature_function,
-            ctx.gpu,
-            feature_cotangent_tangent,
-        )
-
-    @staticmethod
-    def backward(
-        ctx: FunctionCtx, *grad_outputs: torch.Tensor
-    ) -> tuple[torch.Tensor | None, ...]:
-        # The raw feature Jacobian is constant in dm. The only nonzero gradient
-        # propagates through the feature-space cotangent.
-        grads = [ctx.dm * 0]
-        # We need to provide None for the gradients of the non-differentiable inputs
-        # these are mol (1), grids (2), feature_function (3), blksize (4),
-        # compile_feature_function (5), gpu (6)
-        num_non_differentiable_inputs = 6
-
-        grads += [None] * num_non_differentiable_inputs
-        grads.append(
-            ChunkEvalForward.apply(
-                ctx.dm,
-                ctx.mol,
-                ctx.grids,
-                ctx.feature_function,
-                ctx.blksize,
-                ctx.compile_feature_function,
-                ctx.gpu,
-                grad_outputs[0],
-            )
-        )
-        return tuple(grads)
-
-
-def non_chunk(
-    dm: torch.Tensor,
-    mol: gto.Mole,
-    coords: Array,
-    feature_function: feature_math.FeatureFunction,
-    compile_feature_function: bool = False,
-    gpu: bool = False,
-) -> torch.Tensor:
-    if gpu:
-        check_gpu_imports_were_successful()
-        ni = dft_gpu.numint.NumInt().build(mol, coords)
-    else:
-        ni = dft.numint.NumInt()
-    ao = from_numpy_or_cupy(
-        ni.eval_ao(mol, coords, deriv=feature_function.deriv, non0tab=None),
-        device=dm.device,
-        dtype=dm.dtype,
-        transpose=True,
-    )
-    if compile_feature_function:
-        return torch.compile(feature_function.forward)(dm, ao)
-    else:
-        return feature_function.forward(dm, ao)
-
-
-def auto_chunk(
-    dm: torch.Tensor,
-    mol: gto.Mole,
-    grids: Grid,
-    feature_function: feature_math.FeatureFunction,
-    block_size: int | None = None,
-    max_memory: int = 2000,
-    fix_block_size: bool = True,
-    compile_feature_function: bool = False,
-    gpu: bool = False,
-) -> dict[str, torch.Tensor]:
-    """
-    Automatically splits feature evaluation into smaller chunks if needed.
-
-    This function determines the appropriate chunk size for evaluating a feature
-    function on molecular grids, based on available memory and number of basis
-    functions. If the computed chunk size is larger than the size of the grid, or
-    if a fixed block size was provided, it uses a non-chunked approach.
-
-    Parameters
-    ----------
-    dm: torch.Tensor
-        Density matrix or set of density matrices used for
-        evaluating the feature function.
-    mol: gto.Mole
-        PySCF molecule object representing the system of interest.
-    grids: Grid
-        Grids object defining the points in space on which
-        the feature function is evaluated.
-    feature_function: FeatureFunction
-        The object representing the feature function to evaluate. The number of derivatives (deriv) determines
-        how many components to compute.
-    gpu: bool, optional
-        Whether to use GPU for computation. Defaults to False.
-    block_size: int | None, optional
-        Manually specified block size for chunking. (CPU only)
-        Defaults to None.
-    max_memory: int, optional
-        Maximum memory in MB to use for chunking (CPU only)
-    fix_block_size: bool, optional
-        Whether to fix the block size or compute it
-        automatically based on system resources. Defaults to True. (CPU only)
-    compile_feature_function: bool, optional
-        If True, compiles the feature function for efficiency. Defaults to False.
-
-    Returns
-    -------
-    dict[str, torch.Tensor]:
-        The evaluated feature function on the specified grids, either
-        computed in smaller chunks or in a single pass, depending on the block size.
-    """
-
-    if gpu:
-        check_gpu_imports_were_successful()
-        if dm.device.type != "cuda":
-            raise ValueError("Density matrix must be on the GPU when gpu=True.")
-
-    blksize: int | None
-
-    if gpu and block_size is not None:
-        raise ValueError("Setting custom block size is not supported on GPU.")
-
-    if block_size is None and fix_block_size and not gpu:
-        nao = mol.nao_nr()
-        comp = (
-            (feature_function.deriv + 1)
-            * (feature_function.deriv + 2)
-            * (feature_function.deriv + 3)
-            // 6
-        )
-        BLKSIZE = dft.gen_grid.BLKSIZE
-        blksize = int(max_memory * 1e6 / ((comp + 1) * nao * 8 * BLKSIZE))
-        blksize = max(4, min(blksize, 1200)) * BLKSIZE
-    else:
-        blksize = block_size
-
-    if blksize is not None and not gpu:
-        blksize = blksize - blksize % dft.gen_grid.BLKSIZE
-
-    if blksize is not None and blksize >= grids.weights.shape[0]:
-        features = non_chunk(
-            dm.double(),
-            mol,
-            grids.coords,
-            feature_function,
-            compile_feature_function=compile_feature_function,
-            gpu=gpu,
-        )
-    else:
-        features = ChunkEvalForward.apply(
-            dm.double(),
-            mol,
-            grids,
-            feature_function,
-            blksize,
-            compile_feature_function,
-            gpu,
-        )
-    return feature_function.to_dict(features)

@@ -62,11 +62,10 @@ python_version = "3.12"
 exclude = ["third_party/"]
 disable_error_code = ["no-any-return"]
 
-# torch.autograd.Function uses dynamic attributes on FunctionCtx (ctx.save_for_backward pattern)
-# and Function.apply() is untyped. These are fundamental to PyTorch's autograd API.
+# torch.autograd.Function.apply() is untyped in PyTorch.
 [[tool.mypy.overrides]]
-module = "skala.pyscf.features"
-disable_error_code = ["no-any-return", "attr-defined", "no-untyped-call"]
+module = ["skala.pyscf.ao_evaluation", "skala.pyscf.features"]
+disable_error_code = ["no-untyped-call"]
 
 [tool.ruff]
 target-version = "py311"

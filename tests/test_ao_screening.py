@@ -9,14 +9,17 @@ from pyscf.dft import numint as pyscf_numint
 from skala.functional.base import ExcFunctionalBase
 from skala.pyscf import features as features_module
 from skala.pyscf import numint as numint_module
-from skala.pyscf.evaluation import FeatureSpec
-from skala.pyscf.feature_math import MGGAFeatureFunction
-from skala.pyscf.features import (
+from skala.pyscf.ao_evaluation import (
     ChunkEvalBackward,
     ChunkEvalForward,
     _active_cpu_aos,
     _AOBlock,
     _evaluate_feature_block,
+    _resolve_ao_block_size,
+)
+from skala.pyscf.evaluation import FeatureSpec
+from skala.pyscf.feature_math import MGGAFeatureFunction
+from skala.pyscf.features import (
     _prepare_spatially_sorted_grids,
     _spatial_grid_permutations,
 )
@@ -127,6 +130,40 @@ def test_active_cpu_aos(carbon: gto.Mole) -> None:
     empty = _active_cpu_aos(carbon, np.zeros_like(screen_index))
     assert empty.dtype == np.int64
     assert empty.size == 0
+
+
+def test_resolve_ao_block_size_modes(carbon: gto.Mole) -> None:
+    feature_function = MGGAFeatureFunction(FeatureSpec(["density"]))
+    backend_block_size = dft.gen_grid.BLKSIZE
+
+    # CPU sizes are aligned locally; GPU sizing is delegated unless explicitly invalid.
+    automatic = _resolve_ao_block_size(
+        carbon, feature_function, block_size=None, max_memory=0, gpu=False
+    )
+    explicit = _resolve_ao_block_size(
+        carbon,
+        feature_function,
+        block_size=backend_block_size + 1,
+        max_memory=0,
+        gpu=False,
+    )
+
+    assert automatic == 4 * backend_block_size
+    assert explicit == backend_block_size
+    assert (
+        _resolve_ao_block_size(
+            carbon, feature_function, block_size=None, max_memory=0, gpu=True
+        )
+        is None
+    )
+    with pytest.raises(ValueError, match="custom block size"):
+        _resolve_ao_block_size(
+            carbon,
+            feature_function,
+            block_size=backend_block_size,
+            max_memory=0,
+            gpu=True,
+        )
 
 
 @pytest.mark.parametrize(("ngrids", "block_size"), [(0, 4), (3, 4), (8, 4), (10, 4)])
