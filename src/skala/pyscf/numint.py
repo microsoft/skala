@@ -19,10 +19,9 @@ from skala.pyscf.backend import (
     to_numpy,
 )
 from skala.pyscf.evaluation import EvaluationPolicy, FeatureSpec
-from skala.pyscf.features import (
-    _global_screened_features,
-    generate_features,
-)
+from skala.pyscf.features import generate_features
+from skala.pyscf.model_chunking import prepare_model_feature_chunks
+from skala.pyscf.screening import prepare_screened_feature_buffer
 
 
 def _should_screen_aos(mol: gto.Mole) -> bool:
@@ -222,11 +221,18 @@ class SkalaNumInt(PySCFNumInt[Array]):
             dm = dm.detach().requires_grad_()
             tot_dens = torch.tensor((0.0, 0.0), device=self.device, dtype=dm.dtype)
             E_xc = torch.tensor(0.0, device=self.device, dtype=dm.dtype)
-            screened_features = _global_screened_features(
+            screened_features = prepare_screened_feature_buffer(
                 mol,
                 dm,
                 grids,
                 features=self.feature_spec,
+            )
+            model_chunks = prepare_model_feature_chunks(
+                mol,
+                dm,
+                grids,
+                atom_major_raw_features=screened_features.atom_major_raw_features,
+                feature_function=screened_features.feature_function,
                 func_deriv=1,
                 max_memory_in_mb=max_memory if dm.device.type == "cpu" else None,
                 safety_fraction=self.evaluation_policy.safety_fraction,
@@ -235,23 +241,16 @@ class SkalaNumInt(PySCFNumInt[Array]):
             atom_major_cotangent = torch.zeros_like(
                 screened_features.atom_major_raw_features
             )
-            for atom_slice, grid_slice in screened_features.chunks:
-                # Break the reorder graph so model backprop retains only this chunk.
-                local_raw_features = (
-                    screened_features.atom_major_raw_features[..., grid_slice]
-                    .detach()
-                    .requires_grad_()
-                )
-                mol_features = screened_features.build_model_chunk(
-                    local_raw_features, atom_slice, grid_slice
-                )
+            for chunk in model_chunks:
+                local_raw_features = chunk.raw_features
+                mol_features = chunk.model_features
                 E_xc_chunk = self.func.get_exc(mol_features)
                 (local_cotangent,) = torch.autograd.grad(
                     E_xc_chunk,
                     local_raw_features,
                     torch.ones_like(E_xc_chunk),
                 )
-                atom_major_cotangent[..., grid_slice] = local_cotangent.detach()
+                atom_major_cotangent[..., chunk.grid_slice] = local_cotangent.detach()
                 tot_dens += (
                     (mol_features["density"] * mol_features["grid_weights"])
                     .sum(dim=-1)
@@ -367,11 +366,18 @@ class SkalaNumInt(PySCFNumInt[Array]):
             ks.mol
         ):
             dm0 = dm0.requires_grad_()
-            screened_features = _global_screened_features(
+            screened_features = prepare_screened_feature_buffer(
                 ks.mol,
                 dm0,
                 ks.grids,
                 features=self.feature_spec,
+            )
+            model_chunks = prepare_model_feature_chunks(
+                ks.mol,
+                dm0,
+                ks.grids,
+                atom_major_raw_features=screened_features.atom_major_raw_features,
+                feature_function=screened_features.feature_function,
                 func_deriv=2,
                 max_memory_in_mb=ks.max_memory if dm0.device.type == "cpu" else None,
                 safety_fraction=kwargs.get(
@@ -386,16 +392,9 @@ class SkalaNumInt(PySCFNumInt[Array]):
                 atom_major_hessian_action = torch.zeros_like(
                     screened_features.atom_major_raw_features
                 )
-                for atom_slice, grid_slice in screened_features.chunks:
-                    # Isolate the second-order model graph to the current atomic chunk.
-                    local_raw_features = (
-                        screened_features.atom_major_raw_features[..., grid_slice]
-                        .detach()
-                        .requires_grad_()
-                    )
-                    mol_features = screened_features.build_model_chunk(
-                        local_raw_features, atom_slice, grid_slice
-                    )
+                for chunk in model_chunks:
+                    local_raw_features = chunk.raw_features
+                    mol_features = chunk.model_features
                     E_xc_chunk = self.func.get_exc(mol_features)
                     (local_gradient,) = torch.autograd.grad(
                         E_xc_chunk,
@@ -407,11 +406,11 @@ class SkalaNumInt(PySCFNumInt[Array]):
                         (local_hessian_action,) = torch.autograd.grad(
                             local_gradient,
                             local_raw_features,
-                            atom_major_tangent[..., grid_slice],
+                            atom_major_tangent[..., chunk.grid_slice],
                         )
                     else:
                         local_hessian_action = torch.zeros_like(local_raw_features)
-                    atom_major_hessian_action[..., grid_slice] = (
+                    atom_major_hessian_action[..., chunk.grid_slice] = (
                         local_hessian_action.detach()
                     )
                     del (

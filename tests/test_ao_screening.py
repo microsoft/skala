@@ -7,8 +7,9 @@ from pyscf import dft, gto
 from pyscf.dft import numint as pyscf_numint
 
 from skala.functional.base import ExcFunctionalBase
-from skala.pyscf import features as features_module
+from skala.pyscf import model_chunking as model_chunking_module
 from skala.pyscf import numint as numint_module
+from skala.pyscf import screening as screening_module
 from skala.pyscf.ao_evaluation import (
     ChunkEvalBackward,
     ChunkEvalForward,
@@ -19,11 +20,12 @@ from skala.pyscf.ao_evaluation import (
 )
 from skala.pyscf.evaluation import FeatureSpec
 from skala.pyscf.feature_math import MGGAFeatureFunction
-from skala.pyscf.features import (
-    _prepare_spatially_sorted_grids,
-    _spatial_grid_permutations,
-)
+from skala.pyscf.model_chunking import ModelFeatureChunk
 from skala.pyscf.numint import SkalaNumInt, _should_screen_aos
+from skala.pyscf.screening import (
+    _decompose_grid_into_spatial_blocks,
+    _prepare_spatially_sorted_grids,
+)
 
 
 @pytest.fixture
@@ -167,12 +169,12 @@ def test_resolve_ao_block_size_modes(carbon: gto.Mole) -> None:
 
 
 @pytest.mark.parametrize(("ngrids", "block_size"), [(0, 4), (3, 4), (8, 4), (10, 4)])
-def test_spatial_grid_permutations_restore_original_order(
+def test_decompose_grid_into_spatial_blocks_restores_original_order(
     ngrids: int, block_size: int
 ) -> None:
     coords = np.arange(3 * ngrids, dtype=np.float64).reshape(ngrids, 3)
 
-    forward, inverse = _spatial_grid_permutations(coords, block_size)
+    forward, inverse = _decompose_grid_into_spatial_blocks(coords, block_size)
 
     assert np.array_equal(np.sort(forward), np.arange(ngrids))
     assert np.array_equal(coords[forward][inverse], coords)
@@ -183,7 +185,7 @@ def test_spatial_grid_permutations_restore_original_order(
     assert len(forward) % block_size == ngrids % block_size
 
 
-def test_spatial_grid_permutations_group_interleaved_clusters() -> None:
+def test_decompose_grid_into_spatial_blocks_groups_interleaved_clusters() -> None:
     block_size = 3
     labels = np.tile(np.arange(4), block_size)
     offsets = np.repeat(np.arange(block_size), 4)
@@ -191,7 +193,7 @@ def test_spatial_grid_permutations_group_interleaved_clusters() -> None:
         (100.0 * labels + offsets, np.zeros(labels.size), np.zeros(labels.size))
     )
 
-    forward, _ = _spatial_grid_permutations(coords, block_size)
+    forward, _ = _decompose_grid_into_spatial_blocks(coords, block_size)
 
     grouped_labels = labels[forward].reshape(-1, block_size)
     assert np.all(grouped_labels == grouped_labels[:, :1])
@@ -210,7 +212,7 @@ def test_prepare_spatially_sorted_cpu_grids(
     non0tab = np.ones((1, carbon.nbas), dtype=np.uint8)
     partition_calls = 0
 
-    def fake_spatial_grid_permutations(
+    def fake_decompose_grid_into_spatial_blocks(
         coords_arg: np.ndarray, block_size: int
     ) -> tuple[np.ndarray, np.ndarray]:
         nonlocal partition_calls
@@ -220,9 +222,9 @@ def test_prepare_spatially_sorted_cpu_grids(
         return forward, inverse
 
     monkeypatch.setattr(
-        features_module,
-        "_spatial_grid_permutations",
-        fake_spatial_grid_permutations,
+        screening_module,
+        "_decompose_grid_into_spatial_blocks",
+        fake_decompose_grid_into_spatial_blocks,
     )
 
     screen_index_calls = 0
@@ -322,49 +324,67 @@ def test_first_and_second_order_use_same_screening_decision(
             "grid_weights": torch.ones(1, dtype=dm.dtype),
         }
 
-    class FakeGlobalScreenedFeatures:
+    class FakeScreenedFeatureBuffer:
         def __init__(self, dm: torch.Tensor) -> None:
             raw_features = dm.sum().reshape(1, 1)
             self.feature_function = MGGAFeatureFunction(FeatureSpec(["density"]))
             self.sorted_raw_features = raw_features
             self.atom_major_raw_features = raw_features
             self.forward_permutation = torch.tensor([0])
-            self.chunks = [(slice(0, 1), slice(0, 1))]
 
         def atom_major_jvp(self, dm_tangent: torch.Tensor) -> torch.Tensor:
             return dm_tangent.sum().reshape(1, 1)
 
-        def build_model_chunk(
-            self,
-            raw_features: torch.Tensor,
-            atom_slice: slice,
-            grid_slice: slice,
-        ) -> dict[str, torch.Tensor]:
-            assert atom_slice == slice(0, 1)
-            assert grid_slice == slice(0, 1)
-            return {
-                "atomic_grid_sizes": torch.tensor([1]),
-                "density": raw_features.expand(2, 1) / 2,
-                "grid_weights": torch.ones(1, dtype=raw_features.dtype),
-            }
+    class FakeModelFeatureChunks:
+        def __init__(self, raw_features: torch.Tensor) -> None:
+            self.raw_features = raw_features
 
-    def fake_global_screened_features(
+        def __iter__(self) -> Iterator[ModelFeatureChunk]:
+            raw_features = self.raw_features.detach().requires_grad_()
+            yield ModelFeatureChunk(
+                grid_slice=slice(0, 1),
+                raw_features=raw_features,
+                model_features={
+                    "atomic_grid_sizes": torch.tensor([1]),
+                    "density": raw_features.expand(2, 1) / 2,
+                    "grid_weights": torch.ones(1, dtype=raw_features.dtype),
+                },
+            )
+
+    def fake_prepare_screened_feature_buffer(
         mol: gto.Mole,
         dm: torch.Tensor,
         grids: object,
         features: set[str],
+        **kwargs: object,
+    ) -> FakeScreenedFeatureBuffer:
+        routes.append("screened")
+        return FakeScreenedFeatureBuffer(dm)
+
+    def fake_prepare_model_feature_chunks(
+        mol: gto.Mole,
+        dm: torch.Tensor,
+        grids: object,
+        atom_major_raw_features: torch.Tensor,
+        feature_function: MGGAFeatureFunction,
         func_deriv: int,
         **kwargs: object,
-    ) -> FakeGlobalScreenedFeatures:
-        routes.append("screened")
+    ) -> FakeModelFeatureChunks:
         safety_fraction = kwargs["safety_fraction"]
         assert isinstance(safety_fraction, float)
         safety_fractions.append(safety_fraction)
-        return FakeGlobalScreenedFeatures(dm)
+        return FakeModelFeatureChunks(atom_major_raw_features)
 
     monkeypatch.setattr(numint_module, "generate_features", fake_generate_features)
     monkeypatch.setattr(
-        numint_module, "_global_screened_features", fake_global_screened_features
+        numint_module,
+        "prepare_screened_feature_buffer",
+        fake_prepare_screened_feature_buffer,
+    )
+    monkeypatch.setattr(
+        numint_module,
+        "prepare_model_feature_chunks",
+        fake_prepare_model_feature_chunks,
     )
     numint = SkalaNumInt(QuadraticDensityFunctional())
     dm = torch.eye(carbon.nao_nr(), dtype=torch.float64)
@@ -635,7 +655,7 @@ def test_cpu_response_dense_screened_equivalence(
 
 
 @pytest.mark.parametrize("func_deriv", [1, 2])
-def test_global_screened_ao_traversals_are_independent_of_model_chunks(
+def test_screened_ao_traversals_are_independent_of_model_chunking(
     monkeypatch: pytest.MonkeyPatch,
     func_deriv: int,
 ) -> None:
@@ -643,8 +663,8 @@ def test_global_screened_ao_traversals_are_independent_of_model_chunks(
     grids = _minimal_atom_grid(mol)
     atom_grid_size = grids.weights.size // mol.natm
     monkeypatch.setattr(
-        features_module,
-        "estimate_max_grid_chunk_size",
+        model_chunking_module,
+        "estimate_max_model_grid_points",
         lambda *args, **kwargs: atom_grid_size,
     )
     monkeypatch.setattr(pyscf_numint, "SWITCH_SIZE", mol.nao_nr() - 1)

@@ -3,7 +3,7 @@
 import torch
 
 
-def estimate_max_grid_chunk_size(
+def estimate_max_model_grid_points(
     dm: torch.Tensor,
     deriv: int,
     max_memory_in_mb: int | None = None,
@@ -11,7 +11,7 @@ def estimate_max_grid_chunk_size(
     func_deriv: int = 1,
     reserved_memory_in_bytes: int = 0,
 ) -> int:
-    """Heuristically pick a model grid chunk size for screened feature evaluation.
+    """Heuristically limit grid points per atom-aligned model evaluation.
 
     The dominant per-chunk allocation is the atomic-orbital matrix evaluated by
     ``non_chunk`` (shape ``(ncomp, nao, n)`` in float64, with no AO screening),

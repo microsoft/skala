@@ -33,8 +33,8 @@ from skala.pyscf.ao_evaluation import (  # noqa: E402
 from skala.pyscf.backend import dft_gpu  # noqa: E402
 from skala.pyscf.evaluation import FeatureSpec  # noqa: E402
 from skala.pyscf.feature_math import MGGAFeatureFunction  # noqa: E402
-from skala.pyscf.features import _prepare_spatially_sorted_grids  # noqa: E402
 from skala.pyscf.numint import SkalaNumInt  # noqa: E402
+from skala.pyscf.screening import _prepare_spatially_sorted_grids  # noqa: E402
 
 CARBON_CHAIN = """
 C 0.0 0.0 0.0

@@ -3,7 +3,7 @@ import torch
 
 from skala.pyscf.memory_estimators import (
     estimate_global_raw_feature_buffer_memory,
-    estimate_max_grid_chunk_size,
+    estimate_max_model_grid_points,
     linear_peak_memory_model,
 )
 
@@ -37,7 +37,7 @@ def test_global_raw_feature_buffer_memory_rejects_unsupported_order() -> None:
 def test_reserved_memory_reduces_grid_chunk_size() -> None:
     dm = torch.eye(10, dtype=torch.float64)
     bytes_per_point, _ = linear_peak_memory_model(nao=10, deriv=1, func_deriv=1)
-    base_chunk_size = estimate_max_grid_chunk_size(
+    base_chunk_size = estimate_max_model_grid_points(
         dm,
         deriv=1,
         max_memory_in_mb=100,
@@ -45,7 +45,7 @@ def test_reserved_memory_reduces_grid_chunk_size() -> None:
         func_deriv=1,
     )
     reserved_points = 123
-    reserved_chunk_size = estimate_max_grid_chunk_size(
+    reserved_chunk_size = estimate_max_model_grid_points(
         dm,
         deriv=1,
         max_memory_in_mb=100,
@@ -58,13 +58,13 @@ def test_reserved_memory_reduces_grid_chunk_size() -> None:
 
 
 @pytest.mark.parametrize("safety_fraction", [-0.1, 0.0, 1.1])
-def test_grid_chunk_size_rejects_invalid_safety_fraction(
+def test_model_grid_point_limit_rejects_invalid_safety_fraction(
     safety_fraction: float,
 ) -> None:
     with pytest.raises(
         ValueError, match="safety_fraction must be greater than 0 and at most 1"
     ):
-        estimate_max_grid_chunk_size(
+        estimate_max_model_grid_points(
             torch.eye(2, dtype=torch.float64),
             deriv=1,
             max_memory_in_mb=100,

@@ -64,7 +64,7 @@ disable_error_code = ["no-any-return"]
 
 # torch.autograd.Function.apply() is untyped in PyTorch.
 [[tool.mypy.overrides]]
-module = ["skala.pyscf.ao_evaluation", "skala.pyscf.features"]
+module = ["skala.pyscf.ao_evaluation", "skala.pyscf.screening"]
 disable_error_code = ["no-untyped-call"]
 
 [tool.ruff]
