@@ -8,8 +8,8 @@ from pyscf.dft import numint as pyscf_numint
 
 from skala.functional.base import ExcFunctionalBase
 from skala.pyscf import model_chunking as model_chunking_module
-from skala.pyscf import numint as numint_module
 from skala.pyscf import screening as screening_module
+from skala.pyscf import xc_integrator as xc_integrator_module
 from skala.pyscf.ao_evaluation import (
     ChunkEvalBackward,
     ChunkEvalForward,
@@ -21,12 +21,13 @@ from skala.pyscf.ao_evaluation import (
 from skala.pyscf.evaluation import FeatureSpec
 from skala.pyscf.feature_math import MGGAFeatureFunction
 from skala.pyscf.model_chunking import ModelFeatureChunk
-from skala.pyscf.numint import SkalaNumInt, _should_screen_aos
+from skala.pyscf.numint import SkalaNumInt
 from skala.pyscf.screening import (
     SpatialGridLayout,
     _decompose_grid_into_spatial_blocks,
     prepare_spatial_grid_layout,
 )
+from skala.pyscf.xc_integrator import _should_screen_aos
 
 
 @pytest.fixture
@@ -303,22 +304,22 @@ def test_grid_reuses_spatial_grid_layout_across_numints(
         return layout
 
     monkeypatch.setattr(
-        numint_module,
+        xc_integrator_module,
         "prepare_spatial_grid_layout",
         fake_prepare_spatial_grid_layout,
     )
     numint = SkalaNumInt(QuadraticDensityFunctional())
     other_numint = SkalaNumInt(QuadraticDensityFunctional())
 
-    layout = numint._get_spatial_grid_layout(carbon, grids)
-    assert other_numint._get_spatial_grid_layout(carbon, grids) is layout
+    layout = numint.integrator._get_spatial_grid_layout(carbon, grids)
+    assert other_numint.integrator._get_spatial_grid_layout(carbon, grids) is layout
     assert vars(grids)["_skala_spatial_grid_layout"] is layout
     assert len(layouts) == 1
 
     numint.reset()
-    assert numint._get_spatial_grid_layout(carbon, grids) is layout
+    assert numint.integrator._get_spatial_grid_layout(carbon, grids) is layout
 
-    other_layout = numint._get_spatial_grid_layout(carbon, other_grids)
+    other_layout = numint.integrator._get_spatial_grid_layout(carbon, other_grids)
     assert other_layout is not layout
     assert vars(other_grids)["_skala_spatial_grid_layout"] is other_layout
     assert len(layouts) == 2
@@ -440,9 +441,11 @@ def test_first_and_second_order_use_same_screening_decision(
         safety_fractions.append(safety_fraction)
         return FakeModelFeatureChunks(atom_major_raw_features)
 
-    monkeypatch.setattr(numint_module, "generate_features", fake_generate_features)
     monkeypatch.setattr(
-        numint_module,
+        xc_integrator_module, "generate_features", fake_generate_features
+    )
+    monkeypatch.setattr(
+        xc_integrator_module,
         "prepare_spatial_grid_layout",
         fake_prepare_spatial_grid_layout,
     )
@@ -452,12 +455,12 @@ def test_first_and_second_order_use_same_screening_decision(
         staticmethod(fake_chunk_eval_forward),
     )
     monkeypatch.setattr(
-        numint_module,
+        xc_integrator_module,
         "prepare_model_feature_chunks",
         fake_prepare_model_feature_chunks,
     )
     monkeypatch.setattr(
-        numint_module,
+        xc_integrator_module,
         "screened_feature_jvp",
         fake_screened_feature_jvp,
     )

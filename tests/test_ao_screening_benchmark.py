@@ -18,7 +18,8 @@ from torch.utils.dlpack import from_dlpack
 
 from skala.functional import load_functional
 from skala.functional.base import ExcFunctionalBase
-from skala.pyscf.numint import SkalaNumInt, _should_screen_aos
+from skala.pyscf.numint import SkalaNumInt
+from skala.pyscf.xc_integrator import _should_screen_aos
 
 THREAD_COUNT = 4
 MAX_MEMORY_MB = 2000

@@ -35,7 +35,7 @@ from skala.gpu4pyscf.gradients import (  # noqa: E402
 from skala.pyscf import SkalaKS as CpuSkalaKS  # noqa: E402
 from skala.pyscf.features import generate_features  # noqa: E402
 from skala.pyscf.gradients import SkalaRKSGradient as CpuSkalaRKSGradient  # noqa: E402
-from skala.pyscf.numint import _should_screen_aos  # noqa: E402
+from skala.pyscf.xc_integrator import _should_screen_aos  # noqa: E402
 from skala.utils import torch_allocator  # noqa: E402
 
 H2_SKALA_1_1_GRAD_REF = torch.tensor(
