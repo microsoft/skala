@@ -318,6 +318,60 @@ def test_nonlocal_model_snapshot() -> None:
     )
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
+def test_nonlocal_model_cuda_split_linear_matches_concat() -> None:
+    torch.manual_seed(42)
+    sph_irreps = Irreps.spherical_harmonics(1, p=1)
+    nlm = NonLocalModel(
+        input_nf=256,
+        hidden_nf=3,
+        lmax=1,
+        edge_irreps=sph_irreps,
+        coarse_linear_type="decomp-identity",
+        correlation=1,
+    ).cuda()
+
+    num_fine, num_coarse = 10, 4
+    h = torch.randn(num_fine, num_coarse, 256, device="cuda", requires_grad=True)
+    distance_ft = (
+        torch.randn(num_fine, num_coarse, 3, device="cuda").abs().requires_grad_()
+    )
+    direction_ft = torch.randn(
+        num_fine, num_coarse, 4, device="cuda", requires_grad=True
+    )
+    grid_weights = (
+        torch.randn(num_fine, num_coarse, dtype=torch.float64, device="cuda")
+        .abs()
+        .requires_grad_()
+    )
+    exp_m1_rho = (
+        torch.randn(num_fine, num_coarse, 1, device="cuda").abs().requires_grad_()
+    )
+
+    inputs = (h, distance_ft, direction_ft, grid_weights, exp_m1_rho)
+    concat_linear = nlm.concat_layer[0]
+    assert isinstance(concat_linear, torch.nn.Linear)
+    assert concat_linear.bias is not None
+    differentiated = (*inputs, concat_linear.weight, concat_linear.bias)
+    actual = nlm(*inputs)
+    actual_grads = torch.autograd.grad(actual.sum(), differentiated)
+
+    h_prepared = nlm.pre_down_layer(h)
+    down = nlm.tp_down(h_prepared, direction_ft, distance_weights=distance_ft)
+    h_coarse = torch.einsum("gck,gc->ck", down.double(), grid_weights.double()).to(
+        nlm.dtype
+    )
+    h_coarse = nlm.coarse_linear(h_coarse)
+    h_fine = nlm.tp_up(h_coarse, direction_ft, distance_weights=distance_ft)
+    h_fine = nlm.post_up_layer(h_fine)
+    expected = nlm.concat_layer(torch.cat([h, h_fine * exp_m1_rho], dim=-1))
+    expected_grads = torch.autograd.grad(expected.sum(), differentiated)
+
+    torch.testing.assert_close(actual, expected, rtol=2e-5, atol=2e-5)
+    for actual_grad, expected_grad in zip(actual_grads, expected_grads, strict=True):
+        torch.testing.assert_close(actual_grad, expected_grad, rtol=2e-5, atol=2e-5)
+
+
 def test_get_exc_density_snapshot_4atoms() -> None:
     torch.manual_seed(42)
     model = small_model()
