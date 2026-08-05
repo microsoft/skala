@@ -27,6 +27,7 @@ except ModuleNotFoundError:
 from skala.functional.base import ExcFunctionalBase  # noqa: E402
 from skala.gpu4pyscf import SkalaKS  # noqa: E402
 from skala.pyscf.backend import dft_gpu  # noqa: E402
+from skala.pyscf.evaluation import FeatureSpec  # noqa: E402
 from skala.pyscf.features import (  # noqa: E402
     ChunkEvalForward,
     MGGAFeatureFunction,
@@ -361,9 +362,7 @@ def test_gpu_empty_ao_block_matches_dense_reference() -> None:
     assert active_ao_counts[1] > 0
     grids._non0ao_idx = None
 
-    feature_function = MGGAFeatureFunction(
-        with_density=True, with_grad=True, with_kin=True
-    )
+    feature_function = MGGAFeatureFunction(FeatureSpec(["density", "grad", "kin"]))
     dm = torch.eye(mol.nao_nr(), dtype=torch.float64, device="cuda", requires_grad=True)
     screened = ChunkEvalForward.apply(  # type: ignore[no-untyped-call]
         dm, mol, grids, feature_function, block_size, False, True
@@ -416,9 +415,7 @@ def test_gpu_sparse_mask_sorts_scatters_and_unsorts(
 
     monkeypatch.setattr(dft_gpu.numint, "NumInt", FakeGpuNumInt)
 
-    feature_function = MGGAFeatureFunction(
-        with_density=True, with_grad=False, with_kin=False
-    )
+    feature_function = MGGAFeatureFunction(FeatureSpec(["density"]))
     dm = torch.diag(
         torch.arange(1, mol.nao_nr() + 1, dtype=torch.float64, device="cuda")
     ).requires_grad_()

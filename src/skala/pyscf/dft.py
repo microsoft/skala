@@ -62,7 +62,7 @@ from pyscf import dft, gto
 from pyscf.df import df_jk
 
 from skala.functional.base import ExcFunctionalBase
-from skala.pyscf.features import _ATOMIC_GRID_FEATURES
+from skala.pyscf.evaluation import FeatureSpec
 from skala.pyscf.gradients import SkalaRKSGradient, SkalaUKSGradient
 from skala.pyscf.grids import UnsortableGrids
 from skala.pyscf.numint import SkalaNumInt
@@ -73,7 +73,7 @@ logger = logging.getLogger(__name__)
 
 def _needs_unsorted_grids(func: ExcFunctionalBase) -> bool:
     """Return True when the functional needs per-atom grid ordering."""
-    return bool(set(func.features) & _ATOMIC_GRID_FEATURES)
+    return FeatureSpec(func.features).requires_atomic_layout
 
 
 def _build_grids_unsorted(

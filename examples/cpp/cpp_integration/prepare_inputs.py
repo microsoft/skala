@@ -7,12 +7,9 @@ import torch
 from pyscf import dft, gto
 from pyscf.dft import gen_grid
 
+from skala.functional.model import SkalaFunctional
 from skala.functional.traditional import LDA
-from skala.pyscf.features import (
-    _ATOMIC_GRID_FEATURES,
-    DEFAULT_FEATURES_SET,
-    generate_features,
-)
+from skala.pyscf.features import generate_features
 
 
 def main() -> None:
@@ -45,11 +42,8 @@ def main() -> None:
     grid.level = 3
     grid.build(sort_grids=False)
     features = generate_features(
-        molecule, dm, grid, features=DEFAULT_FEATURES_SET | _ATOMIC_GRID_FEATURES
+        molecule, dm, grid, features=set(SkalaFunctional.features)
     )
-
-    # Add a feature called `coarse_0_atomic_coords` containing the atomic coordinates.
-    features["coarse_0_atomic_coords"] = torch.from_numpy(molecule.atom_coords())
 
     # Save all features as individual .pt files.
     for key, value in features.items():

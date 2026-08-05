@@ -25,6 +25,7 @@ from skala.pyscf.backend import (
     dft_gpu,
     from_numpy_or_cupy,
 )
+from skala.pyscf.evaluation import EvaluationPolicy, FeatureSpec
 from skala.pyscf.memory_estimators import (
     estimate_global_raw_feature_buffer_memory,
     estimate_max_grid_chunk_size,
@@ -35,13 +36,6 @@ LOG = logging.getLogger(__name__)
 DEFAULT_FEATURES = ["density", "kin", "grad", "grid_coords", "grid_weights"]
 DEFAULT_FEATURES_SET = set(DEFAULT_FEATURES)
 CPU_AO_SCREENING_BLOCK_SIZE = 9 * dft.gen_grid.BLKSIZE
-
-# Features that require per-atom grid decomposition.
-_ATOMIC_GRID_FEATURES = {
-    "atomic_grid_weights",
-    "atomic_grid_sizes",
-    "atomic_grid_size_bound_shape",
-}
 
 _Float64Coordinates: TypeAlias = np.ndarray[tuple[int, int], np.dtype[np.float64]]
 _Int64Permutation: TypeAlias = np.ndarray[tuple[int], np.dtype[np.int64]]
@@ -307,7 +301,8 @@ def generate_features(
         A dictionary containing the requested features. The keys are the feature names,
         and the values are the corresponding tensors.
     """
-    features = features or DEFAULT_FEATURES_SET
+    feature_spec = FeatureSpec(DEFAULT_FEATURES_SET if features is None else features)
+    evaluation_policy = EvaluationPolicy(ao_block_size=chunk_size)
 
     # if dm is a 3D tensor, then we have a spin-polarized system
     with_spin = len(dm.shape) == 3
@@ -315,28 +310,17 @@ def generate_features(
     if gpu and dm.device.type != "cuda":
         raise ValueError("Density matrix must be on the GPU when gpu=True.")
 
-    mol_features = get_grid_features(mol, dm, grids, features)
+    mol_features = get_grid_features(mol, dm, grids, feature_spec)
 
-    with_mgga_feature = (
-        "density" in features
-        or "grad" in features
-        or "kin" in features
-        or "lapl" in features
-    )
-    if with_mgga_feature:
+    if feature_spec.requires_mgga:
         mgga_features = auto_chunk(
             dm,
             mol,
             grids,
-            MGGAFeatureFunction(
-                with_density="density" in features,
-                with_grad="grad" in features,
-                with_kin="kin" in features,
-                with_lapl="lapl" in features,
-            ),
-            block_size=chunk_size,
+            MGGAFeatureFunction(feature_spec),
+            block_size=evaluation_policy.ao_block_size,
             max_memory=max_memory,
-            fix_block_size=chunk_size is None,
+            fix_block_size=evaluation_policy.ao_block_size is None,
             gpu=gpu,
         )
 
@@ -352,26 +336,26 @@ def get_grid_features(
     mol: gto.Mole,
     dm: Tensor,
     grids: Grid,
-    requested_features: set[str],
+    feature_spec: FeatureSpec,
 ) -> dict[str, Tensor]:
     grid_features = {}
 
-    if "grid_coords" in requested_features:
+    if feature_spec.requests("grid_coords"):
         grid_features["grid_coords"] = from_numpy_or_cupy(
             grids.coords, device=dm.device, dtype=dm.dtype
         )
 
-    if "grid_weights" in requested_features:
+    if feature_spec.requests("grid_weights"):
         grid_features["grid_weights"] = from_numpy_or_cupy(
             grids.weights, device=dm.device, dtype=dm.dtype
         )
 
-    if "coarse_0_atomic_coords" in requested_features:
+    if feature_spec.requests("coarse_0_atomic_coords"):
         grid_features["coarse_0_atomic_coords"] = from_numpy_or_cupy(
             mol.atom_coords(), device=dm.device, dtype=dm.dtype
         )
 
-    if requested_features & _ATOMIC_GRID_FEATURES:
+    if feature_spec.requires_atomic_layout:
         atom_grids_tab = grids.gen_atomic_grids(
             mol, grids.atom_grid, grids.radi_method, grids.level, grids.prune
         )
@@ -387,18 +371,18 @@ def get_grid_features(
                 f"Set grids.alignment = 1 before building grids to disable padding."
             )
 
-        if "atomic_grid_sizes" in requested_features:
+        if feature_spec.requests("atomic_grid_sizes"):
             grid_features["atomic_grid_sizes"] = torch.tensor(
                 sizes, dtype=torch.long, device=dm.device
             )
 
-        if "atomic_grid_size_bound_shape" in requested_features:
+        if feature_spec.requests("atomic_grid_size_bound_shape"):
             max_size = max(sizes)
             grid_features["atomic_grid_size_bound_shape"] = torch.zeros(
                 max_size, 0, dtype=torch.long, device=dm.device
             )
 
-        if "atomic_grid_weights" in requested_features:
+        if feature_spec.requests("atomic_grid_weights"):
             raw_weights = np.concatenate(
                 [atom_grids_tab[mol.atom_symbol(ia)][1] for ia in range(mol.natm)]
             )
@@ -456,50 +440,29 @@ class FeatureFunction(nn.Module, ABC):
 
 
 class MGGAFeatureFunction(FeatureFunction):
-    with_density: bool
-    with_grad: bool
-    with_kin: bool
-    with_lapl: bool
-
-    def __init__(
-        self,
-        with_density: bool = True,
-        with_grad: bool = True,
-        with_kin: bool = True,
-        with_lapl: bool = False,
-    ):
+    def __init__(self, feature_spec: FeatureSpec):
         super().__init__()
 
-        self.with_density = with_density
-        self.with_grad = with_grad
-        self.with_kin = with_kin
-        self.with_lapl = with_lapl
-
-        self.deriv = 0
-        if with_grad or with_kin:
-            self.deriv = 1
-        if with_lapl:
-            self.deriv = 2
-
-        self.nfeats = with_density + with_grad * 3 + with_kin + with_lapl
-
-        if self.nfeats == 0:
+        if not feature_spec.requires_mgga:
             raise ValueError("At least one feature must be selected.")
+        self.feature_spec = feature_spec
+        self.deriv = feature_spec.ao_derivative_order
+        self.nfeats = feature_spec.mgga_feature_count
 
     def to_dict(self, features: torch.Tensor) -> dict[str, torch.Tensor]:
         """Convert the features to a dictionary with the keys being the feature names."""
         feature_index = 0
         feature_dict: dict[str, torch.Tensor] = {}
-        if self.with_density:
+        if self.feature_spec.with_density:
             feature_dict["density"] = features[..., feature_index, :]
             feature_index += 1
-        if self.with_grad:
+        if self.feature_spec.with_grad:
             feature_dict["grad"] = features[..., feature_index : feature_index + 3, :]
             feature_index += 3
-        if self.with_kin:
+        if self.feature_spec.with_kin:
             feature_dict["kin"] = features[..., feature_index, :]
             feature_index += 1
-        if self.with_lapl:
+        if self.feature_spec.with_lapl:
             feature_dict["lapl"] = features[..., feature_index, :]
             feature_index += 1
         return feature_dict
@@ -529,33 +492,33 @@ class MGGAFeatureFunction(FeatureFunction):
         c0 = dm_view @ ao[0]
 
         feat_idx = 0
-        if self.with_density:
+        if self.feature_spec.with_density:
             features[..., feat_idx, :] = torch.sum(c0 * ao[0][None, :, :], dim=-2)
             feat_idx += 1
 
-        if self.with_grad:
+        if self.feature_spec.with_grad:
             for i in range(3):
                 features[..., feat_idx, :] = 2 * torch.sum(
                     c0 * ao[i + 1][None, :, :], dim=-2
                 )
                 feat_idx += 1
 
-        if self.with_kin or self.with_lapl:
+        if self.feature_spec.with_kin or self.feature_spec.with_lapl:
             for i in range(3):
                 ci = dm_view @ ao[i + 1]
                 features[..., feat_idx, :] += 0.5 * torch.sum(
                     ci * ao[i + 1][None, :, :], dim=-2
                 )
 
-            if self.with_kin:
+            if self.feature_spec.with_kin:
                 feat_idx += 1
-                if self.with_lapl:
+                if self.feature_spec.with_lapl:
                     features[..., feat_idx, :] = 4 * features[..., feat_idx - 1, :]
             else:
                 # Multiply times four for the laplacian
                 features[..., feat_idx, :] *= 4.0
 
-            if self.with_lapl:
+            if self.feature_spec.with_lapl:
                 # 0 is without derivative
                 # 1 2 3 are x y z derivatives
                 # 4 5 6 are xx xy xz derivatives
@@ -584,7 +547,7 @@ class _GlobalScreenedFeatures:
     compile_feature_function: bool
     gpu: bool
     grid_features: dict[str, Tensor]
-    feature_names: set[str]
+    feature_spec: FeatureSpec
     chunks: list[tuple[slice, slice]]
     with_spin: bool
 
@@ -611,18 +574,18 @@ class _GlobalScreenedFeatures:
         """Build one atom-aligned model dictionary from raw feature values."""
         feature_chunk: dict[str, Tensor] = {}
         for feature_name in ("grid_coords", "grid_weights", "atomic_grid_weights"):
-            if feature_name in self.feature_names:
+            if self.feature_spec.requests(feature_name):
                 feature_chunk[feature_name] = self.grid_features[feature_name][
                     grid_slice
                 ]
 
         for feature_name in ("coarse_0_atomic_coords", "atomic_grid_sizes"):
-            if feature_name in self.feature_names:
+            if self.feature_spec.requests(feature_name):
                 feature_chunk[feature_name] = self.grid_features[feature_name][
                     atom_slice
                 ]
 
-        if "atomic_grid_size_bound_shape" in self.feature_names:
+        if self.feature_spec.requests("atomic_grid_size_bound_shape"):
             max_size = int(feature_chunk["atomic_grid_sizes"].max().item())
             feature_chunk["atomic_grid_size_bound_shape"] = torch.zeros(
                 max_size,
@@ -644,27 +607,25 @@ def _global_screened_features(
     mol: gto.Mole,
     dm: Tensor,
     grids: Grid,
-    features: set[str],
+    features: FeatureSpec | set[str],
     func_deriv: int,
     max_memory_in_mb: int | None = None,
     safety_fraction: float = 0.8,
     compile_feature_function: bool = False,
 ) -> _GlobalScreenedFeatures:
     """Evaluate raw AO features once on a spatially ordered molecular grid."""
-    if "atomic_grid_sizes" not in features:
+    feature_spec = (
+        features if isinstance(features, FeatureSpec) else FeatureSpec(features)
+    )
+    if not feature_spec.supports_screened_evaluation:
         raise ValueError(
             "Global screened features require 'atomic_grid_sizes' for model chunks."
         )
     if grids.coords is None or grids.weights is None:
         raise ValueError("Grids must be built before generating screened features.")
 
-    feature_function = MGGAFeatureFunction(
-        with_density="density" in features,
-        with_grad="grad" in features,
-        with_kin="kin" in features,
-        with_lapl="lapl" in features,
-    )
-    grid_features = get_grid_features(mol, dm, grids, features)
+    feature_function = MGGAFeatureFunction(feature_spec)
+    grid_features = get_grid_features(mol, dm, grids, feature_spec)
     max_grid_chunk_size = estimate_max_grid_chunk_size(
         dm=dm,
         deriv=feature_function.deriv,
@@ -721,7 +682,7 @@ def _global_screened_features(
         compile_feature_function=compile_feature_function,
         gpu=gpu,
         grid_features=grid_features,
-        feature_names=features,
+        feature_spec=feature_spec,
         chunks=chunks,
         with_spin=dm.ndim == 3,
     )

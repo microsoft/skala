@@ -9,6 +9,7 @@ from pyscf.dft import numint as pyscf_numint
 from skala.functional.base import ExcFunctionalBase
 from skala.pyscf import features as features_module
 from skala.pyscf import numint as numint_module
+from skala.pyscf.evaluation import FeatureSpec
 from skala.pyscf.features import (
     ChunkEvalBackward,
     ChunkEvalForward,
@@ -28,77 +29,27 @@ def carbon() -> gto.Mole:
 
 
 @pytest.mark.parametrize(
-    ("options", "expected_deriv", "expected_nfeats", "expected_names"),
+    ("feature_names", "expected_deriv", "expected_nfeats"),
     [
-        (
-            {
-                "with_density": True,
-                "with_grad": False,
-                "with_kin": False,
-                "with_lapl": False,
-            },
-            0,
-            1,
-            {"density"},
-        ),
-        (
-            {
-                "with_density": False,
-                "with_grad": True,
-                "with_kin": False,
-                "with_lapl": False,
-            },
-            1,
-            3,
-            {"grad"},
-        ),
-        (
-            {
-                "with_density": False,
-                "with_grad": False,
-                "with_kin": True,
-                "with_lapl": False,
-            },
-            1,
-            1,
-            {"kin"},
-        ),
-        (
-            {
-                "with_density": False,
-                "with_grad": False,
-                "with_kin": False,
-                "with_lapl": True,
-            },
-            2,
-            1,
-            {"lapl"},
-        ),
-        (
-            {
-                "with_density": True,
-                "with_grad": True,
-                "with_kin": True,
-                "with_lapl": True,
-            },
-            2,
-            6,
-            {"density", "grad", "kin", "lapl"},
-        ),
+        ({"density"}, 0, 1),
+        ({"grad"}, 1, 3),
+        ({"kin"}, 1, 1),
+        ({"lapl"}, 2, 1),
+        ({"density", "grad", "kin", "lapl"}, 2, 6),
     ],
 )
 def test_mgga_supported_features_are_linear_in_density_matrix(
-    options: dict[str, bool],
+    feature_names: set[str],
     expected_deriv: int,
     expected_nfeats: int,
-    expected_names: set[str],
 ) -> None:
     """Check each supported feature layout and its linear dependence on ``dm``.
 
     Linearity requires the first JVP to equal direct feature evaluation on the
     tangent and the second JVP to vanish.
     """
-    feature_function = MGGAFeatureFunction(**options)
+    feature_spec = FeatureSpec(feature_names)
+    feature_function = MGGAFeatureFunction(feature_spec)
     ncomp = (expected_deriv + 1) * (expected_deriv + 2) * (expected_deriv + 3) // 6
     ao = torch.arange(1, ncomp * 2 * 3 + 1, dtype=torch.float64).reshape(ncomp, 2, 3)
     if expected_deriv == 0:
@@ -128,20 +79,16 @@ def test_mgga_supported_features_are_linear_in_density_matrix(
 
     assert feature_function.deriv == expected_deriv
     assert feature_function.nfeats == expected_nfeats
+    assert feature_function.feature_spec is feature_spec
     assert features.shape == (expected_nfeats, 3)
-    assert set(feature_function.to_dict(features)) == expected_names
+    assert set(feature_function.to_dict(features)) == feature_names
     torch.testing.assert_close(feature_jvp, feature_function(tangent, ao))
     torch.testing.assert_close(second_jvp, torch.zeros_like(second_jvp))
 
 
 def test_mgga_requires_at_least_one_feature() -> None:
     with pytest.raises(ValueError, match="At least one feature must be selected"):
-        MGGAFeatureFunction(
-            with_density=False,
-            with_grad=False,
-            with_kin=False,
-            with_lapl=False,
-        )
+        MGGAFeatureFunction(FeatureSpec([]))
 
 
 @pytest.mark.parametrize(
@@ -341,11 +288,7 @@ def test_first_and_second_order_use_same_screening_decision(
     class FakeGlobalScreenedFeatures:
         def __init__(self, dm: torch.Tensor) -> None:
             raw_features = dm.sum().reshape(1, 1)
-            self.feature_function = MGGAFeatureFunction(
-                with_density=True,
-                with_grad=False,
-                with_kin=False,
-            )
+            self.feature_function = MGGAFeatureFunction(FeatureSpec(["density"]))
             self.sorted_raw_features = raw_features
             self.atom_major_raw_features = raw_features
             self.forward_permutation = torch.tensor([0])
@@ -421,11 +364,7 @@ def test_first_and_second_order_use_same_screening_decision(
 
 def test_feature_block_helper_localizes_derivative_vectors() -> None:
     """Use AO slices for linear JVPs and grid slices for feature VJPs."""
-    feature_function = MGGAFeatureFunction(
-        with_density=True,
-        with_grad=False,
-        with_kin=False,
-    )
+    feature_function = MGGAFeatureFunction(FeatureSpec(["density"]))
     block = _AOBlock(
         ao=torch.tensor([[1.0, 2.0], [3.0, 4.0]], dtype=torch.float64),
         active_aos=torch.tensor([0, 2]),
@@ -466,11 +405,7 @@ def test_feature_block_helper_localizes_derivative_vectors() -> None:
 def test_chunk_eval_transforms_follow_linear_operator(carbon: gto.Mole) -> None:
     """Check first and second JVPs and the feature-cotangent adjoint JVP."""
     grids = _minimal_atom_grid(carbon)
-    feature_function = MGGAFeatureFunction(
-        with_density=True,
-        with_grad=False,
-        with_kin=False,
-    )
+    feature_function = MGGAFeatureFunction(FeatureSpec(["density"]))
     dm = torch.eye(carbon.nao_nr(), dtype=torch.float64)
     tangent = torch.arange(1, dm.numel() + 1, dtype=dm.dtype).reshape(dm.shape)
 
@@ -532,9 +467,7 @@ def test_cpu_screening_slices_and_scatters_full_derivatives(
 
     monkeypatch.setattr(dft.numint, "NumInt", FakeNumInt)
 
-    feature_function = MGGAFeatureFunction(
-        with_density=True, with_grad=False, with_kin=False
-    )
+    feature_function = MGGAFeatureFunction(FeatureSpec(["density"]))
     dm = torch.diag(
         torch.arange(1, carbon.nao_nr() + 1, dtype=torch.float64)
     ).requires_grad_()
@@ -577,9 +510,7 @@ def test_cpu_no_active_aos_returns_full_zero_derivatives(
             yield ao, screen_index, grids.weights, grids.coords
 
     monkeypatch.setattr(dft.numint, "NumInt", FakeNumInt)
-    feature_function = MGGAFeatureFunction(
-        with_density=True, with_grad=False, with_kin=False
-    )
+    feature_function = MGGAFeatureFunction(FeatureSpec(["density"]))
     dm = torch.eye(carbon.nao_nr(), dtype=torch.float64).requires_grad_()
 
     features = ChunkEvalForward.apply(  # type: ignore[no-untyped-call]

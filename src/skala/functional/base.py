@@ -8,7 +8,7 @@ for implementing exchange-correlation functionals in Skala.
 """
 
 from collections.abc import Callable
-from typing import Any, ClassVar
+from typing import Any
 
 import torch
 from torch import nn
@@ -25,7 +25,7 @@ class ExcFunctionalBase(nn.Module):
     energy density from molecular features.
     """
 
-    features: ClassVar[list[str]]
+    features: list[str]
     """List of features that this functional requires."""
 
     def get_d3_settings(self) -> str | None:

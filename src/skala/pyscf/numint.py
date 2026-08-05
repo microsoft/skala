@@ -18,6 +18,7 @@ from skala.pyscf.backend import (
     to_cupy,
     to_numpy,
 )
+from skala.pyscf.evaluation import EvaluationPolicy, FeatureSpec
 from skala.pyscf.features import (
     _global_screened_features,
     generate_features,
@@ -144,7 +145,8 @@ class SkalaNumInt(PySCFNumInt[Array]):
             check_gpu_imports_were_successful()
 
         self.func = functional.to(device=self.device)
-        self.chunk_size = chunk_size
+        self.feature_spec = FeatureSpec(self.func.features)
+        self.evaluation_policy = EvaluationPolicy(ao_block_size=chunk_size)
 
     def from_backend(
         self,
@@ -182,7 +184,7 @@ class SkalaNumInt(PySCFNumInt[Array]):
             self.from_backend(dm),
             grids,
             features={"density"},
-            chunk_size=self.chunk_size,
+            chunk_size=self.evaluation_policy.ao_block_size,
             max_memory=max_memory,
             gpu=self.device.type == "cuda",
         )
@@ -216,7 +218,7 @@ class SkalaNumInt(PySCFNumInt[Array]):
                 f"Density matrix device {dm.device} does not match functional device {self.device}"
             )
 
-        if self._functional_supports_atom_chunking() and _should_screen_aos(mol):
+        if self.feature_spec.supports_screened_evaluation and _should_screen_aos(mol):
             dm = dm.detach().requires_grad_()
             tot_dens = torch.tensor((0.0, 0.0), device=self.device, dtype=dm.dtype)
             E_xc = torch.tensor(0.0, device=self.device, dtype=dm.dtype)
@@ -224,10 +226,10 @@ class SkalaNumInt(PySCFNumInt[Array]):
                 mol,
                 dm,
                 grids,
-                features=set(self.func.features),
+                features=self.feature_spec,
                 func_deriv=1,
                 max_memory_in_mb=max_memory if dm.device.type == "cpu" else None,
-                safety_fraction=0.8,
+                safety_fraction=self.evaluation_policy.safety_fraction,
             )
             # Store only full-grid feature cotangents; model activations remain chunk-local.
             atom_major_cotangent = torch.zeros_like(
@@ -275,8 +277,8 @@ class SkalaNumInt(PySCFNumInt[Array]):
             mol,
             dm,
             grids,
-            set(self.func.features),
-            chunk_size=self.chunk_size,
+            set(self.feature_spec.names),
+            chunk_size=self.evaluation_policy.ao_block_size,
             max_memory=max_memory,
             gpu=self.device.type == "cuda",
         )
@@ -361,16 +363,20 @@ class SkalaNumInt(PySCFNumInt[Array]):
 
         dm0 = self.from_backend(ks.make_rdm1(mo_coeff, mo_occ))
 
-        if self._functional_supports_atom_chunking() and _should_screen_aos(ks.mol):
+        if self.feature_spec.supports_screened_evaluation and _should_screen_aos(
+            ks.mol
+        ):
             dm0 = dm0.requires_grad_()
             screened_features = _global_screened_features(
                 ks.mol,
                 dm0,
                 ks.grids,
-                features=set(self.func.features),
+                features=self.feature_spec,
                 func_deriv=2,
                 max_memory_in_mb=ks.max_memory if dm0.device.type == "cpu" else None,
-                safety_fraction=kwargs.get("safety_fraction", 0.8),
+                safety_fraction=kwargs.get(
+                    "safety_fraction", self.evaluation_policy.safety_fraction
+                ),
             )
 
             def hessian_vector_product_atom_chunked(dm1: Array) -> Array:
@@ -458,6 +464,3 @@ class SkalaNumInt(PySCFNumInt[Array]):
             return v1
 
         return hessian_vector_product
-
-    def _functional_supports_atom_chunking(self) -> bool:
-        return "atomic_grid_sizes" in self.func.features
