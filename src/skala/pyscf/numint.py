@@ -135,25 +135,16 @@ class SkalaNumInt(PySCFNumInt[Array]):
         """Numerical policy owned by the XC integrator."""
         return self.integrator.evaluation_policy
 
-    def reset(self) -> "SkalaNumInt[Array]":
-        """Return this integrator; spatial layouts are owned by grid objects."""
-        return self
-
-    def from_backend(
-        self,
-        x: Array,
-        device: torch.device | None = None,
-        transpose: bool = False,
-    ) -> Tensor:
-        return from_numpy_or_cupy(x, device=device or self.device, transpose=transpose)
+    def _from_backend(self, x: Array) -> Tensor:
+        return from_numpy_or_cupy(x, device=self.device)
 
     @overload
-    def to_backend(self, x: Tensor) -> Array: ...
+    def _to_backend(self, x: Tensor) -> Array: ...
     @overload
-    def to_backend(self, x: list[Tensor]) -> list[Array]: ...
-    def to_backend(self, x: Tensor | list[Tensor]) -> Array | list[Array]:
+    def _to_backend(self, x: list[Tensor]) -> list[Array]: ...
+    def _to_backend(self, x: Tensor | list[Tensor]) -> Array | list[Array]:
         if isinstance(x, list):
-            return [self.to_backend(y) for y in x]
+            return [self._to_backend(y) for y in x]
 
         if self.device.type == "cuda":
             return to_cupy(x)
@@ -170,11 +161,11 @@ class SkalaNumInt(PySCFNumInt[Array]):
     ) -> Array:
         density = self.integrator.density(
             mol,
-            self.from_backend(dm),
+            self._from_backend(dm),
             grids,
             max_memory=max_memory,
         )
-        return self.to_backend(density)
+        return self._to_backend(density)
 
     def __call__(
         self,
@@ -217,9 +208,9 @@ class SkalaNumInt(PySCFNumInt[Array]):
         """Restricted Kohn-Sham method, applicable if both spin-densities as equal."""
         assert len(dm.shape) == 2
         N, E_xc, V_xc = self(
-            mol, grids, xc_code, self.from_backend(dm), max_memory=max_memory
+            mol, grids, xc_code, self._from_backend(dm), max_memory=max_memory
         )
-        return N.sum().item(), E_xc.item(), self.to_backend(V_xc)
+        return N.sum().item(), E_xc.item(), self._to_backend(V_xc)
 
     def nr_uks(
         self,
@@ -232,9 +223,9 @@ class SkalaNumInt(PySCFNumInt[Array]):
         """Unrestricted Kohn-Sham method, spin densities can be different."""
         assert len(dm.shape) == 3 and dm.shape[0] == 2
         N, E_xc, V_xc = self(
-            mol, grids, xc_code, self.from_backend(dm), max_memory=max_memory
+            mol, grids, xc_code, self._from_backend(dm), max_memory=max_memory
         )
-        return self.to_backend(N), E_xc.item(), self.to_backend(V_xc)
+        return self._to_backend(N), E_xc.item(), self._to_backend(V_xc)
 
     class libxc:
         __version__ = None
@@ -270,7 +261,7 @@ class SkalaNumInt(PySCFNumInt[Array]):
             if "with_j" in kwargs:
                 assert kwargs["with_j"]
 
-        dm0 = self.from_backend(ks.make_rdm1(mo_coeff, mo_occ))
+        dm0 = self._from_backend(ks.make_rdm1(mo_coeff, mo_occ))
         xc_response = self.integrator.gen_response(
             ks.mol,
             ks.grids,
@@ -280,7 +271,7 @@ class SkalaNumInt(PySCFNumInt[Array]):
         )
 
         def hessian_vector_product(dm1: Array) -> Array:
-            v1 = self.to_backend(xc_response(self.from_backend(dm1)))
+            v1 = self._to_backend(xc_response(self._from_backend(dm1)))
             vj = ks.get_j(ks.mol, dm1, hermi=1)
 
             if ks.mol.spin == 0:
