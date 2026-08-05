@@ -192,14 +192,17 @@ class FakeKS:
 
 
 @pytest.mark.parametrize("expected", [False, True])
+@pytest.mark.parametrize("response_safety_fraction", [None, 0.6])
 def test_first_and_second_order_use_same_screening_decision(
     carbon: gto.Mole,
     monkeypatch: pytest.MonkeyPatch,
     expected: bool,
+    response_safety_fraction: float | None,
 ) -> None:
     switch_size = carbon.nao_nr() - 1 if expected else carbon.nao_nr()
     monkeypatch.setattr(pyscf_numint, "SWITCH_SIZE", switch_size)
     routes: list[str] = []
+    safety_fractions: list[float] = []
 
     def fake_generate_features(
         mol: gto.Mole,
@@ -255,6 +258,9 @@ def test_first_and_second_order_use_same_screening_decision(
         **kwargs: object,
     ) -> FakeGlobalScreenedFeatures:
         routes.append("screened")
+        safety_fraction = kwargs["safety_fraction"]
+        assert isinstance(safety_fraction, float)
+        safety_fractions.append(safety_fraction)
         return FakeGlobalScreenedFeatures(dm)
 
     monkeypatch.setattr(numint_module, "generate_features", fake_generate_features)
@@ -269,14 +275,29 @@ def test_first_and_second_order_use_same_screening_decision(
     numint(carbon, grids, None, dm)
 
     ks = FakeKS(carbon, grids)
+    response_kwargs = (
+        {}
+        if response_safety_fraction is None
+        else {"safety_fraction": response_safety_fraction}
+    )
     response = numint.gen_response(
-        np.eye(carbon.nao_nr()), np.ones(carbon.nao_nr()), ks=ks
+        np.eye(carbon.nao_nr()),
+        np.ones(carbon.nao_nr()),
+        ks=ks,
+        **response_kwargs,
     )
     result = response(np.eye(carbon.nao_nr()))
 
     assert result.shape == (carbon.nao_nr(), carbon.nao_nr())
     expected_route = "screened" if expected else "dense"
     assert routes == [expected_route, expected_route]
+    if expected:
+        assert safety_fractions == [
+            0.8,
+            0.8 if response_safety_fraction is None else response_safety_fraction,
+        ]
+    else:
+        assert safety_fractions == []
 
 
 def test_cpu_screening_slices_and_scatters_full_derivatives(

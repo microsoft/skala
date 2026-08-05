@@ -52,10 +52,14 @@ def estimate_max_grid_chunk_size(
         clamp it to at least the largest atomic grid size.
 
     Raises:
-        ValueError: If ``max_memory_in_mb`` is ``None`` and ``dm`` lives on a device
-            type other than ``cuda`` or ``cpu`` (supply ``max_memory_in_mb`` instead).
+        ValueError: If ``safety_fraction`` is outside ``(0, 1]``, or if
+            ``max_memory_in_mb`` is ``None`` and ``dm`` lives on a device type
+            other than ``cuda`` or ``cpu`` (supply ``max_memory_in_mb`` instead).
         RuntimeError: If CPU host memory cannot be determined automatically.
     """
+    if not 0 < safety_fraction <= 1:
+        raise ValueError("safety_fraction must be greater than 0 and at most 1")
+
     if max_memory_in_mb is None:
         match dm.device.type:
             case "cuda":

@@ -55,3 +55,18 @@ def test_reserved_memory_reduces_grid_chunk_size() -> None:
     )
 
     assert base_chunk_size - reserved_chunk_size == reserved_points
+
+
+@pytest.mark.parametrize("safety_fraction", [-0.1, 0.0, 1.1])
+def test_grid_chunk_size_rejects_invalid_safety_fraction(
+    safety_fraction: float,
+) -> None:
+    with pytest.raises(
+        ValueError, match="safety_fraction must be greater than 0 and at most 1"
+    ):
+        estimate_max_grid_chunk_size(
+            torch.eye(2, dtype=torch.float64),
+            deriv=1,
+            max_memory_in_mb=100,
+            safety_fraction=safety_fraction,
+        )

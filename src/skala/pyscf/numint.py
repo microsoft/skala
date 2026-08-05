@@ -370,7 +370,7 @@ class SkalaNumInt(PySCFNumInt[Array]):
                 features=set(self.func.features),
                 func_deriv=2,
                 max_memory_in_mb=ks.max_memory if dm0.device.type == "cpu" else None,
-                safety_fraction=kwargs.get("safety_fraction", 0.0),
+                safety_fraction=kwargs.get("safety_fraction", 0.8),
             )
             if not screened_features.feature_function.only_linear_feats:
                 raise NotImplementedError(
