@@ -420,29 +420,13 @@ def partial_feature_function_over_aos(
     """Returns a function that computes the feature function with the given ao,
     but not the dm already passed to the function.
 
-    Purpose is to allow for chaining of derivatives.
+    Purpose is to allow evaluating a block-local VJP.
     """
 
     def partial_feature_function(dm: torch.Tensor) -> torch.Tensor:
         return feature_function(dm, ao)
 
     return partial_feature_function
-
-
-def partial_jvp_function_over_tangents(
-    func: Callable[[torch.Tensor], torch.Tensor],
-    tangents: torch.Tensor,
-) -> Callable[[torch.Tensor], torch.Tensor]:
-    """Returns a function that computes the jvp of the given function with tangents,
-    but not primals already passed to the function.
-
-    Purpose is to allow for chaining of derivatives over primals."""
-
-    def reduced_jvp(primals: torch.Tensor) -> torch.Tensor:
-        _, tangent = torch.func.jvp(func, (primals,), (tangents,))
-        return tangent
-
-    return reduced_jvp
 
 
 def partial_vjp_function_over_tangents(
@@ -452,7 +436,7 @@ def partial_vjp_function_over_tangents(
     """Returns a function that computes the vjp of the given function with tangents,
     but not primals already passed to the function.
 
-    Purpose is to allow for chaining of derivatives over primals."""
+    Purpose is to evaluate the feature-space adjoint for one AO block."""
 
     def reduced_vjp(primals: torch.Tensor) -> torch.Tensor:
         return torch.func.vjp(func, primals)[1](tangents)[0]
@@ -763,6 +747,25 @@ class _AOBlock:
             )
 
 
+def _evaluate_feature_block(
+    feature_function: FeatureFunction,
+    block: _AOBlock,
+    active_dm: Tensor,
+    compile_feature_function: bool,
+    feature_cotangent: Tensor | None = None,
+) -> Tensor:
+    """Evaluate one active-AO feature block or its feature-space VJP."""
+    partial_func = partial_feature_function_over_aos(feature_function, block.ao)
+    if feature_cotangent is not None:
+        partial_func = partial_vjp_function_over_tangents(
+            partial_func, feature_cotangent[..., block.grid_slice]
+        )
+
+    if compile_feature_function:
+        return torch.compile(partial_func)(active_dm)
+    return partial_func(active_dm)
+
+
 class _AOBlockLoop:
     def __init__(
         self,
@@ -892,8 +895,6 @@ class ChunkEvalForward(Function):
     ) -> torch.Tensor:
         ngrids = grids.weights.size
         block_loop = _AOBlockLoop(dm, mol, grids, feature_function, blksize, gpu)
-        dm_ordered = block_loop.order_aos(dm)
-        vectors_jvp_ordered = [block_loop.order_aos(vector) for vector in vectors_jvp]
 
         features = torch.zeros(
             *dm.shape[:-2],
@@ -906,31 +907,41 @@ class ChunkEvalForward(Function):
         if len(vectors_jvp) > 1:
             return features
 
+        # Since the raw feature map is linear, its JVP is direct evaluation on
+        # the tangent density matrix.
+        evaluation_dm = vectors_jvp[0] if vectors_jvp else dm
+        evaluation_dm_ordered = block_loop.order_aos(evaluation_dm)
         for block in block_loop:
-            # Apply chain rule for this particular block
-            partial_func = partial_feature_function_over_aos(
+            active_dm = block.select_aos(evaluation_dm_ordered)
+            temp_feature = _evaluate_feature_block(
                 feature_function,
-                block.ao,
+                block,
+                active_dm,
+                compile_feature_function,
             )
-            for vector in vectors_jvp_ordered:
-                partial_func = partial_jvp_function_over_tangents(
-                    partial_func,
-                    block.select_aos(vector),
-                )
-
-            # Compute feature (or its jvp) for this block with masked dm
-            active_dm = block.select_aos(dm_ordered)
-            if compile_feature_function:
-                temp_feature = torch.compile(partial_func)(active_dm)
-            else:
-                temp_feature = partial_func(active_dm)
 
             features[..., block.grid_slice] = temp_feature
         return features
 
     @staticmethod
-    def jvp(ctx: FunctionCtx, *grad_inputs: torch.Tensor) -> torch.Tensor:
-        # Chain rule for the jvp
+    def jvp(ctx: FunctionCtx, *grad_inputs: torch.Tensor | None) -> torch.Tensor:
+        if len(ctx.vectors_jvp) > 1:
+            return torch.zeros(
+                *ctx.dm.shape[:-2],
+                ctx.feature_function.nfeats,
+                ctx.grids.weights.size,
+                device=ctx.dm.device,
+                dtype=ctx.dm.dtype,
+            )
+        vector_tangent = grad_inputs[7] if ctx.vectors_jvp else grad_inputs[0]
+        if vector_tangent is None:
+            return torch.zeros(
+                *ctx.dm.shape[:-2],
+                ctx.feature_function.nfeats,
+                ctx.grids.weights.size,
+                device=ctx.dm.device,
+                dtype=ctx.dm.dtype,
+            )
         return ChunkEvalForward.apply(
             ctx.dm,
             ctx.mol,
@@ -939,32 +950,28 @@ class ChunkEvalForward(Function):
             ctx.blksize,
             ctx.compile_feature_function,
             ctx.gpu,
-            *ctx.vectors_jvp,
-            grad_inputs[0],
+            vector_tangent,
         )
 
     @staticmethod
     def backward(
         ctx: FunctionCtx, *grad_outputs: torch.Tensor
     ) -> tuple[torch.Tensor | None, ...]:
-        # After one vjp (backward) the signature of the function changes from dm.shape -> (*dm.shape[:-2], nfeats, ngrid) to dm.shape -> dm.shape
-        # therefore we move to a different function that does essentially the same thing, but with the new signature
-
-        # Derivative to dm
-        grads = [
-            ChunkEvalBackward.apply(
+        feature_cotangent = grad_outputs[0]
+        if ctx.vectors_jvp:
+            dm_grad = ctx.dm * 0
+        else:
+            dm_grad = ChunkEvalBackward.apply(
                 ctx.dm,
                 ctx.mol,
                 ctx.grids,
                 ctx.feature_function,
-                ["jvp"] * len(ctx.vectors_jvp) + ["first_vjp"],
                 ctx.blksize,
                 ctx.compile_feature_function,
                 ctx.gpu,
-                *ctx.vectors_jvp,
-                *grad_outputs,
+                feature_cotangent,
             )
-        ]
+        grads = [dm_grad]
 
         # We need to provide None for the gradients of the non-differentiable inputs
         # these are mol (1), grids (2), feature_function (3), blksize (4),
@@ -973,25 +980,22 @@ class ChunkEvalForward(Function):
 
         grads += [None] * num_non_differentiable_inputs
 
-        # Gradients of earlier tangents
-        for i in range(len(ctx.vectors_jvp)):
-            derivative_types = ["jvp"] * len(ctx.vectors_jvp)
-            derivative_types[i] = "first_vjp"
-            grads.append(
-                ChunkEvalBackward.apply(
+        # A first JVP is linear in its tangent; higher JVPs are identically zero.
+        for vector in ctx.vectors_jvp:
+            if len(ctx.vectors_jvp) == 1:
+                vector_grad = ChunkEvalBackward.apply(
                     ctx.dm,
                     ctx.mol,
                     ctx.grids,
                     ctx.feature_function,
-                    derivative_types,
                     ctx.blksize,
                     ctx.compile_feature_function,
                     ctx.gpu,
-                    *ctx.vectors_jvp[:i],
-                    *grad_outputs,
-                    *ctx.vectors_jvp[i + 1 :],
+                    feature_cotangent,
                 )
-            )
+            else:
+                vector_grad = vector * 0
+            grads.append(vector_grad)
 
         return tuple(grads)
 
@@ -1005,24 +1009,22 @@ class ChunkEvalBackward(Function):
             gto.Mole,
             Grid,
             FeatureFunction,
-            list[str],
             int | None,
             bool,
             bool,
             torch.Tensor,
         ],
-        output: tuple[torch.Tensor, ...],
+        output: torch.Tensor,
     ) -> None:
         (
             ctx.dm,
             ctx.mol,
             ctx.grids,
             ctx.feature_function,
-            ctx.derivative_types,
             ctx.blksize,
             ctx.compile_feature_function,
             ctx.gpu,
-            *ctx.vectors,
+            ctx.feature_cotangent,
         ) = inputs
         ctx.save_for_backward(ctx.dm)
 
@@ -1032,144 +1034,68 @@ class ChunkEvalBackward(Function):
         mol: gto.Mole,
         grids: Grid,
         feature_function: FeatureFunction,
-        derivative_types: list[str],
         blksize: int | None,
         compile_feature_function: bool,
         gpu: bool,
-        *vectors: torch.Tensor,
+        feature_cotangent: torch.Tensor,
     ) -> torch.Tensor:
         block_loop = _AOBlockLoop(dm, mol, grids, feature_function, blksize, gpu)
         dm_ordered = block_loop.order_aos(dm)
-        vectors_ordered = [
-            block_loop.order_aos(vector)
-            if derivative_type in ("jvp", "vjp")
-            else vector
-            for derivative_type, vector in zip(derivative_types, vectors, strict=True)
-        ]
 
         out = torch.zeros_like(dm)
-        # Raw AO features are linear in dm, so derivatives above first order vanish.
-        if len(vectors) > 1:
-            return out
-
         for block in block_loop:
-            # Apply chain rule for this particular block
-            # but be careful with signature change upon first vjp
-            partial_func = partial_feature_function_over_aos(
-                feature_function,
-                block.ao,
-            )
-            for derivative_type, vector, vector_ordered in zip(
-                derivative_types, vectors, vectors_ordered, strict=True
-            ):
-                if derivative_type == "jvp":
-                    partial_func = partial_jvp_function_over_tangents(
-                        partial_func,
-                        block.select_aos(vector_ordered),
-                    )
-                elif derivative_type == "vjp":
-                    partial_func = partial_vjp_function_over_tangents(
-                        partial_func,
-                        block.select_aos(vector_ordered),
-                    )
-                elif derivative_type == "first_vjp":
-                    partial_func = partial_vjp_function_over_tangents(
-                        partial_func, vector[..., block.grid_slice]
-                    )
-                else:
-                    raise ValueError(
-                        f"Unknown derivative {derivative_type} (must be one of 'jvp', 'vjp', 'first_vjp')"
-                    )
             active_dm = block.select_aos(dm_ordered)
-            if compile_feature_function:
-                block_result = torch.compile(partial_func)(active_dm)
-            else:
-                block_result = partial_func(active_dm)
+            block_result = _evaluate_feature_block(
+                feature_function,
+                block,
+                active_dm,
+                compile_feature_function,
+                feature_cotangent,
+            )
             block.add_to(out, block_result)
         return block_loop.restore_ao_order(out)
 
     @staticmethod
-    def jvp(ctx: FunctionCtx, *grad_input: torch.Tensor) -> torch.Tensor:
-        # Chain rule for the jvp
+    def jvp(ctx: FunctionCtx, *grad_inputs: torch.Tensor | None) -> torch.Tensor:
+        feature_cotangent_tangent = grad_inputs[7]
+        if feature_cotangent_tangent is None:
+            return torch.zeros_like(ctx.dm)
         return ChunkEvalBackward.apply(
             ctx.dm,
             ctx.mol,
             ctx.grids,
             ctx.feature_function,
-            ctx.derivative_types + ["jvp"],
             ctx.blksize,
             ctx.compile_feature_function,
             ctx.gpu,
-            *ctx.vectors,
-            grad_input,
+            feature_cotangent_tangent,
         )
 
     @staticmethod
     def backward(
         ctx: FunctionCtx, *grad_outputs: torch.Tensor
     ) -> tuple[torch.Tensor | None, ...]:
-        # Chain rule for the vjp
+        # The raw feature Jacobian is constant in dm. The only nonzero gradient
+        # propagates through the feature-space cotangent.
+        grads = [ctx.dm * 0]
+        # We need to provide None for the gradients of the non-differentiable inputs
+        # these are mol (1), grids (2), feature_function (3), blksize (4),
+        # compile_feature_function (5), gpu (6)
+        num_non_differentiable_inputs = 6
 
-        # Gradient corresponding to dm
-        grads = [
-            ChunkEvalBackward.apply(
+        grads += [None] * num_non_differentiable_inputs
+        grads.append(
+            ChunkEvalForward.apply(
                 ctx.dm,
                 ctx.mol,
                 ctx.grids,
                 ctx.feature_function,
-                ctx.derivative_types + ["vjp"],
                 ctx.blksize,
                 ctx.compile_feature_function,
                 ctx.gpu,
-                *ctx.vectors,
-                *grad_outputs,
+                grad_outputs[0],
             )
-        ]
-        # We need to provide None for the gradients of the non-differentiable inputs
-        # these are mol (1), grids (2), feature_function (3), derivative_types (4), blksize (5),
-        # compile_feature_function (6), gpu (7)
-        num_non_differentiable_inputs = 7
-
-        grads += [None] * num_non_differentiable_inputs
-        # Gradients of gradients
-        for i, derivative_type in enumerate(ctx.derivative_types):
-            derivative_types = copy(ctx.derivative_types)
-            if derivative_type == "jvp" or derivative_type == "vjp":
-                derivative_types[i] = "vjp"
-                grads.append(
-                    ChunkEvalBackward.apply(
-                        ctx.dm,
-                        ctx.mol,
-                        ctx.grids,
-                        ctx.feature_function,
-                        derivative_types,
-                        ctx.blksize,
-                        ctx.compile_feature_function,
-                        ctx.gpu,
-                        *ctx.vectors[:i],
-                        *grad_outputs,
-                        *ctx.vectors[i + 1 :],
-                    )
-                )
-            elif derivative_type == "first_vjp":
-                grads.append(
-                    ChunkEvalForward.apply(
-                        ctx.dm,
-                        ctx.mol,
-                        ctx.grids,
-                        ctx.feature_function,
-                        ctx.blksize,
-                        ctx.compile_feature_function,
-                        ctx.gpu,
-                        *ctx.vectors[:i],
-                        *grad_outputs,
-                        *ctx.vectors[i + 1 :],
-                    )
-                )
-            else:
-                raise ValueError(
-                    f"Unknown derivative {derivative_type} (must be one of 'jvp', 'vjp', 'first_vjp')"
-                )
+        )
         return tuple(grads)
 
 

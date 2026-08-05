@@ -14,6 +14,8 @@ from skala.pyscf.features import (
     ChunkEvalForward,
     MGGAFeatureFunction,
     _active_cpu_aos,
+    _AOBlock,
+    _evaluate_feature_block,
     _prepare_spatially_sorted_grids,
     _spatial_grid_permutations,
 )
@@ -415,6 +417,93 @@ def test_first_and_second_order_use_same_screening_decision(
         ]
     else:
         assert safety_fractions == []
+
+
+def test_feature_block_helper_localizes_derivative_vectors() -> None:
+    """Use AO slices for linear JVPs and grid slices for feature VJPs."""
+    feature_function = MGGAFeatureFunction(
+        with_density=True,
+        with_grad=False,
+        with_kin=False,
+    )
+    block = _AOBlock(
+        ao=torch.tensor([[1.0, 2.0], [3.0, 4.0]], dtype=torch.float64),
+        active_aos=torch.tensor([0, 2]),
+        grid_slice=slice(1, 3),
+    )
+    dm_ordered = torch.tensor(
+        [[2.0, 0.1, 0.2], [0.1, 1.0, 0.3], [0.2, 0.3, 3.0]],
+        dtype=torch.float64,
+    )
+    tangent_ordered = torch.tensor(
+        [[0.5, 1.0, -0.2], [1.0, 0.4, 0.3], [-0.2, 0.3, 0.7]],
+        dtype=torch.float64,
+    )
+    active_dm = block.select_aos(dm_ordered)
+
+    feature_jvp = _evaluate_feature_block(
+        feature_function,
+        block,
+        block.select_aos(tangent_ordered),
+        compile_feature_function=False,
+    )
+    expected_jvp = feature_function(block.select_aos(tangent_ordered), block.ao)
+    torch.testing.assert_close(feature_jvp, expected_jvp)
+
+    full_grid_cotangent = torch.tensor([[10.0, 0.25, -0.5, 20.0]], dtype=torch.float64)
+    feature_vjp = _evaluate_feature_block(
+        feature_function,
+        block,
+        active_dm,
+        compile_feature_function=False,
+        feature_cotangent=full_grid_cotangent,
+    )
+    local_cotangent = full_grid_cotangent[0, block.grid_slice]
+    expected_vjp = torch.einsum("g,ig,jg->ij", local_cotangent, block.ao, block.ao)
+    torch.testing.assert_close(feature_vjp, expected_vjp)
+
+
+def test_chunk_eval_transforms_follow_linear_operator(carbon: gto.Mole) -> None:
+    """Check first and second JVPs and the feature-cotangent adjoint JVP."""
+    grids = _minimal_atom_grid(carbon)
+    feature_function = MGGAFeatureFunction(
+        with_density=True,
+        with_grad=False,
+        with_kin=False,
+    )
+    dm = torch.eye(carbon.nao_nr(), dtype=torch.float64)
+    tangent = torch.arange(1, dm.numel() + 1, dtype=dm.dtype).reshape(dm.shape)
+
+    def evaluate(value: torch.Tensor) -> torch.Tensor:
+        return ChunkEvalForward.apply(  # type: ignore[no-untyped-call]
+            value, carbon, grids, feature_function, None, False, False
+        )
+
+    features, feature_tangent = torch.func.jvp(evaluate, (dm,), (tangent,))
+    torch.testing.assert_close(feature_tangent, evaluate(tangent))
+
+    def first_jvp(value: torch.Tensor) -> torch.Tensor:
+        return torch.func.jvp(evaluate, (value,), (tangent,))[1]
+
+    _, second_jvp = torch.func.jvp(first_jvp, (dm,), (torch.ones_like(dm),))
+    torch.testing.assert_close(second_jvp, torch.zeros_like(features))
+
+    feature_cotangent = torch.arange(
+        1, features.numel() + 1, dtype=features.dtype
+    ).reshape(features.shape)
+    cotangent_tangent = torch.flip(feature_cotangent, dims=(-1,))
+
+    def apply_adjoint(value: torch.Tensor) -> torch.Tensor:
+        return ChunkEvalBackward.apply(  # type: ignore[no-untyped-call]
+            dm, carbon, grids, feature_function, None, False, False, value
+        )
+
+    _, adjoint_tangent = torch.func.jvp(
+        apply_adjoint,
+        (feature_cotangent,),
+        (cotangent_tangent,),
+    )
+    torch.testing.assert_close(adjoint_tangent, apply_adjoint(cotangent_tangent))
 
 
 def test_cpu_screening_slices_and_scatters_full_derivatives(
