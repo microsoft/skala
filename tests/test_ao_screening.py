@@ -13,8 +13,9 @@ from skala.pyscf import xc_integrator as xc_integrator_module
 from skala.pyscf.ao_evaluation import (
     ChunkEvalBackward,
     ChunkEvalForward,
-    _active_cpu_aos,
+    _active_cpu_ao_indices,
     _AOBlock,
+    _CPUAOBlockLoop,
     _evaluate_feature_block,
     _resolve_ao_block_size,
 )
@@ -110,13 +111,13 @@ def test_should_screen_aos_at_crossover(
     monkeypatch.setattr(
         pyscf_numint,
         "SWITCH_SIZE",
-        carbon.nao_nr() + switch_offset,
+        2 * carbon.nao_nr() + switch_offset,
     )
 
     assert _should_screen_aos(carbon) is expected
 
 
-def test_active_cpu_aos(carbon: gto.Mole) -> None:
+def test_active_cpu_ao_indices(carbon: gto.Mole) -> None:
     ao_loc = carbon.ao_loc_nr()
     screen_index = np.zeros((2, carbon.nbas), dtype=np.uint8)
     screen_index[0, 0] = 1
@@ -129,9 +130,9 @@ def test_active_cpu_aos(carbon: gto.Mole) -> None:
         )
     )
 
-    assert np.array_equal(_active_cpu_aos(carbon, screen_index), expected)
+    assert np.array_equal(_active_cpu_ao_indices(carbon, screen_index), expected)
 
-    empty = _active_cpu_aos(carbon, np.zeros_like(screen_index))
+    empty = _active_cpu_ao_indices(carbon, np.zeros_like(screen_index))
     assert empty.dtype == np.int64
     assert empty.size == 0
 
@@ -359,7 +360,7 @@ def test_first_and_second_order_use_same_screening_decision(
     expected: bool,
     response_safety_fraction: float | None,
 ) -> None:
-    switch_size = carbon.nao_nr() - 1 if expected else carbon.nao_nr()
+    switch_size = 2 * carbon.nao_nr() - 1 if expected else 2 * carbon.nao_nr()
     monkeypatch.setattr(pyscf_numint, "SWITCH_SIZE", switch_size)
     routes: list[str] = []
     safety_fractions: list[float] = []
@@ -501,8 +502,8 @@ def test_feature_block_helper_localizes_derivative_vectors() -> None:
     """Use AO slices for linear JVPs and grid slices for feature VJPs."""
     feature_function = MGGAFeatureFunction(FeatureSpec(["density"]))
     block = _AOBlock(
-        ao=torch.tensor([[1.0, 2.0], [3.0, 4.0]], dtype=torch.float64),
-        active_aos=torch.tensor([0, 2]),
+        ao_values=torch.tensor([[1.0, 2.0], [3.0, 4.0]], dtype=torch.float64),
+        active_ao_indices=torch.tensor([0, 2]),
         grid_slice=slice(1, 3),
     )
     dm_ordered = torch.tensor(
@@ -513,27 +514,31 @@ def test_feature_block_helper_localizes_derivative_vectors() -> None:
         [[0.5, 1.0, -0.2], [1.0, 0.4, 0.3], [-0.2, 0.3, 0.7]],
         dtype=torch.float64,
     )
-    active_dm = block.select_aos(dm_ordered)
+    active_dm_submatrix = block.select_active_ao_submatrix(dm_ordered)
 
     feature_jvp = _evaluate_feature_block(
         feature_function,
         block,
-        block.select_aos(tangent_ordered),
+        block.select_active_ao_submatrix(tangent_ordered),
         compile_feature_function=False,
     )
-    expected_jvp = feature_function(block.select_aos(tangent_ordered), block.ao)
+    expected_jvp = feature_function(
+        block.select_active_ao_submatrix(tangent_ordered), block.ao_values
+    )
     torch.testing.assert_close(feature_jvp, expected_jvp)
 
     full_grid_cotangent = torch.tensor([[10.0, 0.25, -0.5, 20.0]], dtype=torch.float64)
     feature_vjp = _evaluate_feature_block(
         feature_function,
         block,
-        active_dm,
+        active_dm_submatrix,
         compile_feature_function=False,
         feature_cotangent=full_grid_cotangent,
     )
     local_cotangent = full_grid_cotangent[0, block.grid_slice]
-    expected_vjp = torch.einsum("g,ig,jg->ij", local_cotangent, block.ao, block.ao)
+    expected_vjp = torch.einsum(
+        "g,ig,jg->ij", local_cotangent, block.ao_values, block.ao_values
+    )
     torch.testing.assert_close(feature_vjp, expected_vjp)
 
 
@@ -579,7 +584,8 @@ def test_chunk_eval_transforms_follow_linear_operator(carbon: gto.Mole) -> None:
 def test_cpu_screening_slices_and_scatters_full_derivatives(
     carbon: gto.Mole, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    ngrids = dft.gen_grid.BLKSIZE
+    block_size = dft.gen_grid.BLKSIZE
+    ngrids = 2 * block_size
     grids = dft.Grids(carbon)
     grids.coords = np.zeros((ngrids, 3))
     grids.weights = np.ones(ngrids)
@@ -587,18 +593,26 @@ def test_cpu_screening_slices_and_scatters_full_derivatives(
     ao = np.arange(ngrids * carbon.nao_nr(), dtype=np.float64).reshape(
         ngrids, carbon.nao_nr()
     )
-    screen_index = np.zeros((1, carbon.nbas), dtype=np.uint8)
-    screen_index[0, (0, -1)] = 1
+    screen_index = np.zeros((2, carbon.nbas), dtype=np.uint8)
+    screen_index[0, 0] = 1
+    screen_index[1, -1] = 1
     grids.non0tab = screen_index
-    active_aos = _active_cpu_aos(carbon, screen_index)
+    active_ao_indices = _active_cpu_ao_indices(carbon, screen_index)
 
     class FakeNumInt:
         def block_loop(
             self, *args: object, **kwargs: object
-        ) -> Iterator[tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]:
+        ) -> Iterator[tuple[np.ndarray, None, np.ndarray, np.ndarray]]:
             assert kwargs["non0tab"] is screen_index
             assert "strict_grid_order" not in kwargs
-            yield ao, screen_index, grids.weights, grids.coords
+            for start in range(0, ngrids, block_size):
+                grid_slice = slice(start, start + block_size)
+                yield (
+                    ao[grid_slice],
+                    None,
+                    grids.weights[grid_slice],
+                    grids.coords[grid_slice],
+                )
 
     monkeypatch.setattr(dft.numint, "NumInt", FakeNumInt)
 
@@ -607,25 +621,85 @@ def test_cpu_screening_slices_and_scatters_full_derivatives(
         torch.arange(1, carbon.nao_nr() + 1, dtype=torch.float64)
     ).requires_grad_()
     features = ChunkEvalForward.apply(  # type: ignore[no-untyped-call]
-        dm, carbon, grids, feature_function, ngrids, False, False
+        dm, carbon, grids, feature_function, block_size, False, False
     )
 
-    ao_active = torch.from_numpy(ao[:, active_aos]).T
-    dm_active = dm[..., active_aos[:, None], active_aos[None, :]]
-    expected = torch.sum((dm_active @ ao_active) * ao_active, dim=0).unsqueeze(0)
+    expected_blocks = []
+    for block_index, start in enumerate(range(0, ngrids, block_size)):
+        block_active_ao_indices = _active_cpu_ao_indices(
+            carbon, screen_index[block_index : block_index + 1]
+        )
+        grid_slice = slice(start, start + block_size)
+        active_ao_values = torch.from_numpy(
+            ao[grid_slice][:, block_active_ao_indices]
+        ).T
+        active_dm_submatrix = dm[
+            ...,
+            block_active_ao_indices[:, None],
+            block_active_ao_indices[None, :],
+        ]
+        expected_blocks.append(
+            torch.sum(
+                (active_dm_submatrix @ active_ao_values) * active_ao_values, dim=0
+            )
+        )
+    expected = torch.cat(expected_blocks).unsqueeze(0)
     assert torch.allclose(features, expected)
 
     energy = features.square().sum()
     (vxc,) = torch.autograd.grad(energy, dm, create_graph=True)
     (hvp,) = torch.autograd.grad(vxc, dm, torch.ones_like(dm))
 
-    inactive_aos = np.setdiff1d(np.arange(carbon.nao_nr()), active_aos)
+    inactive_ao_indices = np.setdiff1d(np.arange(carbon.nao_nr()), active_ao_indices)
     assert vxc.shape == dm.shape
     assert hvp.shape == dm.shape
-    assert torch.count_nonzero(vxc[inactive_aos]) == 0
-    assert torch.count_nonzero(vxc[:, inactive_aos]) == 0
-    assert torch.count_nonzero(hvp[inactive_aos]) == 0
-    assert torch.count_nonzero(hvp[:, inactive_aos]) == 0
+    assert torch.count_nonzero(vxc[inactive_ao_indices]) == 0
+    assert torch.count_nonzero(vxc[:, inactive_ao_indices]) == 0
+    assert torch.count_nonzero(hvp[inactive_ao_indices]) == 0
+    assert torch.count_nonzero(hvp[:, inactive_ao_indices]) == 0
+
+
+def test_cpu_all_active_block_uses_dense_sentinel(
+    carbon: gto.Mole, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    block_size = dft.gen_grid.BLKSIZE
+    ngrids = 2 * block_size
+    grids = dft.Grids(carbon)
+    grids.coords = np.zeros((ngrids, 3))
+    grids.weights = np.ones(ngrids)
+    screen_index = np.zeros((2, carbon.nbas), dtype=np.uint8)
+    screen_index[0] = 1
+    screen_index[1, 0] = 1
+    grids.non0tab = screen_index
+    ao_values = np.ones((ngrids, carbon.nao_nr()))
+
+    class FakeNumInt:
+        def block_loop(
+            self, *args: object, **kwargs: object
+        ) -> Iterator[tuple[np.ndarray, None, np.ndarray, np.ndarray]]:
+            for start in range(0, ngrids, block_size):
+                grid_slice = slice(start, start + block_size)
+                yield (
+                    ao_values[grid_slice],
+                    None,
+                    grids.weights[grid_slice],
+                    grids.coords[grid_slice],
+                )
+
+    monkeypatch.setattr(dft.numint, "NumInt", FakeNumInt)
+    feature_function = MGGAFeatureFunction(FeatureSpec(["density"]))
+    dm = torch.eye(carbon.nao_nr(), dtype=torch.float64)
+
+    blocks = list(_CPUAOBlockLoop(dm, carbon, grids, feature_function, block_size))
+
+    assert len(blocks) == 2
+    assert blocks[0].active_ao_indices is None
+    assert blocks[0].ao_values.shape == (carbon.nao_nr(), block_size)
+    expected_sparse_indices = torch.as_tensor(
+        _active_cpu_ao_indices(carbon, screen_index[1:]), dtype=torch.long
+    )
+    torch.testing.assert_close(blocks[1].active_ao_indices, expected_sparse_indices)
+    assert blocks[1].ao_values.shape == (expected_sparse_indices.numel(), block_size)
 
 
 def test_cpu_no_active_aos_returns_full_zero_derivatives(
@@ -637,12 +711,14 @@ def test_cpu_no_active_aos_returns_full_zero_derivatives(
     grids.weights = np.ones(ngrids)
     ao = np.ones((ngrids, carbon.nao_nr()))
     screen_index = np.zeros((1, carbon.nbas), dtype=np.uint8)
+    grids.non0tab = screen_index
 
     class FakeNumInt:
         def block_loop(
             self, *args: object, **kwargs: object
-        ) -> Iterator[tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]:
-            yield ao, screen_index, grids.weights, grids.coords
+        ) -> Iterator[tuple[np.ndarray, None, np.ndarray, np.ndarray]]:
+            assert kwargs["non0tab"] is screen_index
+            yield ao, None, grids.weights, grids.coords
 
     monkeypatch.setattr(dft.numint, "NumInt", FakeNumInt)
     feature_function = MGGAFeatureFunction(FeatureSpec(["density"]))

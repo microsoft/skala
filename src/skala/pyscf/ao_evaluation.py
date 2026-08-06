@@ -45,21 +45,26 @@ class _ChunkEvalBackwardContext(Protocol):
     gpu: bool
 
 
-def _active_cpu_aos(mol: gto.Mole, screen_index: np.ndarray) -> np.ndarray:
-    """Expand a PySCF shell-screening mask into active AO indices."""
+def _active_cpu_ao_indices(mol: gto.Mole, screen_index: np.ndarray) -> np.ndarray:
+    """Expand active shells in a PySCF screen-index slice to AO indices.
+
+    A shell is active for the grid block if it is nonzero in any of the
+    ``BLKSIZE``-point rows covered by that block. ``ao_loc_nr`` maps each shell
+    to its contiguous range in PySCF's AO ordering.
+    """
     active_shells = np.any(screen_index, axis=0)
     ao_loc = mol.ao_loc_nr()
     return np.flatnonzero(np.repeat(active_shells, np.diff(ao_loc)))
 
 
-def partial_feature_function_over_aos(
+def partial_feature_function_over_ao_values(
     feature_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-    ao: torch.Tensor,
+    ao_values: torch.Tensor,
 ) -> Callable[[torch.Tensor], torch.Tensor]:
-    """Bind an AO block to a feature function for block-local evaluation."""
+    """Bind evaluated AO values to a feature function for one grid block."""
 
     def partial_feature_function(dm: torch.Tensor) -> torch.Tensor:
-        return feature_function(dm, ao)
+        return feature_function(dm, ao_values)
 
     return partial_feature_function
 
@@ -78,44 +83,82 @@ def partial_vjp_function_over_tangents(
 
 @dataclass(frozen=True)
 class _AOBlock:
-    ao: Tensor
-    active_aos: Tensor | None
+    """Evaluated AO data and index metadata for one contiguous grid block.
+
+    ``ao_values`` contains only the active AO rows when screening is enabled.
+    ``active_ao_indices`` identifies those rows in the backend's current AO
+    ordering; ``None`` means that ``ao_values`` contains every AO. The CPU
+    backend uses PySCF's native AO order, while the GPU backend uses
+    GPU4PySCF's sorted AO order until the completed matrix is restored.
+    """
+
+    ao_values: Tensor
+    active_ao_indices: Tensor | None
     grid_slice: slice
 
-    def select_aos(self, matrix: Tensor) -> Tensor:
-        if self.active_aos is None:
+    def select_active_ao_submatrix(self, matrix: Tensor) -> Tensor:
+        """Gather the square matrix corresponding to this block's AO values."""
+        if self.active_ao_indices is None:
             return matrix
-        return matrix[..., self.active_aos[:, None], self.active_aos[None, :]]
+        return matrix[
+            ..., self.active_ao_indices[:, None], self.active_ao_indices[None, :]
+        ]
 
-    def add_to(self, matrix: Tensor, block_result: Tensor) -> None:
-        if self.active_aos is None:
+    def add_active_ao_submatrix(self, matrix: Tensor, block_result: Tensor) -> None:
+        """Add a block result into its active rows and columns in ``matrix``."""
+        if self.active_ao_indices is None:
             matrix += block_result
         else:
-            matrix[..., self.active_aos[:, None], self.active_aos[None, :]] += (
-                block_result
-            )
+            matrix[
+                ..., self.active_ao_indices[:, None], self.active_ao_indices[None, :]
+            ] += block_result
 
 
 def _evaluate_feature_block(
     feature_function: feature_math.FeatureFunction,
     block: _AOBlock,
-    active_dm: Tensor,
+    active_dm_submatrix: Tensor,
     compile_feature_function: bool,
     feature_cotangent: Tensor | None = None,
 ) -> Tensor:
     """Evaluate one active-AO feature block or its feature-space VJP."""
-    partial_func = partial_feature_function_over_aos(feature_function, block.ao)
+    partial_func = partial_feature_function_over_ao_values(
+        feature_function, block.ao_values
+    )
     if feature_cotangent is not None:
         partial_func = partial_vjp_function_over_tangents(
             partial_func, feature_cotangent[..., block.grid_slice]
         )
 
     if compile_feature_function:
-        return torch.compile(partial_func)(active_dm)
-    return partial_func(active_dm)
+        return torch.compile(partial_func)(active_dm_submatrix)
+    return partial_func(active_dm_submatrix)
 
 
-class _AOBlockLoop:
+class _CPUAOBlockLoop:
+    """Yield CPU AO values screened with the exact PySCF screen-index table.
+
+    PySCF evaluates AOs with ``grids.non0tab``, whose rows each describe one
+    ``dft.gen_grid.BLKSIZE``-point range and whose columns describe shells. The
+    loop converts the rows covered by each yielded grid block into AO indices,
+    slices the evaluated AO tensor, and records those indices for density-matrix
+    gathering and result scattering. If every shell is active for a particular
+    block, the loop keeps the full AO tensor and records ``None`` instead of an
+    identity index. Whether a block is dense can therefore vary across the
+    rows of one ``non0tab`` table.
+
+    The second item yielded by ``NumInt.block_loop`` is intentionally ignored.
+    Despite being called ``mask`` by PySCF, it is not the authoritative
+    screening table for that block. After AO evaluation, PySCF may replace it
+    with ``None`` to request dense downstream contractions. That policy depends
+    on the total grid's ``ALIGNMENT_UNIT`` divisibility and PySCF's sparsity
+    heuristic, not on whether shells were screened during AO evaluation. Using
+    that yielded value would therefore make Skala's active AO set depend on
+    contraction policy and grid alignment. Reading the exact rows from
+    ``grids.non0tab`` preserves the screening information actually used for AO
+    evaluation.
+    """
+
     def __init__(
         self,
         dm: Tensor,
@@ -123,83 +166,157 @@ class _AOBlockLoop:
         grids: Grid,
         feature_function: feature_math.FeatureFunction,
         blksize: int | None,
-        gpu: bool,
     ) -> None:
         self.dm = dm
         self.mol = mol
+        assert isinstance(grids, dft.Grids)
         self.grids = grids
         self.feature_function = feature_function
         self.blksize = blksize
-        self.gpu = gpu
-        self.sort_idx: Tensor | None
-        self.unsort_idx: Tensor | None
-
-        if gpu:
-            check_gpu_imports_were_successful()
-            self.numint = dft_gpu.numint.NumInt().build(mol, grids.coords)
-            self.numint.grid_blksize = blksize
-            self.sort_idx = torch.as_tensor(
-                self.numint.gdftopt._ao_idx, device=dm.device
-            )
-            self.unsort_idx = torch.argsort(self.sort_idx)
-        else:
-            self.numint = dft.numint.NumInt()
-            self.sort_idx = None
-            self.unsort_idx = None
+        self.numint = dft.numint.NumInt()
 
     def order_aos(self, matrix: Tensor) -> Tensor:
-        if self.sort_idx is None:
-            return matrix
-        return matrix[..., self.sort_idx, :][..., self.sort_idx]
+        return matrix
 
     def restore_ao_order(self, matrix: Tensor) -> Tensor:
-        if self.unsort_idx is None:
-            return matrix
-        return matrix[..., self.unsort_idx, :][..., self.unsort_idx]
+        return matrix
+
+    def _active_ao_indices(
+        self,
+        non0tab: np.ndarray,
+        grid_start: int,
+        grid_end: int,
+    ) -> Tensor | None:
+        """Create active AO indices for the exact rows covering a grid block.
+
+        ``NumInt.block_loop`` requires CPU block sizes to be integer multiples
+        of ``dft.gen_grid.BLKSIZE``. Consequently every non-final block starts
+        and ends on screen-index row boundaries; the ceiling for ``grid_end``
+        also includes the final partial row. All shells active in any covered
+        row are included because one AO tensor is shared by the whole grid
+        block.
+
+        Returns ``None`` when the covered rows activate every AO. ``_AOBlock``
+        uses that value as its dense sentinel, avoiding identity indexing of AO
+        values and density matrices. An empty tensor means that no AO is active
+        and the caller can omit the block entirely.
+
+        This method requires the authoritative screen-index table and must not
+        consume the mask yielded by ``NumInt.block_loop``. PySCF may set that
+        yielded mask to ``None`` after AO evaluation when sparse contraction is
+        unsuitable, even though ``non0tab`` still contains the exact
+        shell-screening data. The caller handles a missing ``non0tab`` as the
+        genuinely dense case.
+        """
+        row_start = grid_start // dft.gen_grid.BLKSIZE
+        row_end = (grid_end + dft.gen_grid.BLKSIZE - 1) // dft.gen_grid.BLKSIZE
+        block_non0tab = non0tab[row_start:row_end]
+        if np.all(np.any(block_non0tab, axis=0)):
+            return None
+        return torch.as_tensor(
+            _active_cpu_ao_indices(self.mol, block_non0tab),
+            device=self.dm.device,
+            dtype=torch.long,
+        )
 
     def __iter__(self) -> Iterator[_AOBlock]:
-        block_loop_options: dict[str, bool] = {}
-        if self.gpu:
-            # GPU4PySCF otherwise omits zero-AO blocks, shifting all later grid slices.
-            block_loop_options["strict_grid_order"] = True
+        non0tab = self.grids.non0tab
 
         end = 0
-        for ao_block, mask, weights, _ in self.numint.block_loop(
+        for backend_ao_values, _, block_weights, _ in self.numint.block_loop(
             mol=self.mol,
             grids=self.grids,
             nao=self.mol.nao,
             deriv=self.feature_function.deriv,
             blksize=self.blksize,
-            non0tab=(None if self.gpu else getattr(self.grids, "non0tab", None)),
-            **block_loop_options,
+            non0tab=non0tab,
         ):
-            start, end = end, end + weights.size
-            ao = from_numpy_or_cupy(
-                ao_block,
-                device=self.dm.device,
-                dtype=self.dm.dtype,
-                transpose=not self.gpu,
+            start, end = end, end + block_weights.size
+            ao_values = (
+                torch.from_numpy(backend_ao_values)
+                .to(device=self.dm.device, dtype=self.dm.dtype)
+                .transpose(-1, -2)
             )
-            active_aos: Tensor | None
-            if mask is None:
-                active_aos = None
-            elif self.gpu:
-                active_aos = from_numpy_or_cupy(
-                    mask, device=self.dm.device, dtype=torch.long
-                )
-            else:
-                num_screen_rows = (
-                    weights.size + dft.gen_grid.BLKSIZE - 1
-                ) // dft.gen_grid.BLKSIZE
-                active_aos = torch.as_tensor(
-                    _active_cpu_aos(self.mol, mask[:num_screen_rows]),
-                    device=self.dm.device,
-                    dtype=torch.long,
-                )
-                ao = ao[..., active_aos, :]
-            if active_aos is not None and active_aos.numel() == 0:
+            active_ao_indices = (
+                None
+                if non0tab is None
+                else self._active_ao_indices(non0tab, start, end)
+            )
+            if active_ao_indices is None:
+                yield _AOBlock(ao_values, None, slice(start, end))
                 continue
-            yield _AOBlock(ao, active_aos, slice(start, end))
+
+            if active_ao_indices.numel() == 0:
+                continue
+            ao_values = ao_values[..., active_ao_indices, :]
+            yield _AOBlock(ao_values, active_ao_indices, slice(start, end))
+
+
+class _GPUAOBlockLoop:
+    """Yield GPU4PySCF AO values and compact indices in sorted AO order."""
+
+    def __init__(
+        self,
+        dm: Tensor,
+        mol: gto.Mole,
+        grids: Grid,
+        feature_function: feature_math.FeatureFunction,
+        blksize: int | None,
+    ) -> None:
+        check_gpu_imports_were_successful()
+        self.dm = dm
+        self.mol = mol
+        self.grids = grids
+        self.feature_function = feature_function
+        self.blksize = blksize
+        self.numint = dft_gpu.numint.NumInt().build(mol, grids.coords)
+        self.numint.grid_blksize = blksize
+        self.sort_idx = torch.as_tensor(self.numint.gdftopt._ao_idx, device=dm.device)
+        self.unsort_idx = torch.argsort(self.sort_idx)
+
+    def order_aos(self, matrix: Tensor) -> Tensor:
+        return matrix[..., self.sort_idx[:, None], self.sort_idx[None, :]]
+
+    def restore_ao_order(self, matrix: Tensor) -> Tensor:
+        return matrix[..., self.unsort_idx[:, None], self.unsort_idx[None, :]]
+
+    def __iter__(self) -> Iterator[_AOBlock]:
+        end = 0
+        for (
+            backend_ao_values,
+            active_ao_indices,
+            block_weights,
+            _,
+        ) in self.numint.block_loop(
+            mol=self.mol,
+            grids=self.grids,
+            nao=self.mol.nao,
+            deriv=self.feature_function.deriv,
+            blksize=self.blksize,
+            non0tab=None,
+            # GPU4PySCF otherwise omits zero-AO blocks, shifting later grid slices.
+            strict_grid_order=True,
+        ):
+            start, end = end, end + block_weights.size
+            if active_ao_indices.size == 0:
+                continue
+            yield _AOBlock(
+                torch.from_dlpack(backend_ao_values),
+                torch.from_dlpack(active_ao_indices),
+                slice(start, end),
+            )
+
+
+def _make_ao_block_loop(
+    dm: Tensor,
+    mol: gto.Mole,
+    grids: Grid,
+    feature_function: feature_math.FeatureFunction,
+    blksize: int | None,
+    gpu: bool,
+) -> _CPUAOBlockLoop | _GPUAOBlockLoop:
+    loop_type = _GPUAOBlockLoop if gpu else _CPUAOBlockLoop
+    return loop_type(dm, mol, grids, feature_function, blksize)
 
 
 class ChunkEvalForward(Function):
@@ -247,7 +364,7 @@ class ChunkEvalForward(Function):
         *vectors_jvp: torch.Tensor,
     ) -> torch.Tensor:
         ngrids = grids.weights.size
-        block_loop = _AOBlockLoop(dm, mol, grids, feature_function, blksize, gpu)
+        block_loop = _make_ao_block_loop(dm, mol, grids, feature_function, blksize, gpu)
 
         features = torch.zeros(
             *dm.shape[:-2],
@@ -263,11 +380,13 @@ class ChunkEvalForward(Function):
         evaluation_dm = vectors_jvp[0] if vectors_jvp else dm
         evaluation_dm_ordered = block_loop.order_aos(evaluation_dm)
         for block in block_loop:
-            active_dm = block.select_aos(evaluation_dm_ordered)
+            active_dm_submatrix = block.select_active_ao_submatrix(
+                evaluation_dm_ordered
+            )
             temp_feature = _evaluate_feature_block(
                 feature_function,
                 block,
-                active_dm,
+                active_dm_submatrix,
                 compile_feature_function,
             )
             features[..., block.grid_slice] = temp_feature
@@ -385,20 +504,20 @@ class ChunkEvalBackward(Function):
         gpu: bool,
         feature_cotangent: torch.Tensor,
     ) -> torch.Tensor:
-        block_loop = _AOBlockLoop(dm, mol, grids, feature_function, blksize, gpu)
+        block_loop = _make_ao_block_loop(dm, mol, grids, feature_function, blksize, gpu)
         dm_ordered = block_loop.order_aos(dm)
 
         out = torch.zeros_like(dm)
         for block in block_loop:
-            active_dm = block.select_aos(dm_ordered)
+            active_dm_submatrix = block.select_active_ao_submatrix(dm_ordered)
             block_result = _evaluate_feature_block(
                 feature_function,
                 block,
-                active_dm,
+                active_dm_submatrix,
                 compile_feature_function,
                 feature_cotangent,
             )
-            block.add_to(out, block_result)
+            block.add_active_ao_submatrix(out, block_result)
         return block_loop.restore_ao_order(out)
 
     @staticmethod

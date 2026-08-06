@@ -27,7 +27,8 @@ from skala.pyscf.screening import (
 
 def _should_screen_aos(mol: gto.Mole) -> bool:
     """Return whether PySCF's sparse-contraction crossover is exceeded."""
-    return mol.nao_nr() > pyscf_numint.SWITCH_SIZE
+    # we use a smaller threshold because for MetaGGAs the AO evaluation is more expensive
+    return 2 * mol.nao_nr() > pyscf_numint.SWITCH_SIZE
 
 
 @dataclass(frozen=True)
