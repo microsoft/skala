@@ -156,14 +156,15 @@ class XCIntegrator:
         max_memory: int,
     ) -> XCResult:
         dm = dm.detach().requires_grad_()
-        electron_count = torch.tensor((0.0, 0.0), device=self.device, dtype=dm.dtype)
-        energy = torch.tensor(0.0, device=self.device, dtype=dm.dtype)
+        dm_eval = dm.double()
+        electron_count = torch.zeros(2, device=self.device, dtype=dm_eval.dtype)
+        energy = torch.tensor(0.0, device=self.device, dtype=dm_eval.dtype)
         feature_function = feature_math.MGGAFeatureFunction(self.feature_spec)
         spatial_grid_layout = self._get_spatial_grid_layout(mol, grids)
         sorted_raw_features = cast(
             Tensor,
             ao_evaluation.ChunkEvalForward.apply(  # type: ignore[no-untyped-call]
-                dm.double(),
+                dm_eval,
                 mol,
                 spatial_grid_layout.sorted_grids,
                 feature_function,
