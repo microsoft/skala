@@ -31,7 +31,7 @@ dependencies = [
 
 optional-dependencies.dev = [
     "pre-commit",
-    "mypy",
+    "mypy>=2",
     "memray",
     "pytest",
     "pytest-benchmark",

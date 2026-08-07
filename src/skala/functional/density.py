@@ -17,7 +17,7 @@ from torch import Tensor
 from skala.features import Feature, FeatureMap
 
 EPS = 1e-10
-IMMUTABLES: frozenset[str] = frozenset([Feature.GRID_COORDS, Feature.GRID_WEIGHTS])
+IMMUTABLES: frozenset[Feature] = frozenset([Feature.GRID_COORDS, Feature.GRID_WEIGHTS])
 
 
 def _map(mol_features: FeatureMap, f: Callable[[Tensor], Tensor]) -> FeatureMap:

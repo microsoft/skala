@@ -30,12 +30,7 @@ jobs:
 
     - name: Run pre-commit hooks
       run: |
-        pre-commit install
         pre-commit run --all-files
-      shell: micromamba-shell {0}
-
-    - name: Run mypy
-      run: mypy .
       shell: micromamba-shell {0}
 
   test:
@@ -80,4 +75,34 @@ jobs:
         --durations=50 --durations-min=1.0
         --pyargs skala
         tests/
+      shell: micromamba-shell {0}
+
+  profiling:
+    name: "Profiling (Python=3.12 & PySCF=2.9)"
+    runs-on: ubuntu-latest
+    needs:
+      - lint
+    env:
+      OMP_NUM_THREADS: 4
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+    - name: Setup micromamba
+      uses: mamba-org/setup-micromamba@4b9113af4fba0e9e1124b252dd6497a419e7396d # v1
+      with:
+        environment-file: environment-cpu.yml
+        environment-name: skala
+        cache-environment: true
+        cache-downloads: true
+        create-args: >-
+          python=3.12
+          pyscf=2.9
+
+    - name: Install package in development mode
+      run: |
+        pip install -e . --no-deps
+      shell: micromamba-shell {0}
+
+    - name: Run profiling tests
+      run: pytest -v -m profiling tests/test_ao_screening_benchmark.py
       shell: micromamba-shell {0}

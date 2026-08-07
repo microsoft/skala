@@ -15,6 +15,7 @@ dependencies:
   - pytorch * cpu_*
   - qcelemental
 # Testing and development
+  - memray
   - pre-commit
   - pytest
   - pytest-benchmark
@@ -22,6 +23,6 @@ dependencies:
   - pytest-randomly
   - pytest-timeout
   - ruff
-  - mypy
+  - mypy >=2
   - pip:
     - huggingface_hub
