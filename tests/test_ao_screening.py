@@ -202,6 +202,32 @@ def test_decompose_grid_into_spatial_blocks_groups_interleaved_clusters() -> Non
     assert np.all(grouped_labels == grouped_labels[:, :1])
 
 
+def test_decompose_grid_into_spatial_blocks_uses_principal_direction() -> None:
+    longitudinal = np.arange(-3.5, 4.0)
+    transverse = 0.45 * (np.square(longitudinal) - np.mean(np.square(longitudinal)))
+    coords = np.column_stack(
+        (
+            longitudinal + transverse,
+            longitudinal - transverse,
+            np.zeros(longitudinal.size),
+        )
+    )
+
+    forward, _ = _decompose_grid_into_spatial_blocks(coords, block_size=2)
+
+    assert set(forward[:4]) == set(range(4))
+    assert set(forward[4:]) == set(range(4, 8))
+
+
+def test_decompose_grid_into_spatial_blocks_handles_identical_points() -> None:
+    coords = np.ones((10, 3), dtype=np.float64)
+
+    forward, inverse = _decompose_grid_into_spatial_blocks(coords, block_size=4)
+
+    assert np.array_equal(forward, np.arange(coords.shape[0]))
+    assert np.array_equal(inverse, forward)
+
+
 def test_prepare_spatially_sorted_cpu_grids(
     carbon: gto.Mole, monkeypatch: pytest.MonkeyPatch
 ) -> None:

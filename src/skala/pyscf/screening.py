@@ -55,9 +55,10 @@ def _decompose_grid_into_spatial_blocks(
 ) -> tuple[_Int64Permutation, _Int64Permutation]:
     """Decompose a molecular grid into spatial blocks and return its permutations.
 
-    Recursively partitions points along the longest Cartesian extent. Every left
-    subtree contains a whole number of evaluator blocks, so all output blocks have
-    ``block_size`` points except for a possible final remainder.
+    Recursively partitions points along their principal spatial direction. Every
+    left subtree contains a whole number of evaluator blocks, so all output blocks
+    have ``block_size`` points except for a possible final remainder. Degenerate
+    principal directions fall back to the longest Cartesian extent.
 
     Args:
         coords: Molecular grid coordinates with shape ``(ngrids, 3)``.
@@ -74,15 +75,34 @@ def _decompose_grid_into_spatial_blocks(
     if block_size <= 0:
         raise ValueError("block_size must be positive")
 
+    def split_projections(indices: _Int64Permutation) -> np.ndarray:
+        point_coords = coords[indices]
+        centered_coords = point_coords - point_coords.mean(axis=0)
+        scatter = centered_coords.T @ centered_coords
+        eigenvalues, eigenvectors = np.linalg.eigh(scatter)
+        eigenvalue_scale = max(abs(eigenvalues[-1]), abs(eigenvalues[-2]))
+        if np.isclose(
+            eigenvalues[-1],
+            eigenvalues[-2],
+            rtol=1e-12,
+            atol=np.finfo(np.float64).eps * eigenvalue_scale,
+        ):
+            split_axis = int(np.argmax(np.ptp(point_coords, axis=0)))
+            return point_coords[:, split_axis]
+
+        principal_direction = eigenvectors[:, -1]
+        largest_component = int(np.argmax(np.abs(principal_direction)))
+        if principal_direction[largest_component] < 0:
+            principal_direction = -principal_direction
+        return centered_coords @ principal_direction
+
     def partition(indices: _Int64Permutation) -> list[_Int64Permutation]:
         if indices.size <= block_size:
             return [indices]
 
         block_count = (indices.size + block_size - 1) // block_size
         left_size = (block_count // 2) * block_size
-        extents = np.ptp(coords[indices], axis=0)
-        split_axis = int(np.argmax(extents))
-        positions = np.lexsort((indices, coords[indices, split_axis]))
+        positions = np.lexsort((indices, split_projections(indices)))
         ordered_indices = indices[positions]
         return partition(ordered_indices[:left_size]) + partition(
             ordered_indices[left_size:]
