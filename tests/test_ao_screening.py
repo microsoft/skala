@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 import torch
 from pyscf import dft, gto
-from utils import patch_ao_screening
+from utils import QuadraticFunctional, patch_ao_screening
 
 from skala.features import Feature, FeatureMap
 from skala.functional.base import ExcFunctionalBase
@@ -304,19 +304,6 @@ def test_prepare_spatially_sorted_cpu_grids(
     assert not hasattr(grids, "_skala_spatial_grid_layout")
 
 
-class QuadraticDensityFunctional(ExcFunctionalBase):
-    def __init__(self) -> None:
-        super().__init__()
-        self.features = [
-            Feature.ATOMIC_GRID_SIZES,
-            Feature.DENSITY,
-            Feature.GRID_WEIGHTS,
-        ]
-
-    def get_exc(self, mol: FeatureMap) -> torch.Tensor:
-        return (mol[Feature.DENSITY].square() * mol[Feature.GRID_WEIGHTS]).sum()
-
-
 def test_grid_reuses_spatial_grid_layout_across_numints(
     carbon: gto.Mole, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -348,8 +335,8 @@ def test_grid_reuses_spatial_grid_layout_across_numints(
         "prepare_spatial_grid_layout",
         fake_prepare_spatial_grid_layout,
     )
-    numint = SkalaNumInt(QuadraticDensityFunctional())
-    other_numint = SkalaNumInt(QuadraticDensityFunctional())
+    numint = SkalaNumInt(QuadraticFunctional())
+    other_numint = SkalaNumInt(QuadraticFunctional())
 
     layout = numint.integrator._get_spatial_grid_layout(carbon, grids)
     assert other_numint.integrator._get_spatial_grid_layout(carbon, grids) is layout
@@ -379,7 +366,7 @@ class FakeKS:
 
 
 def test_call_rejects_second_order_evaluation(carbon: gto.Mole) -> None:
-    numint = SkalaNumInt(QuadraticDensityFunctional())
+    numint = SkalaNumInt(QuadraticFunctional())
 
     with pytest.raises(NotImplementedError, match="second-order evaluation"):
         numint(
@@ -502,7 +489,7 @@ def test_first_and_second_order_use_same_screening_decision(
         "screened_feature_jvp",
         fake_screened_feature_jvp,
     )
-    numint = SkalaNumInt(QuadraticDensityFunctional())
+    numint = SkalaNumInt(QuadraticFunctional())
     dm = torch.eye(carbon.nao_nr(), dtype=torch.float64)
     grids = dft.Grids(carbon)
     grids.weights = np.ones(1)
@@ -783,7 +770,7 @@ def _minimal_atom_grid(mol: gto.Mole) -> dft.Grids:
 
 
 def test_numint_reset_does_not_clear_grid_spatial_layout(carbon: gto.Mole) -> None:
-    numint = SkalaNumInt(QuadraticDensityFunctional())
+    numint = SkalaNumInt(QuadraticFunctional())
     grids = _minimal_atom_grid(carbon)
     spatial_grid_layout = prepare_spatial_grid_layout(
         carbon,
@@ -838,7 +825,7 @@ def test_cpu_response_dense_screened_equivalence() -> None:
     mol = gto.M(atom="H 0 0 0; H 0 0 0.74", basis="sto-3g", spin=0, verbose=0)
     grids = _minimal_atom_grid(mol)
     ks = FakeKS(mol, grids)
-    numint = SkalaNumInt(QuadraticDensityFunctional())
+    numint = SkalaNumInt(QuadraticFunctional())
     mo_coeff = np.eye(mol.nao_nr())
     mo_occ = np.ones(mol.nao_nr())
     dm1 = np.arange(mol.nao_nr() ** 2, dtype=np.float64).reshape(
@@ -888,7 +875,7 @@ def test_screened_ao_traversals_are_independent_of_model_chunking(
 
     monkeypatch.setattr(ChunkEvalForward, "apply", counting_forward_apply)
     monkeypatch.setattr(ChunkEvalBackward, "apply", counting_backward_apply)
-    functional = QuadraticDensityFunctional()
+    functional = QuadraticFunctional()
     numint = SkalaNumInt(functional)
 
     with patch_ao_screening(True):

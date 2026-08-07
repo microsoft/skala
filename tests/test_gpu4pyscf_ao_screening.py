@@ -23,9 +23,9 @@ except ModuleNotFoundError:
         allow_module_level=True,
     )
 
-from utils import patch_ao_screening  # noqa: E402
+from utils import QuadraticFunctional, patch_ao_screening  # noqa: E402
 
-from skala.features import Feature, FeatureMap  # noqa: E402
+from skala.features import Feature  # noqa: E402
 from skala.functional.base import ExcFunctionalBase  # noqa: E402
 from skala.gpu4pyscf import SkalaKS  # noqa: E402
 from skala.pyscf.ao_evaluation import (  # noqa: E402
@@ -44,39 +44,6 @@ C 1.4 0.0 0.0
 C 2.8 0.0 0.0
 C 4.2 0.0 0.0
 """
-
-
-class QuadraticDensityFunctional(ExcFunctionalBase):
-    def __init__(self) -> None:
-        super().__init__()
-        self.features = [
-            Feature.ATOMIC_GRID_SIZES,
-            Feature.DENSITY,
-            Feature.GRID_WEIGHTS,
-        ]
-
-    def get_exc(self, mol: FeatureMap) -> torch.Tensor:
-        return (mol[Feature.DENSITY].square() * mol[Feature.GRID_WEIGHTS]).sum()
-
-
-class QuadraticMGGAFunctional(ExcFunctionalBase):
-    def __init__(self) -> None:
-        super().__init__()
-        self.features = [
-            Feature.ATOMIC_GRID_SIZES,
-            Feature.DENSITY,
-            Feature.GRAD,
-            Feature.KIN,
-            Feature.GRID_WEIGHTS,
-        ]
-
-    def get_exc(self, mol: FeatureMap) -> torch.Tensor:
-        energy_density = (
-            mol[Feature.DENSITY].square()
-            + mol[Feature.GRAD].square().sum(dim=-2)
-            + mol[Feature.KIN].square()
-        )
-        return (energy_density * mol[Feature.GRID_WEIGHTS]).sum()
 
 
 def _to_numpy(value: object) -> np.ndarray:
@@ -162,7 +129,7 @@ def test_gpu_rks_uks_dense_screened_equivalence(
 
 def test_gpu_response_dense_screened_equivalence() -> None:
     mol = gto.M(atom="H 0 0 0; H 0 0 0.74", basis="sto-3g", spin=0, verbose=0)
-    ks = SkalaKS(mol, xc=QuadraticDensityFunctional(), with_dftd3=False)
+    ks = SkalaKS(mol, xc=QuadraticFunctional(), with_dftd3=False)
     ks.grids.level = 0
     ks.grids.alignment = 1
     ks.grids.build(sort_grids=False)
@@ -189,7 +156,7 @@ def test_gpu_response_dense_screened_equivalence() -> None:
 
 def test_gpu_uks_response_dense_screened_equivalence() -> None:
     mol = gto.M(atom="H 0 0 0", basis="sto-3g", spin=1, verbose=0)
-    ks = SkalaKS(mol, xc=QuadraticDensityFunctional(), with_dftd3=False)
+    ks = SkalaKS(mol, xc=QuadraticFunctional(), with_dftd3=False)
     ks.grids.level = 0
     ks.grids.alignment = 1
     ks.grids.build(sort_grids=False)
@@ -212,8 +179,27 @@ def test_gpu_uks_response_dense_screened_equivalence() -> None:
 
 
 def test_gpu_multiblock_mgga_response_dense_screened_equivalence() -> None:
+    """Exercise screened MGGA Hessian-vector products across multiple GPU blocks.
+
+    Density-only and single-block cases cannot expose errors in block-local JVP
+    assembly, spatial permutation, or reduction of vector gradient features. The
+    large basis and grid force multiple GPU AO blocks, while the quadratic density,
+    gradient, and kinetic terms give a nonzero response for every MGGA feature path.
+    """
     mol = gto.M(atom=CARBON_CHAIN, basis="def2-qzvpp", verbose=0)
-    ks = SkalaKS(mol, xc=QuadraticMGGAFunctional(), with_dftd3=False)
+    ks = SkalaKS(
+        mol,
+        xc=QuadraticFunctional(
+            [
+                Feature.ATOMIC_GRID_SIZES,
+                Feature.DENSITY,
+                Feature.GRAD,
+                Feature.KIN,
+                Feature.GRID_WEIGHTS,
+            ]
+        ),
+        with_dftd3=False,
+    )
     ks.grids.level = 1
     ks.grids.alignment = 1
     ks.grids.build(sort_grids=False)
