@@ -5,7 +5,6 @@ import numpy as np
 import pytest
 import torch
 from pyscf import dft, gto
-from pyscf.dft import numint as pyscf_numint
 from torch.utils.dlpack import from_dlpack
 
 pytestmark = pytest.mark.gpu
@@ -24,11 +23,14 @@ except ModuleNotFoundError:
         allow_module_level=True,
     )
 
+from utils import patch_ao_screening  # noqa: E402
+
+from skala.features import Feature, FeatureMap  # noqa: E402
 from skala.functional.base import ExcFunctionalBase  # noqa: E402
 from skala.gpu4pyscf import SkalaKS  # noqa: E402
 from skala.pyscf.ao_evaluation import (  # noqa: E402
     ChunkEvalForward,
-    non_chunk,
+    evaluate_full_grid,
 )
 from skala.pyscf.backend import dft_gpu  # noqa: E402
 from skala.pyscf.evaluation import FeatureSpec  # noqa: E402
@@ -47,30 +49,34 @@ C 4.2 0.0 0.0
 class QuadraticDensityFunctional(ExcFunctionalBase):
     def __init__(self) -> None:
         super().__init__()
-        self.features = ["atomic_grid_sizes", "density", "grid_weights"]
+        self.features = [
+            Feature.ATOMIC_GRID_SIZES,
+            Feature.DENSITY,
+            Feature.GRID_WEIGHTS,
+        ]
 
-    def get_exc(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
-        return (mol["density"].square() * mol["grid_weights"]).sum()
+    def get_exc(self, mol: FeatureMap) -> torch.Tensor:
+        return (mol[Feature.DENSITY].square() * mol[Feature.GRID_WEIGHTS]).sum()
 
 
 class QuadraticMGGAFunctional(ExcFunctionalBase):
     def __init__(self) -> None:
         super().__init__()
         self.features = [
-            "atomic_grid_sizes",
-            "density",
-            "grad",
-            "kin",
-            "grid_weights",
+            Feature.ATOMIC_GRID_SIZES,
+            Feature.DENSITY,
+            Feature.GRAD,
+            Feature.KIN,
+            Feature.GRID_WEIGHTS,
         ]
 
-    def get_exc(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
+    def get_exc(self, mol: FeatureMap) -> torch.Tensor:
         energy_density = (
-            mol["density"].square()
-            + mol["grad"].square().sum(dim=-2)
-            + mol["kin"].square()
+            mol[Feature.DENSITY].square()
+            + mol[Feature.GRAD].square().sum(dim=-2)
+            + mol[Feature.KIN].square()
         )
-        return (energy_density * mol["grid_weights"]).sum()
+        return (energy_density * mol[Feature.GRID_WEIGHTS]).sum()
 
 
 def _to_numpy(value: object) -> np.ndarray:
@@ -117,7 +123,6 @@ def test_prepare_spatially_sorted_gpu_grids() -> None:
 
 @pytest.mark.parametrize("unrestricted", [False, True])
 def test_gpu_rks_uks_dense_screened_equivalence(
-    monkeypatch: pytest.MonkeyPatch,
     load_functional_cached: Callable[..., ExcFunctionalBase | str],
     unrestricted: bool,
 ) -> None:
@@ -134,19 +139,19 @@ def test_gpu_rks_uks_dense_screened_equivalence(
     ks.grids.build(sort_grids=False)
     dm = ks.get_init_guess()
 
-    monkeypatch.setattr(pyscf_numint, "SWITCH_SIZE", mol.nao_nr())
-    dense = (
-        ks._numint.nr_uks(mol, ks.grids, None, dm)
-        if unrestricted
-        else ks._numint.nr_rks(mol, ks.grids, None, dm)
-    )
+    with patch_ao_screening(False):
+        dense = (
+            ks._numint.nr_uks(mol, ks.grids, None, dm)
+            if unrestricted
+            else ks._numint.nr_rks(mol, ks.grids, None, dm)
+        )
 
-    monkeypatch.setattr(pyscf_numint, "SWITCH_SIZE", mol.nao_nr() - 1)
-    screened = (
-        ks._numint.nr_uks(mol, ks.grids, None, dm)
-        if unrestricted
-        else ks._numint.nr_rks(mol, ks.grids, None, dm)
-    )
+    with patch_ao_screening(True):
+        screened = (
+            ks._numint.nr_uks(mol, ks.grids, None, dm)
+            if unrestricted
+            else ks._numint.nr_rks(mol, ks.grids, None, dm)
+        )
 
     assert np.allclose(_to_numpy(dense[0]), _to_numpy(screened[0]), rtol=1e-9)
     assert np.isclose(dense[1], screened[1], rtol=1e-9)
@@ -155,9 +160,7 @@ def test_gpu_rks_uks_dense_screened_equivalence(
     )
 
 
-def test_gpu_response_dense_screened_equivalence(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_gpu_response_dense_screened_equivalence() -> None:
     mol = gto.M(atom="H 0 0 0; H 0 0 0.74", basis="sto-3g", spin=0, verbose=0)
     ks = SkalaKS(mol, xc=QuadraticDensityFunctional(), with_dftd3=False)
     ks.grids.level = 0
@@ -170,11 +173,11 @@ def test_gpu_response_dense_screened_equivalence(
     )
     dm1 += dm1.T
 
-    monkeypatch.setattr(pyscf_numint, "SWITCH_SIZE", mol.nao_nr())
-    dense_response = ks._numint.gen_response(mo_coeff, mo_occ, ks=ks)
+    with patch_ao_screening(False):
+        dense_response = ks._numint.gen_response(mo_coeff, mo_occ, ks=ks)
 
-    monkeypatch.setattr(pyscf_numint, "SWITCH_SIZE", mol.nao_nr() - 1)
-    screened_response = ks._numint.gen_response(mo_coeff, mo_occ, ks=ks)
+    with patch_ao_screening(True):
+        screened_response = ks._numint.gen_response(mo_coeff, mo_occ, ks=ks)
 
     assert np.allclose(
         _to_numpy(dense_response(dm1)),
@@ -184,9 +187,7 @@ def test_gpu_response_dense_screened_equivalence(
     )
 
 
-def test_gpu_uks_response_dense_screened_equivalence(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_gpu_uks_response_dense_screened_equivalence() -> None:
     mol = gto.M(atom="H 0 0 0", basis="sto-3g", spin=1, verbose=0)
     ks = SkalaKS(mol, xc=QuadraticDensityFunctional(), with_dftd3=False)
     ks.grids.level = 0
@@ -196,11 +197,11 @@ def test_gpu_uks_response_dense_screened_equivalence(
     mo_occ = cupy.ones((2, mol.nao_nr()))
     dm1 = cupy.ones((2, mol.nao_nr(), mol.nao_nr()))
 
-    monkeypatch.setattr(pyscf_numint, "SWITCH_SIZE", mol.nao_nr())
-    dense_response = ks._numint.gen_response(mo_coeff, mo_occ, ks=ks)
+    with patch_ao_screening(False):
+        dense_response = ks._numint.gen_response(mo_coeff, mo_occ, ks=ks)
 
-    monkeypatch.setattr(pyscf_numint, "SWITCH_SIZE", mol.nao_nr() - 1)
-    screened_response = ks._numint.gen_response(mo_coeff, mo_occ, ks=ks)
+    with patch_ao_screening(True):
+        screened_response = ks._numint.gen_response(mo_coeff, mo_occ, ks=ks)
 
     np.testing.assert_allclose(
         _to_numpy(screened_response(dm1)),
@@ -210,9 +211,7 @@ def test_gpu_uks_response_dense_screened_equivalence(
     )
 
 
-def test_gpu_multiblock_mgga_response_dense_screened_equivalence(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_gpu_multiblock_mgga_response_dense_screened_equivalence() -> None:
     mol = gto.M(atom=CARBON_CHAIN, basis="def2-qzvpp", verbose=0)
     ks = SkalaKS(mol, xc=QuadraticMGGAFunctional(), with_dftd3=False)
     ks.grids.level = 1
@@ -223,11 +222,11 @@ def test_gpu_multiblock_mgga_response_dense_screened_equivalence(
     mo_occ = cupy.ones(mol.nao_nr())
     dm1 = cupy.eye(mol.nao_nr())
 
-    monkeypatch.setattr(pyscf_numint, "SWITCH_SIZE", mol.nao_nr())
-    dense_response = ks._numint.gen_response(mo_coeff, mo_occ, ks=ks)
+    with patch_ao_screening(False):
+        dense_response = ks._numint.gen_response(mo_coeff, mo_occ, ks=ks)
 
-    monkeypatch.setattr(pyscf_numint, "SWITCH_SIZE", mol.nao_nr() - 1)
-    screened_response = ks._numint.gen_response(mo_coeff, mo_occ, ks=ks)
+    with patch_ao_screening(True):
+        screened_response = ks._numint.gen_response(mo_coeff, mo_occ, ks=ks)
 
     np.testing.assert_allclose(
         _to_numpy(screened_response(dm1)),
@@ -238,7 +237,6 @@ def test_gpu_multiblock_mgga_response_dense_screened_equivalence(
 
 
 def test_gpu_screened_skala_matches_cpu_on_carbon_chain(
-    monkeypatch: pytest.MonkeyPatch,
     load_functional_cached: Callable[..., ExcFunctionalBase | str],
 ) -> None:
     """Prevent inaccurate GPU AO screening on spatially diffuse grid blocks.
@@ -290,15 +288,15 @@ def test_gpu_screened_skala_matches_cpu_on_carbon_chain(
     assert isinstance(cpu_functional, ExcFunctionalBase)
     assert isinstance(gpu_functional, ExcFunctionalBase)
 
-    monkeypatch.setattr(pyscf_numint, "SWITCH_SIZE", mol.nao_nr())
-    cpu_result = SkalaNumInt(cpu_functional, device=torch.device("cpu")).nr_rks(
-        mol, cpu_grids, None, dm
-    )
+    with patch_ao_screening(False):
+        cpu_result = SkalaNumInt(cpu_functional, device=torch.device("cpu")).nr_rks(
+            mol, cpu_grids, None, dm
+        )
 
-    monkeypatch.setattr(pyscf_numint, "SWITCH_SIZE", mol.nao_nr() - 1)
-    gpu_result = SkalaNumInt(gpu_functional, device=torch.device("cuda:0")).nr_rks(
-        mol, gpu_grids, None, cupy.asarray(dm)
-    )
+    with patch_ao_screening(True):
+        gpu_result = SkalaNumInt(gpu_functional, device=torch.device("cuda:0")).nr_rks(
+            mol, gpu_grids, None, cupy.asarray(dm)
+        )
 
     gpu_vxc = cupy.asnumpy(gpu_result[2])
     vxc_difference = cpu_result[2] - gpu_vxc
@@ -355,12 +353,14 @@ def test_gpu_empty_ao_block_matches_dense_reference() -> None:
     assert active_ao_counts[1] > 0
     grids._non0ao_idx = None
 
-    feature_function = MGGAFeatureFunction(FeatureSpec(["density", "grad", "kin"]))
+    feature_function = MGGAFeatureFunction(
+        FeatureSpec([Feature.DENSITY, Feature.GRAD, Feature.KIN])
+    )
     dm = torch.eye(mol.nao_nr(), dtype=torch.float64, device="cuda", requires_grad=True)
     screened = ChunkEvalForward.apply(  # type: ignore[no-untyped-call]
         dm, mol, grids, feature_function, block_size, False, True
     )
-    dense = non_chunk(dm, mol, coords, feature_function, gpu=True)
+    dense = evaluate_full_grid(dm, mol, coords, feature_function, gpu=True)
 
     torch.testing.assert_close(screened, dense, rtol=1e-12, atol=1e-12)
     (screened_vjp,) = torch.autograd.grad(screened.square().sum(), dm)
@@ -408,7 +408,7 @@ def test_gpu_sparse_mask_sorts_scatters_and_unsorts(
 
     monkeypatch.setattr(dft_gpu.numint, "NumInt", FakeGpuNumInt)
 
-    feature_function = MGGAFeatureFunction(FeatureSpec(["density"]))
+    feature_function = MGGAFeatureFunction(FeatureSpec([Feature.DENSITY]))
     dm = torch.diag(
         torch.arange(1, mol.nao_nr() + 1, dtype=torch.float64, device="cuda")
     ).requires_grad_()

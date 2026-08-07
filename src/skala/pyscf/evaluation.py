@@ -5,53 +5,72 @@
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-_MGGA_FEATURES = frozenset({"density", "grad", "kin", "lapl"})
+from skala.features import Feature
+
+_AO_FEATURES = frozenset(
+    {
+        Feature.DENSITY,
+        Feature.GRAD,
+        Feature.KIN,
+        Feature.LAPL,
+    }
+)
 _ATOMIC_LAYOUT_FEATURES = frozenset(
     {
-        "atomic_grid_weights",
-        "atomic_grid_sizes",
-        "atomic_grid_size_bound_shape",
+        Feature.ATOMIC_GRID_WEIGHTS,
+        Feature.ATOMIC_GRID_SIZES,
+        Feature.ATOMIC_GRID_SIZE_BOUND_SHAPE,
     }
 )
 
 
-@dataclass(frozen=True, init=False)
 class FeatureSpec:
     """Normalized feature names and their evaluation requirements."""
 
-    names: frozenset[str]
+    def __init__(self, names: Iterable[Feature]) -> None:
+        self._names = frozenset(names)
 
-    def __init__(self, names: Iterable[str]) -> None:
-        object.__setattr__(self, "names", frozenset(names))
+    @property
+    def names(self) -> frozenset[Feature]:
+        """Return the normalized feature names."""
+        return self._names
 
-    def requests(self, feature: str) -> bool:
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, FeatureSpec):
+            return NotImplemented
+        return self.names == other.names
+
+    def __hash__(self) -> int:
+        return hash(self.names)
+
+    def requests(self, feature: Feature) -> bool:
         """Return whether a feature is requested."""
         return feature in self.names
 
     @property
     def with_density(self) -> bool:
         """Return whether density is requested."""
-        return self.requests("density")
+        return self.requests(Feature.DENSITY)
 
     @property
     def with_grad(self) -> bool:
         """Return whether the density gradient is requested."""
-        return self.requests("grad")
+        return self.requests(Feature.GRAD)
 
     @property
     def with_kin(self) -> bool:
         """Return whether kinetic-energy density is requested."""
-        return self.requests("kin")
+        return self.requests(Feature.KIN)
 
     @property
     def with_lapl(self) -> bool:
         """Return whether the density Laplacian is requested."""
-        return self.requests("lapl")
+        return self.requests(Feature.LAPL)
 
     @property
-    def requires_mgga(self) -> bool:
-        """Return whether AO-based meta-GGA features are requested."""
-        return bool(self.names & _MGGA_FEATURES)
+    def requires_ao_evaluation(self) -> bool:
+        """Return whether AO-derived features are requested."""
+        return bool(self.names & _AO_FEATURES)
 
     @property
     def mgga_feature_count(self) -> int:
@@ -61,9 +80,9 @@ class FeatureSpec:
     @property
     def ao_derivative_order(self) -> int:
         """Return the highest AO derivative order needed by the features."""
-        if "lapl" in self.names:
+        if Feature.LAPL in self.names:
             return 2
-        if self.names & {"grad", "kin"}:
+        if self.names & {Feature.GRAD, Feature.KIN}:
             return 1
         return 0
 
@@ -75,7 +94,7 @@ class FeatureSpec:
     @property
     def supports_screened_evaluation(self) -> bool:
         """Return whether atom-aligned screened evaluation is supported."""
-        return "atomic_grid_sizes" in self.names
+        return Feature.ATOMIC_GRID_SIZES in self.names
 
 
 @dataclass(frozen=True)

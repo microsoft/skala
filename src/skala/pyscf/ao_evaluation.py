@@ -3,8 +3,7 @@
 """Blockwise atomic-orbital feature evaluation and custom autograd."""
 
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass
-from typing import Protocol, cast
+from typing import NamedTuple, Protocol, TypeAlias, cast
 
 import numpy as np
 import torch
@@ -12,8 +11,10 @@ from pyscf import dft, gto
 from torch import Tensor
 from torch.autograd import Function
 from torch.autograd.function import FunctionCtx
+from torch.utils.dlpack import from_dlpack
 from typing_extensions import Unpack
 
+from skala.features import FeatureMap
 from skala.pyscf import feature_math
 from skala.pyscf.backend import (
     Array,
@@ -22,6 +23,9 @@ from skala.pyscf.backend import (
     dft_gpu,
     from_numpy_or_cupy,
 )
+
+_ScreenIndex: TypeAlias = np.ndarray[tuple[int, int], np.dtype[np.uint8]]
+_AOIndices: TypeAlias = np.ndarray[tuple[int], np.dtype[np.intp]]
 
 
 class _ChunkEvalForwardContext(Protocol):
@@ -45,7 +49,7 @@ class _ChunkEvalBackwardContext(Protocol):
     gpu: bool
 
 
-def _active_cpu_ao_indices(mol: gto.Mole, screen_index: np.ndarray) -> np.ndarray:
+def _active_cpu_ao_indices(mol: gto.Mole, screen_index: _ScreenIndex) -> _AOIndices:
     """Expand active shells in a PySCF screen-index slice to AO indices.
 
     A shell is active for the grid block if it is nonzero in any of the
@@ -57,32 +61,7 @@ def _active_cpu_ao_indices(mol: gto.Mole, screen_index: np.ndarray) -> np.ndarra
     return np.flatnonzero(np.repeat(active_shells, np.diff(ao_loc)))
 
 
-def partial_feature_function_over_ao_values(
-    feature_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-    ao_values: torch.Tensor,
-) -> Callable[[torch.Tensor], torch.Tensor]:
-    """Bind evaluated AO values to a feature function for one grid block."""
-
-    def partial_feature_function(dm: torch.Tensor) -> torch.Tensor:
-        return feature_function(dm, ao_values)
-
-    return partial_feature_function
-
-
-def partial_vjp_function_over_tangents(
-    func: Callable[[torch.Tensor], torch.Tensor],
-    tangents: torch.Tensor,
-) -> Callable[[torch.Tensor], torch.Tensor]:
-    """Bind feature cotangents to a function for block-local VJP evaluation."""
-
-    def reduced_vjp(primals: torch.Tensor) -> torch.Tensor:
-        return torch.func.vjp(func, primals)[1](tangents)[0]
-
-    return reduced_vjp
-
-
-@dataclass(frozen=True)
-class _AOBlock:
+class _AOBlock(NamedTuple):
     """Evaluated AO data and index metadata for one contiguous grid block.
 
     ``ao_values`` contains only the active AO rows when screening is enabled.
@@ -122,17 +101,22 @@ def _evaluate_feature_block(
     feature_cotangent: Tensor | None = None,
 ) -> Tensor:
     """Evaluate one active-AO feature block or its feature-space VJP."""
-    partial_func = partial_feature_function_over_ao_values(
-        feature_function, block.ao_values
-    )
+
+    def evaluate_features(dm: Tensor) -> Tensor:
+        return feature_function(dm, block.ao_values)
+
+    evaluation_function: Callable[[Tensor], Tensor] = evaluate_features
     if feature_cotangent is not None:
-        partial_func = partial_vjp_function_over_tangents(
-            partial_func, feature_cotangent[..., block.grid_slice]
-        )
+        local_cotangent = feature_cotangent[..., block.grid_slice]
+
+        def evaluate_vjp(dm: Tensor) -> Tensor:
+            return torch.func.vjp(evaluate_features, dm)[1](local_cotangent)[0]
+
+        evaluation_function = evaluate_vjp
 
     if compile_feature_function:
-        return torch.compile(partial_func)(active_dm_submatrix)
-    return partial_func(active_dm_submatrix)
+        return torch.compile(evaluation_function)(active_dm_submatrix)
+    return evaluation_function(active_dm_submatrix)
 
 
 class _CPUAOBlockLoop:
@@ -183,7 +167,7 @@ class _CPUAOBlockLoop:
 
     def _active_ao_indices(
         self,
-        non0tab: np.ndarray,
+        non0tab: _ScreenIndex,
         grid_start: int,
         grid_end: int,
     ) -> Tensor | None:
@@ -213,11 +197,7 @@ class _CPUAOBlockLoop:
         block_non0tab = non0tab[row_start:row_end]
         if np.all(np.any(block_non0tab, axis=0)):
             return None
-        return torch.as_tensor(
-            _active_cpu_ao_indices(self.mol, block_non0tab),
-            device=self.dm.device,
-            dtype=torch.long,
-        )
+        return torch.from_numpy(_active_cpu_ao_indices(self.mol, block_non0tab))
 
     def __iter__(self) -> Iterator[_AOBlock]:
         non0tab = self.grids.non0tab
@@ -232,11 +212,7 @@ class _CPUAOBlockLoop:
             non0tab=non0tab,
         ):
             start, end = end, end + block_weights.size
-            ao_values = (
-                torch.from_numpy(backend_ao_values)
-                .to(device=self.dm.device, dtype=self.dm.dtype)
-                .transpose(-1, -2)
-            )
+            ao_values = torch.from_numpy(backend_ao_values).transpose(-1, -2)
             active_ao_indices = (
                 None
                 if non0tab is None
@@ -301,8 +277,8 @@ class _GPUAOBlockLoop:
             if active_ao_indices.size == 0:
                 continue
             yield _AOBlock(
-                torch.from_dlpack(backend_ao_values),
-                torch.from_dlpack(active_ao_indices),
+                from_dlpack(backend_ao_values),
+                from_dlpack(active_ao_indices),
                 slice(start, end),
             )
 
@@ -559,7 +535,7 @@ class ChunkEvalBackward(Function):
         return tuple(grads)
 
 
-def non_chunk(
+def evaluate_full_grid(
     dm: torch.Tensor,
     mol: gto.Mole,
     coords: Array,
@@ -593,9 +569,9 @@ def _resolve_ao_block_size(
 ) -> int | None:
     """Resolve an aligned CPU block size or delegate GPU sizing to its backend."""
     if gpu:
-        if block_size is not None:
-            raise ValueError("Setting custom block size is not supported on GPU.")
-        return None
+        if block_size is None:
+            return None
+        raise ValueError("Setting custom block size is not supported on GPU.")
 
     if block_size is None:
         nao = mol.nao_nr()
@@ -620,7 +596,7 @@ def auto_chunk(
     block_size: int | None = None,
     max_memory: int = 2000,
     gpu: bool = False,
-) -> dict[str, torch.Tensor]:
+) -> FeatureMap:
     """Evaluate raw features with a memory-derived or explicit AO block size."""
     if gpu:
         check_gpu_imports_were_successful()
@@ -630,20 +606,9 @@ def auto_chunk(
     blksize = _resolve_ao_block_size(mol, feature_function, block_size, max_memory, gpu)
 
     if blksize is not None and blksize >= grids.weights.shape[0]:
-        features = non_chunk(
-            dm.double(),
-            mol,
-            grids.coords,
-            feature_function,
-        )
+        features = evaluate_full_grid(dm.double(), mol, grids.coords, feature_function)
     else:
         features = ChunkEvalForward.apply(
-            dm.double(),
-            mol,
-            grids,
-            feature_function,
-            blksize,
-            False,
-            gpu,
+            dm.double(), mol, grids, feature_function, blksize, False, gpu
         )
     return feature_function.to_dict(features)

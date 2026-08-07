@@ -5,6 +5,7 @@ import pytest
 import torch
 from pyscf import dft, gto
 
+from skala.features import Feature, FeatureMap
 from skala.functional.base import ExcFunctionalBase
 from skala.pyscf import xc_integrator as xc_integrator_module
 from skala.pyscf.numint import SkalaNumInt
@@ -14,10 +15,10 @@ from skala.pyscf.xc_integrator import XCIntegrator, XCResult
 class QuadraticDensityFunctional(ExcFunctionalBase):
     def __init__(self) -> None:
         super().__init__()
-        self.features = ["density"]
+        self.features = [Feature.DENSITY]
 
-    def get_exc(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
-        return (mol["density"].square() * mol["grid_weights"]).sum()
+    def get_exc(self, mol: FeatureMap) -> torch.Tensor:
+        return (mol[Feature.DENSITY].square() * mol[Feature.GRID_WEIGHTS]).sum()
 
 
 def test_xc_integrator_returns_tensors_and_xc_only_response(
@@ -30,13 +31,13 @@ def test_xc_integrator_returns_tensors_and_xc_only_response(
         mol: gto.Mole,
         dm: torch.Tensor,
         grids: object,
-        features: set[str],
+        features: set[Feature],
         **kwargs: object,
-    ) -> dict[str, torch.Tensor]:
-        assert features == {"density", "grid_weights"}
+    ) -> FeatureMap:
+        assert features == {Feature.DENSITY, Feature.GRID_WEIGHTS}
         return {
-            "density": dm.sum().reshape(1),
-            "grid_weights": torch.tensor([2.0], dtype=dm.dtype),
+            Feature.DENSITY: dm.sum().reshape(1),
+            Feature.GRID_WEIGHTS: torch.tensor([2.0], dtype=dm.dtype),
         }
 
     monkeypatch.setattr(

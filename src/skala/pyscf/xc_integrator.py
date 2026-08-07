@@ -3,14 +3,14 @@
 """Tensor-level exchange-correlation integration."""
 
 from collections.abc import Callable
-from dataclasses import dataclass
-from typing import cast
+from typing import NamedTuple, cast
 
 import torch
 from pyscf import gto
 from pyscf.dft import numint as pyscf_numint
 from torch import Tensor
 
+from skala.features import Feature
 from skala.functional.base import ExcFunctionalBase
 from skala.pyscf import ao_evaluation, feature_math
 from skala.pyscf.backend import Grid, check_gpu_imports_were_successful
@@ -31,8 +31,7 @@ def _should_screen_aos(mol: gto.Mole) -> bool:
     return 2 * mol.nao_nr() > pyscf_numint.SWITCH_SIZE
 
 
-@dataclass(frozen=True)
-class XCResult:
+class XCResult(NamedTuple):
     """Tensor-valued result of exchange-correlation integration."""
 
     electron_count: Tensor
@@ -69,12 +68,12 @@ class XCIntegrator:
             mol,
             dm,
             grids,
-            features={"density"},
+            features={Feature.DENSITY},
             chunk_size=self.evaluation_policy.ao_block_size,
             max_memory=max_memory,
             gpu=self.device.type == "cuda",
         )
-        return mol_features["density"].sum(0)
+        return mol_features[Feature.DENSITY].sum(0)
 
     def __call__(
         self,
@@ -183,7 +182,7 @@ class XCIntegrator:
             grids,
             atom_major_raw_features=atom_major_raw_features,
             feature_function=feature_function,
-            func_deriv=1,
+            deriv_order=1,
             max_memory_in_mb=max_memory if dm.device.type == "cpu" else None,
             safety_fraction=self.evaluation_policy.safety_fraction,
         )
@@ -199,7 +198,7 @@ class XCIntegrator:
             )
             atom_major_cotangent[..., chunk.grid_slice] = local_cotangent.detach()
             electron_count += (
-                (mol_features["density"] * mol_features["grid_weights"])
+                (mol_features[Feature.DENSITY] * mol_features[Feature.GRID_WEIGHTS])
                 .sum(dim=-1)
                 .detach()
             )
@@ -230,7 +229,7 @@ class XCIntegrator:
             mol,
             dm,
             grids,
-            set(self.feature_spec.names) | {"density", "grid_weights"},
+            set(self.feature_spec.names) | {Feature.DENSITY, Feature.GRID_WEIGHTS},
             chunk_size=self.evaluation_policy.ao_block_size,
             max_memory=max_memory,
             gpu=self.device.type == "cuda",
@@ -243,9 +242,9 @@ class XCIntegrator:
             retain_graph=create_graph,
             create_graph=create_graph,
         )
-        electron_count = (mol_features["density"] * mol_features["grid_weights"]).sum(
-            dim=-1
-        )
+        electron_count = (
+            mol_features[Feature.DENSITY] * mol_features[Feature.GRID_WEIGHTS]
+        ).sum(dim=-1)
         return XCResult(electron_count, energy, potential)
 
     def _gen_response_screened(
@@ -281,7 +280,7 @@ class XCIntegrator:
             grids,
             atom_major_raw_features=atom_major_raw_features,
             feature_function=feature_function,
-            func_deriv=2,
+            deriv_order=2,
             max_memory_in_mb=max_memory if dm0.device.type == "cpu" else None,
             safety_fraction=safety_fraction,
         )

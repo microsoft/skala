@@ -9,11 +9,18 @@ import torch
 from pyscf import gto
 from torch import Tensor
 
+from skala.features import Feature, FeatureMap
 from skala.pyscf import ao_evaluation, feature_math
 from skala.pyscf.backend import Grid, from_numpy_or_cupy
 from skala.pyscf.evaluation import EvaluationPolicy, FeatureSpec
 
-DEFAULT_FEATURES = ["density", "kin", "grad", "grid_coords", "grid_weights"]
+DEFAULT_FEATURES = [
+    Feature.DENSITY,
+    Feature.KIN,
+    Feature.GRAD,
+    Feature.GRID_COORDS,
+    Feature.GRID_WEIGHTS,
+]
 DEFAULT_FEATURES_SET = set(DEFAULT_FEATURES)
 
 
@@ -21,11 +28,11 @@ def generate_features(
     mol: gto.Mole,
     dm: Tensor,
     grids: Grid,
-    features: set[str] | None = None,
+    features: set[Feature] | None = None,
     chunk_size: int | None = None,
     max_memory: int = 2000,
     gpu: bool = False,
-) -> dict[str, Tensor]:
+) -> FeatureMap:
     """Generate density features for a given molecule. The density features are stored in a dictionary
     with the keys matching the requested features.
 
@@ -56,14 +63,14 @@ def generate_features(
     evaluation_policy = EvaluationPolicy(ao_block_size=chunk_size)
 
     # if dm is a 3D tensor, then we have a spin-polarized system
-    with_spin = len(dm.shape) == 3
+    is_spin_polarized = len(dm.shape) == 3
 
     if gpu and dm.device.type != "cuda":
         raise ValueError("Density matrix must be on the GPU when gpu=True.")
 
     mol_features = get_grid_features(mol, dm, grids, feature_spec)
 
-    if feature_spec.requires_mgga:
+    if feature_spec.requires_ao_evaluation:
         mgga_features = ao_evaluation.auto_chunk(
             dm,
             mol,
@@ -76,7 +83,7 @@ def generate_features(
 
         for feature in mgga_features:
             mol_features[feature] = feature_math.maybe_expand_and_divide(
-                mgga_features[feature], not with_spin, 2
+                mgga_features[feature], not is_spin_polarized, 2
             )
 
     return mol_features
@@ -87,21 +94,21 @@ def get_grid_features(
     dm: Tensor,
     grids: Grid,
     feature_spec: FeatureSpec,
-) -> dict[str, Tensor]:
-    grid_features = {}
+) -> FeatureMap:
+    grid_features: FeatureMap = {}
 
-    if feature_spec.requests("grid_coords"):
-        grid_features["grid_coords"] = from_numpy_or_cupy(
+    if feature_spec.requests(Feature.GRID_COORDS):
+        grid_features[Feature.GRID_COORDS] = from_numpy_or_cupy(
             grids.coords, device=dm.device, dtype=dm.dtype
         )
 
-    if feature_spec.requests("grid_weights"):
-        grid_features["grid_weights"] = from_numpy_or_cupy(
+    if feature_spec.requests(Feature.GRID_WEIGHTS):
+        grid_features[Feature.GRID_WEIGHTS] = from_numpy_or_cupy(
             grids.weights, device=dm.device, dtype=dm.dtype
         )
 
-    if feature_spec.requests("coarse_0_atomic_coords"):
-        grid_features["coarse_0_atomic_coords"] = from_numpy_or_cupy(
+    if feature_spec.requests(Feature.COARSE_0_ATOMIC_COORDS):
+        grid_features[Feature.COARSE_0_ATOMIC_COORDS] = from_numpy_or_cupy(
             mol.atom_coords(), device=dm.device, dtype=dm.dtype
         )
 
@@ -121,22 +128,22 @@ def get_grid_features(
                 f"Set grids.alignment = 1 before building grids to disable padding."
             )
 
-        if feature_spec.requests("atomic_grid_sizes"):
-            grid_features["atomic_grid_sizes"] = torch.tensor(
+        if feature_spec.requests(Feature.ATOMIC_GRID_SIZES):
+            grid_features[Feature.ATOMIC_GRID_SIZES] = torch.tensor(
                 sizes, dtype=torch.long, device=dm.device
             )
 
-        if feature_spec.requests("atomic_grid_size_bound_shape"):
+        if feature_spec.requests(Feature.ATOMIC_GRID_SIZE_BOUND_SHAPE):
             max_size = max(sizes)
-            grid_features["atomic_grid_size_bound_shape"] = torch.zeros(
+            grid_features[Feature.ATOMIC_GRID_SIZE_BOUND_SHAPE] = torch.zeros(
                 max_size, 0, dtype=torch.long, device=dm.device
             )
 
-        if feature_spec.requests("atomic_grid_weights"):
+        if feature_spec.requests(Feature.ATOMIC_GRID_WEIGHTS):
             raw_weights = np.concatenate(
                 [atom_grids_tab[mol.atom_symbol(ia)][1] for ia in range(mol.natm)]
             )
-            grid_features["atomic_grid_weights"] = from_numpy_or_cupy(
+            grid_features[Feature.ATOMIC_GRID_WEIGHTS] = from_numpy_or_cupy(
                 raw_weights, device=dm.device, dtype=dm.dtype
             )
 

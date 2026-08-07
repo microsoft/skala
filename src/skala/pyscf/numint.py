@@ -16,7 +16,6 @@ from skala.pyscf.backend import (
     to_cupy,
     to_numpy,
 )
-from skala.pyscf.evaluation import EvaluationPolicy, FeatureSpec
 from skala.pyscf.xc_integrator import XCIntegrator
 
 
@@ -124,16 +123,6 @@ class SkalaNumInt(PySCFNumInt[Array]):
     def func(self) -> ExcFunctionalBase:
         """Functional retained for gradient-adapter compatibility."""
         return self.integrator.functional
-
-    @property
-    def feature_spec(self) -> FeatureSpec:
-        """Feature requirements owned by the XC integrator."""
-        return self.integrator.feature_spec
-
-    @property
-    def evaluation_policy(self) -> EvaluationPolicy:
-        """Numerical policy owned by the XC integrator."""
-        return self.integrator.evaluation_policy
 
     def _from_backend(self, x: Array) -> Tensor:
         return from_numpy_or_cupy(x, device=self.device)

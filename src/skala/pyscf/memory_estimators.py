@@ -3,7 +3,7 @@
 import torch
 
 
-def estimate_max_model_grid_points(
+def estimate_max_gridpoint_chunk_size(
     dm: torch.Tensor,
     deriv: int,
     max_memory_in_mb: int | None = None,
@@ -14,7 +14,7 @@ def estimate_max_model_grid_points(
     """Heuristically limit grid points per atom-aligned model evaluation.
 
     The dominant per-chunk allocation is the atomic-orbital matrix evaluated by
-    ``non_chunk`` (shape ``(ncomp, nao, n)`` in float64, with no AO screening),
+    ``evaluate_full_grid`` (shape ``(ncomp, nao, n)`` in float64, with no AO screening),
     together with the ``c0``/``ci`` products formed inside the feature function and
     retained by autograd for the backward pass. Peak memory is therefore modelled
     as affine in the number of grid points ``n`` (see

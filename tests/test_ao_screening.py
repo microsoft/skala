@@ -4,8 +4,9 @@ import numpy as np
 import pytest
 import torch
 from pyscf import dft, gto
-from pyscf.dft import numint as pyscf_numint
+from utils import patch_ao_screening
 
+from skala.features import Feature, FeatureMap
 from skala.functional.base import ExcFunctionalBase
 from skala.pyscf import model_chunking as model_chunking_module
 from skala.pyscf import screening as screening_module
@@ -28,7 +29,6 @@ from skala.pyscf.screening import (
     _decompose_grid_into_spatial_blocks,
     prepare_spatial_grid_layout,
 )
-from skala.pyscf.xc_integrator import _should_screen_aos
 
 
 @pytest.fixture
@@ -39,15 +39,24 @@ def carbon() -> gto.Mole:
 @pytest.mark.parametrize(
     ("feature_names", "expected_deriv", "expected_nfeats"),
     [
-        ({"density"}, 0, 1),
-        ({"grad"}, 1, 3),
-        ({"kin"}, 1, 1),
-        ({"lapl"}, 2, 1),
-        ({"density", "grad", "kin", "lapl"}, 2, 6),
+        ({Feature.DENSITY}, 0, 1),
+        ({Feature.GRAD}, 1, 3),
+        ({Feature.KIN}, 1, 1),
+        ({Feature.LAPL}, 2, 1),
+        (
+            {
+                Feature.DENSITY,
+                Feature.GRAD,
+                Feature.KIN,
+                Feature.LAPL,
+            },
+            2,
+            6,
+        ),
     ],
 )
 def test_mgga_supported_features_are_linear_in_density_matrix(
-    feature_names: set[str],
+    feature_names: set[Feature],
     expected_deriv: int,
     expected_nfeats: int,
 ) -> None:
@@ -94,27 +103,27 @@ def test_mgga_supported_features_are_linear_in_density_matrix(
     torch.testing.assert_close(second_jvp, torch.zeros_like(second_jvp))
 
 
-def test_mgga_requires_at_least_one_feature() -> None:
-    with pytest.raises(ValueError, match="At least one feature must be selected"):
-        MGGAFeatureFunction(FeatureSpec([]))
-
-
-@pytest.mark.parametrize(
-    ("switch_offset", "expected"), [(1, False), (0, False), (-1, True)]
-)
-def test_should_screen_aos_at_crossover(
-    carbon: gto.Mole,
-    monkeypatch: pytest.MonkeyPatch,
-    switch_offset: int,
-    expected: bool,
+@pytest.mark.parametrize("feature_names", [[], [Feature.GRID_WEIGHTS]])
+def test_mgga_requires_at_least_one_ao_derived_feature(
+    feature_names: list[Feature],
 ) -> None:
-    monkeypatch.setattr(
-        pyscf_numint,
-        "SWITCH_SIZE",
-        2 * carbon.nao_nr() + switch_offset,
-    )
+    with pytest.raises(
+        ValueError, match="At least one AO-derived feature must be selected"
+    ):
+        MGGAFeatureFunction(FeatureSpec(feature_names))
 
-    assert _should_screen_aos(carbon) is expected
+
+def test_patch_ao_screening_restores_previous_decision(carbon: gto.Mole) -> None:
+    original_decision = xc_integrator_module._should_screen_aos
+
+    with patch_ao_screening(False):
+        dense_decision = xc_integrator_module._should_screen_aos
+        assert not dense_decision(carbon)
+        with patch_ao_screening(True):
+            assert xc_integrator_module._should_screen_aos(carbon)
+        assert xc_integrator_module._should_screen_aos is dense_decision
+
+    assert xc_integrator_module._should_screen_aos is original_decision
 
 
 def test_active_cpu_ao_indices(carbon: gto.Mole) -> None:
@@ -138,7 +147,7 @@ def test_active_cpu_ao_indices(carbon: gto.Mole) -> None:
 
 
 def test_resolve_ao_block_size_modes(carbon: gto.Mole) -> None:
-    feature_function = MGGAFeatureFunction(FeatureSpec(["density"]))
+    feature_function = MGGAFeatureFunction(FeatureSpec([Feature.DENSITY]))
     backend_block_size = dft.gen_grid.BLKSIZE
 
     # CPU sizes are aligned locally; GPU sizing is delegated unless explicitly invalid.
@@ -298,10 +307,14 @@ def test_prepare_spatially_sorted_cpu_grids(
 class QuadraticDensityFunctional(ExcFunctionalBase):
     def __init__(self) -> None:
         super().__init__()
-        self.features = ["atomic_grid_sizes", "density", "grid_weights"]
+        self.features = [
+            Feature.ATOMIC_GRID_SIZES,
+            Feature.DENSITY,
+            Feature.GRID_WEIGHTS,
+        ]
 
-    def get_exc(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
-        return (mol["density"].square() * mol["grid_weights"]).sum()
+    def get_exc(self, mol: FeatureMap) -> torch.Tensor:
+        return (mol[Feature.DENSITY].square() * mol[Feature.GRID_WEIGHTS]).sum()
 
 
 def test_grid_reuses_spatial_grid_layout_across_numints(
@@ -386,8 +399,6 @@ def test_first_and_second_order_use_same_screening_decision(
     expected: bool,
     response_safety_fraction: float | None,
 ) -> None:
-    switch_size = 2 * carbon.nao_nr() - 1 if expected else 2 * carbon.nao_nr()
-    monkeypatch.setattr(pyscf_numint, "SWITCH_SIZE", switch_size)
     routes: list[str] = []
     safety_fractions: list[float] = []
 
@@ -395,15 +406,15 @@ def test_first_and_second_order_use_same_screening_decision(
         mol: gto.Mole,
         dm: torch.Tensor,
         grids: object,
-        features: set[str] | None = None,
+        features: set[Feature] | None = None,
         **kwargs: object,
-    ) -> dict[str, torch.Tensor]:
+    ) -> FeatureMap:
         routes.append("dense")
         density = dm.square().sum().reshape(1).expand(2, 1) / 2
         return {
-            "atomic_grid_sizes": torch.tensor([1]),
-            "density": density,
-            "grid_weights": torch.ones(1, dtype=dm.dtype),
+            Feature.ATOMIC_GRID_SIZES: torch.tensor([1]),
+            Feature.DENSITY: density,
+            Feature.GRID_WEIGHTS: torch.ones(1, dtype=dm.dtype),
         }
 
     class FakeSpatialGridLayout:
@@ -424,9 +435,9 @@ def test_first_and_second_order_use_same_screening_decision(
                 grid_slice=slice(0, 1),
                 raw_features=raw_features,
                 model_features={
-                    "atomic_grid_sizes": torch.tensor([1]),
-                    "density": raw_features.expand(2, 1) / 2,
-                    "grid_weights": torch.ones(1, dtype=raw_features.dtype),
+                    Feature.ATOMIC_GRID_SIZES: torch.tensor([1]),
+                    Feature.DENSITY: raw_features.expand(2, 1) / 2,
+                    Feature.GRID_WEIGHTS: torch.ones(1, dtype=raw_features.dtype),
                 },
             )
 
@@ -460,7 +471,7 @@ def test_first_and_second_order_use_same_screening_decision(
         grids: object,
         atom_major_raw_features: torch.Tensor,
         feature_function: MGGAFeatureFunction,
-        func_deriv: int,
+        deriv_order: int,
         **kwargs: object,
     ) -> FakeModelFeatureChunks:
         safety_fraction = kwargs["safety_fraction"]
@@ -496,21 +507,21 @@ def test_first_and_second_order_use_same_screening_decision(
     grids = dft.Grids(carbon)
     grids.weights = np.ones(1)
 
-    numint(carbon, grids, None, dm)
-
     ks = FakeKS(carbon, grids)
     response_kwargs = (
         {}
         if response_safety_fraction is None
         else {"safety_fraction": response_safety_fraction}
     )
-    response = numint.gen_response(
-        np.eye(carbon.nao_nr()),
-        np.ones(carbon.nao_nr()),
-        ks=ks,
-        **response_kwargs,
-    )
-    result = response(np.eye(carbon.nao_nr()))
+    with patch_ao_screening(expected):
+        numint(carbon, grids, None, dm)
+        response = numint.gen_response(
+            np.eye(carbon.nao_nr()),
+            np.ones(carbon.nao_nr()),
+            ks=ks,
+            **response_kwargs,
+        )
+        result = response(np.eye(carbon.nao_nr()))
 
     assert result.shape == (carbon.nao_nr(), carbon.nao_nr())
     expected_route = "screened" if expected else "dense"
@@ -526,7 +537,7 @@ def test_first_and_second_order_use_same_screening_decision(
 
 def test_feature_block_helper_localizes_derivative_vectors() -> None:
     """Use AO slices for linear JVPs and grid slices for feature VJPs."""
-    feature_function = MGGAFeatureFunction(FeatureSpec(["density"]))
+    feature_function = MGGAFeatureFunction(FeatureSpec([Feature.DENSITY]))
     block = _AOBlock(
         ao_values=torch.tensor([[1.0, 2.0], [3.0, 4.0]], dtype=torch.float64),
         active_ao_indices=torch.tensor([0, 2]),
@@ -571,7 +582,7 @@ def test_feature_block_helper_localizes_derivative_vectors() -> None:
 def test_chunk_eval_transforms_follow_linear_operator(carbon: gto.Mole) -> None:
     """Check first and second JVPs and the feature-cotangent adjoint JVP."""
     grids = _minimal_atom_grid(carbon)
-    feature_function = MGGAFeatureFunction(FeatureSpec(["density"]))
+    feature_function = MGGAFeatureFunction(FeatureSpec([Feature.DENSITY]))
     dm = torch.eye(carbon.nao_nr(), dtype=torch.float64)
     tangent = torch.arange(1, dm.numel() + 1, dtype=dm.dtype).reshape(dm.shape)
 
@@ -642,7 +653,7 @@ def test_cpu_screening_slices_and_scatters_full_derivatives(
 
     monkeypatch.setattr(dft.numint, "NumInt", FakeNumInt)
 
-    feature_function = MGGAFeatureFunction(FeatureSpec(["density"]))
+    feature_function = MGGAFeatureFunction(FeatureSpec([Feature.DENSITY]))
     dm = torch.diag(
         torch.arange(1, carbon.nao_nr() + 1, dtype=torch.float64)
     ).requires_grad_()
@@ -713,7 +724,7 @@ def test_cpu_all_active_block_uses_dense_sentinel(
                 )
 
     monkeypatch.setattr(dft.numint, "NumInt", FakeNumInt)
-    feature_function = MGGAFeatureFunction(FeatureSpec(["density"]))
+    feature_function = MGGAFeatureFunction(FeatureSpec([Feature.DENSITY]))
     dm = torch.eye(carbon.nao_nr(), dtype=torch.float64)
 
     blocks = list(_CPUAOBlockLoop(dm, carbon, grids, feature_function, block_size))
@@ -747,7 +758,7 @@ def test_cpu_no_active_aos_returns_full_zero_derivatives(
             yield ao, None, grids.weights, grids.coords
 
     monkeypatch.setattr(dft.numint, "NumInt", FakeNumInt)
-    feature_function = MGGAFeatureFunction(FeatureSpec(["density"]))
+    feature_function = MGGAFeatureFunction(FeatureSpec([Feature.DENSITY]))
     dm = torch.eye(carbon.nao_nr(), dtype=torch.float64).requires_grad_()
 
     features = ChunkEvalForward.apply(  # type: ignore[no-untyped-call]
@@ -788,7 +799,6 @@ def test_numint_reset_does_not_clear_grid_spatial_layout(carbon: gto.Mole) -> No
 
 @pytest.mark.parametrize("unrestricted", [False, True])
 def test_cpu_rks_uks_dense_screened_equivalence(
-    monkeypatch: pytest.MonkeyPatch,
     load_functional_cached: Callable[..., ExcFunctionalBase | str],
     unrestricted: bool,
 ) -> None:
@@ -805,28 +815,26 @@ def test_cpu_rks_uks_dense_screened_equivalence(
     grids = _minimal_atom_grid(mol)
     dm = mean_field.get_init_guess()
 
-    monkeypatch.setattr(pyscf_numint, "SWITCH_SIZE", mol.nao_nr())
-    dense = (
-        numint.nr_uks(mol, grids, None, dm)
-        if unrestricted
-        else numint.nr_rks(mol, grids, None, dm)
-    )
+    with patch_ao_screening(False):
+        dense = (
+            numint.nr_uks(mol, grids, None, dm)
+            if unrestricted
+            else numint.nr_rks(mol, grids, None, dm)
+        )
 
-    monkeypatch.setattr(pyscf_numint, "SWITCH_SIZE", mol.nao_nr() - 1)
-    screened = (
-        numint.nr_uks(mol, grids, None, dm)
-        if unrestricted
-        else numint.nr_rks(mol, grids, None, dm)
-    )
+    with patch_ao_screening(True):
+        screened = (
+            numint.nr_uks(mol, grids, None, dm)
+            if unrestricted
+            else numint.nr_rks(mol, grids, None, dm)
+        )
 
     assert np.allclose(dense[0], screened[0], rtol=1e-10, atol=1e-11)
     assert np.isclose(dense[1], screened[1], rtol=1e-9, atol=1e-10)
     assert np.allclose(dense[2], screened[2], rtol=1e-8, atol=1e-10)
 
 
-def test_cpu_response_dense_screened_equivalence(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_cpu_response_dense_screened_equivalence() -> None:
     mol = gto.M(atom="H 0 0 0; H 0 0 0.74", basis="sto-3g", spin=0, verbose=0)
     grids = _minimal_atom_grid(mol)
     ks = FakeKS(mol, grids)
@@ -838,11 +846,11 @@ def test_cpu_response_dense_screened_equivalence(
     )
     dm1 += dm1.T
 
-    monkeypatch.setattr(pyscf_numint, "SWITCH_SIZE", mol.nao_nr())
-    dense_response = numint.gen_response(mo_coeff, mo_occ, ks=ks)
+    with patch_ao_screening(False):
+        dense_response = numint.gen_response(mo_coeff, mo_occ, ks=ks)
 
-    monkeypatch.setattr(pyscf_numint, "SWITCH_SIZE", mol.nao_nr() - 1)
-    screened_response = numint.gen_response(mo_coeff, mo_occ, ks=ks)
+    with patch_ao_screening(True):
+        screened_response = numint.gen_response(mo_coeff, mo_occ, ks=ks)
 
     assert np.allclose(
         dense_response(dm1), screened_response(dm1), rtol=1e-10, atol=1e-11
@@ -859,10 +867,9 @@ def test_screened_ao_traversals_are_independent_of_model_chunking(
     atom_grid_size = grids.weights.size // mol.natm
     monkeypatch.setattr(
         model_chunking_module,
-        "estimate_max_model_grid_points",
+        "estimate_max_gridpoint_chunk_size",
         lambda *args, **kwargs: atom_grid_size,
     )
-    monkeypatch.setattr(pyscf_numint, "SWITCH_SIZE", mol.nao_nr() - 1)
 
     forward_calls = 0
     backward_calls = 0
@@ -884,16 +891,17 @@ def test_screened_ao_traversals_are_independent_of_model_chunking(
     functional = QuadraticDensityFunctional()
     numint = SkalaNumInt(functional)
 
-    if func_deriv == 1:
-        dm = dft.RKS(mol).get_init_guess()
-        numint.nr_rks(mol, grids, None, dm)
-        assert forward_calls == 1
-    else:
-        ks = FakeKS(mol, grids)
-        response = numint.gen_response(
-            np.eye(mol.nao_nr()), np.ones(mol.nao_nr()), ks=ks
-        )
-        response(np.eye(mol.nao_nr()))
-        assert forward_calls == 2
+    with patch_ao_screening(True):
+        if func_deriv == 1:
+            dm = dft.RKS(mol).get_init_guess()
+            numint.nr_rks(mol, grids, None, dm)
+            assert forward_calls == 1
+        else:
+            ks = FakeKS(mol, grids)
+            response = numint.gen_response(
+                np.eye(mol.nao_nr()), np.ones(mol.nao_nr()), ks=ks
+            )
+            response(np.eye(mol.nao_nr()))
+            assert forward_calls == 2
 
     assert backward_calls == 1

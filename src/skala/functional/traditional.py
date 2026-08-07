@@ -12,6 +12,7 @@ import math
 import torch
 from torch import Tensor, nn
 
+from skala.features import Feature, FeatureMap
 from skala.functional import density
 from skala.functional.base import ExcFunctionalBase
 
@@ -27,7 +28,7 @@ class SpinScaledXCFunctional(ExcFunctionalBase):
     def get_d3_settings(self) -> str:
         return self.__class__.__name__.lower()
 
-    def exchange(self, mol_features: dict[str, Tensor]) -> Tensor:
+    def exchange(self, mol_features: FeatureMap) -> Tensor:
         """
         Compute the exchange energy density.
 
@@ -43,7 +44,7 @@ class SpinScaledXCFunctional(ExcFunctionalBase):
         """
         raise NotImplementedError()
 
-    def correlation_density(self, mol_features: dict[str, Tensor]) -> Tensor:
+    def correlation_density(self, mol_features: FeatureMap) -> Tensor:
         """
         Compute the correlation energy density.
 
@@ -59,7 +60,7 @@ class SpinScaledXCFunctional(ExcFunctionalBase):
         """
         raise NotImplementedError()
 
-    def correlation(self, mol_features: dict[str, Tensor]) -> Tensor:
+    def correlation(self, mol_features: FeatureMap) -> Tensor:
         """
         Compute the correlation energy.
 
@@ -73,10 +74,10 @@ class SpinScaledXCFunctional(ExcFunctionalBase):
         Tensor
             Correlation energy.
         """
-        rho_total = mol_features["density"].sum(0)
+        rho_total = mol_features[Feature.DENSITY].sum(0)
         return rho_total * self.correlation_density(mol_features)
 
-    def get_exc_density(self, mol: dict[str, Tensor]) -> Tensor:
+    def get_exc_density(self, mol: FeatureMap) -> Tensor:
         exch = self.exchange(density.scale_by(mol, 2)).sum(0) / 2
         corr = self.correlation(mol)
         return exch + corr
@@ -90,15 +91,21 @@ class LDA(SpinScaledXCFunctional):
     Exchange: E_x[ρ] = -3/4 * (3/π)^(1/3) * ρ^(4/3)
     """
 
-    features = ["density", "grid_weights"]
+    features = [
+        Feature.DENSITY,
+        Feature.GRID_WEIGHTS,
+    ]
 
-    def exchange(self, mol_features: dict[str, Tensor]) -> Tensor:
+    def exchange(self, mol_features: FeatureMap) -> Tensor:
         return (
-            -3 / 4 * (3 / math.pi) ** (1 / 3) * mol_features["density"].abs() ** (4 / 3)
+            -3
+            / 4
+            * (3 / math.pi) ** (1 / 3)
+            * mol_features[Feature.DENSITY].abs() ** (4 / 3)
         )
 
-    def correlation_density(self, mol_features: dict[str, Tensor]) -> Tensor:
-        return mol_features["density"].new_zeros((1,))
+    def correlation_density(self, mol_features: FeatureMap) -> Tensor:
+        return mol_features[Feature.DENSITY].new_zeros((1,))
 
 
 class SPW92(SpinScaledXCFunctional):
@@ -109,14 +116,20 @@ class SPW92(SpinScaledXCFunctional):
     correlation energy of the uniform electron gas.
     """
 
-    features = ["density", "grid_weights"]
+    features = [
+        Feature.DENSITY,
+        Feature.GRID_WEIGHTS,
+    ]
 
-    def exchange(self, mol_features: dict[str, Tensor]) -> Tensor:
+    def exchange(self, mol_features: FeatureMap) -> Tensor:
         return (
-            -3 / 4 * (3 / math.pi) ** (1 / 3) * mol_features["density"].abs() ** (4 / 3)
+            -3
+            / 4
+            * (3 / math.pi) ** (1 / 3)
+            * mol_features[Feature.DENSITY].abs() ** (4 / 3)
         )
 
-    def correlation_density(self, mol_features: dict[str, Tensor]) -> Tensor:
+    def correlation_density(self, mol_features: FeatureMap) -> Tensor:
         def Gamma(
             rs: Tensor, A: float, a1: float, b1: float, b2: float, b3: float, b4: float
         ) -> Tensor:
@@ -124,7 +137,7 @@ class SPW92(SpinScaledXCFunctional):
             poly = (b1 + (b2 + (b3 + b4 * rs_sq) * rs_sq) * rs_sq) * rs_sq
             return -2 * A * (1 + a1 * rs) * torch.log(1 + 0.5 / (A * poly))
 
-        rho = mol_features["density"]
+        rho = mol_features[Feature.DENSITY]
         zeta, rho_total = density.zeta(rho), rho.sum(0)
         ff0 = 1.709921
         ff = ((1 + zeta) ** (4 / 3) + (1 - zeta) ** (4 / 3) - 2) / (2 ** (4 / 3) - 2)
@@ -147,7 +160,11 @@ class PBE(SpinScaledXCFunctional):
     and correlation gradient corrections to the local density approximation.
     """
 
-    features = ["density", "grad", "grid_weights"]
+    features = [
+        Feature.DENSITY,
+        Feature.GRAD,
+        Feature.GRID_WEIGHTS,
+    ]
 
     def __init__(self) -> None:
         super().__init__()
@@ -156,9 +173,9 @@ class PBE(SpinScaledXCFunctional):
         self.kappa = nn.Parameter(torch.tensor(0.804), requires_grad=False)
         self.mu = self.beta * (math.pi**2 / 3)
 
-    def exchange(self, mol_features: dict[str, Tensor]) -> Tensor:
-        rho = mol_features["density"]
-        grad = mol_features["grad"]
+    def exchange(self, mol_features: FeatureMap) -> Tensor:
+        rho = mol_features[Feature.DENSITY]
+        grad = mol_features[Feature.GRAD]
         FX = (
             1
             + self.kappa
@@ -167,10 +184,10 @@ class PBE(SpinScaledXCFunctional):
         )
         return self.lda.exchange(mol_features) * FX
 
-    def correlation_density(self, mol_features: dict[str, Tensor]) -> Tensor:
+    def correlation_density(self, mol_features: FeatureMap) -> Tensor:
         eps_c_unif = self.lda.correlation_density(mol_features)
-        rho = mol_features["density"]
-        grad = mol_features["grad"]
+        rho = mol_features[Feature.DENSITY]
+        grad = mol_features[Feature.GRAD]
         rho_total, grad_total = rho.sum(0), grad.sum(0)
         zeta = density.zeta(rho)
         ks = torch.sqrt(4 * density.kF(rho_total) / math.pi)
@@ -200,7 +217,12 @@ class TPSS(SpinScaledXCFunctional):
     exact constraints of density functional theory.
     """
 
-    features = ["density", "kin", "grad", "grid_weights"]
+    features = [
+        Feature.DENSITY,
+        Feature.KIN,
+        Feature.GRAD,
+        Feature.GRID_WEIGHTS,
+    ]
 
     def __init__(self) -> None:
         super().__init__()
@@ -211,10 +233,10 @@ class TPSS(SpinScaledXCFunctional):
         self.b = nn.Parameter(torch.tensor(0.40), requires_grad=False)
         self.d = nn.Parameter(torch.tensor(2.8), requires_grad=False)
 
-    def exchange(self, mol_features: dict[str, Tensor]) -> Tensor:
-        rho = mol_features["density"]
-        grad = mol_features["grad"]
-        kin = mol_features["kin"]
+    def exchange(self, mol_features: FeatureMap) -> Tensor:
+        rho = mol_features[Feature.DENSITY]
+        grad = mol_features[Feature.GRAD]
+        kin = mol_features[Feature.KIN]
         # p is the reduced gradient squared, z is the zeta value
         p, z = density.reduced_gradient(rho, grad) ** 2, density.z(rho, grad, kin)
         alpha = (5 * p / 3) * (1 / torch.clamp(z, density.EPS) - 1)
@@ -233,10 +255,10 @@ class TPSS(SpinScaledXCFunctional):
         FX = 1 + kappa - kappa / (1 + x / kappa)
         return self.lda.exchange(mol_features) * FX
 
-    def correlation_density(self, mol_features: dict[str, Tensor]) -> Tensor:
-        rho = mol_features["density"]
-        grad = mol_features["grad"]
-        kin = mol_features["kin"]
+    def correlation_density(self, mol_features: FeatureMap) -> Tensor:
+        rho = mol_features[Feature.DENSITY]
+        grad = mol_features[Feature.GRAD]
+        kin = mol_features[Feature.KIN]
         rho_total, grad_total, kin_total = rho.sum(0), grad.sum(0), kin.sum(0)
         zeta, grad_zeta = density.zeta(rho), density.grad_zeta(rho, grad).norm(dim=-2)
 
@@ -253,7 +275,7 @@ class TPSS(SpinScaledXCFunctional):
         z = density.z(rho_total, grad_total, kin_total)
         mols = density.separate(mol_features)
         eps_c_revpkzb = eps_c_pbe * (1 + Czetaxi * z**2) - (1 + Czetaxi) * z**2 * sum(
-            (mols[spin]["density"][spin] / rho_total)
+            (mols[spin][Feature.DENSITY][spin] / rho_total)
             * torch.max(eps_c_pbe, self.pbe.correlation_density(mols[spin]))
             for spin in range(2)
         )
@@ -261,7 +283,12 @@ class TPSS(SpinScaledXCFunctional):
 
 
 class _SCANLikeFunctional(SpinScaledXCFunctional):
-    features = ["density", "kin", "grad", "grid_weights"]
+    features = [
+        Feature.DENSITY,
+        Feature.KIN,
+        Feature.GRAD,
+        Feature.GRID_WEIGHTS,
+    ]
 
     def __init__(
         self, alpha_mode: int, interpolation_mode: int, gradient_correction_mode: int
@@ -677,16 +704,16 @@ class _SCANLikeFunctional(SpinScaledXCFunctional):
         energy = ec1 + ief * (ec0 - ec1)
         return torch.where(total_density > 0, energy, torch.zeros_like(energy))
 
-    def exchange(self, mol_features: dict[str, Tensor]) -> Tensor:
-        rho = torch.clamp(mol_features["density"], min=0.0)
-        grad_norm = density.grad_norm(mol_features["grad"])
-        kin = torch.clamp(mol_features["kin"], min=0.0)
+    def exchange(self, mol_features: FeatureMap) -> Tensor:
+        rho = torch.clamp(mol_features[Feature.DENSITY], min=0.0)
+        grad_norm = density.grad_norm(mol_features[Feature.GRAD])
+        kin = torch.clamp(mol_features[Feature.KIN], min=0.0)
         return self._scan_exchange_density(rho, grad_norm, kin)
 
-    def correlation_density(self, mol_features: dict[str, Tensor]) -> Tensor:
-        rho = torch.clamp(mol_features["density"], min=0.0)
-        grad = mol_features["grad"]
-        kin = torch.clamp(mol_features["kin"], min=0.0)
+    def correlation_density(self, mol_features: FeatureMap) -> Tensor:
+        rho = torch.clamp(mol_features[Feature.DENSITY], min=0.0)
+        grad = mol_features[Feature.GRAD]
+        kin = torch.clamp(mol_features[Feature.KIN], min=0.0)
         return self._scan_correlation_per_particle(rho, grad, kin)
 
 

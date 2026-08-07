@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 import torch
 from torch import nn
 
+from skala.features import Feature, FeatureMap
 from skala.pyscf.evaluation import FeatureSpec
 
 
@@ -29,7 +30,7 @@ class FeatureFunction(nn.Module, ABC):
     def forward(self, dm: torch.Tensor, ao: torch.Tensor) -> torch.Tensor: ...
 
     @abstractmethod
-    def to_dict(self, features: torch.Tensor) -> dict[str, torch.Tensor]: ...
+    def to_dict(self, features: torch.Tensor) -> FeatureMap: ...
 
 
 class MGGAFeatureFunction(FeatureFunction):
@@ -38,27 +39,29 @@ class MGGAFeatureFunction(FeatureFunction):
     def __init__(self, feature_spec: FeatureSpec):
         super().__init__()
 
-        if not feature_spec.requires_mgga:
-            raise ValueError("At least one feature must be selected.")
+        if not feature_spec.requires_ao_evaluation:
+            raise ValueError("At least one AO-derived feature must be selected.")
         self.feature_spec = feature_spec
         self.deriv = feature_spec.ao_derivative_order
         self.nfeats = feature_spec.mgga_feature_count
 
-    def to_dict(self, features: torch.Tensor) -> dict[str, torch.Tensor]:
+    def to_dict(self, features: torch.Tensor) -> FeatureMap:
         """Convert a packed feature tensor to its named feature tensors."""
         feature_index = 0
-        feature_dict: dict[str, torch.Tensor] = {}
+        feature_dict: FeatureMap = {}
         if self.feature_spec.with_density:
-            feature_dict["density"] = features[..., feature_index, :]
+            feature_dict[Feature.DENSITY] = features[..., feature_index, :]
             feature_index += 1
         if self.feature_spec.with_grad:
-            feature_dict["grad"] = features[..., feature_index : feature_index + 3, :]
+            feature_dict[Feature.GRAD] = features[
+                ..., feature_index : feature_index + 3, :
+            ]
             feature_index += 3
         if self.feature_spec.with_kin:
-            feature_dict["kin"] = features[..., feature_index, :]
+            feature_dict[Feature.KIN] = features[..., feature_index, :]
             feature_index += 1
         if self.feature_spec.with_lapl:
-            feature_dict["lapl"] = features[..., feature_index, :]
+            feature_dict[Feature.LAPL] = features[..., feature_index, :]
         return feature_dict
 
     def forward(self, dm: torch.Tensor, ao: torch.Tensor) -> torch.Tensor:
@@ -82,13 +85,13 @@ class MGGAFeatureFunction(FeatureFunction):
 
         feature_index = 0
         if self.feature_spec.with_density:
-            features[..., feature_index, :] = torch.sum(c0 * ao[0][None, :, :], dim=-2)
+            features[..., feature_index, :] = torch.sum(c0 * ao[0, None, :, :], dim=-2)
             feature_index += 1
 
         if self.feature_spec.with_grad:
             for component in range(3):
                 features[..., feature_index, :] = 2 * torch.sum(
-                    c0 * ao[component + 1][None, :, :], dim=-2
+                    c0 * ao[component + 1, None, :, :], dim=-2
                 )
                 feature_index += 1
 
@@ -96,7 +99,7 @@ class MGGAFeatureFunction(FeatureFunction):
             for component in range(3):
                 ci = dm_view @ ao[component + 1]
                 features[..., feature_index, :] += 0.5 * torch.sum(
-                    ci * ao[component + 1][None, :, :], dim=-2
+                    ci * ao[component + 1, None, :, :], dim=-2
                 )
 
             if self.feature_spec.with_kin:
@@ -111,7 +114,7 @@ class MGGAFeatureFunction(FeatureFunction):
             if self.feature_spec.with_lapl:
                 for component in (4, 7, 9):
                     features[..., feature_index, :] += 2 * torch.sum(
-                        c0 * ao[component][None, :, :], dim=-2
+                        c0 * ao[component, None, :, :], dim=-2
                     )
 
         if len(dm.shape) == 2:

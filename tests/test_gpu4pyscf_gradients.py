@@ -2,6 +2,7 @@ from collections.abc import Callable
 
 import pytest
 import torch
+from torch.utils.dlpack import from_dlpack
 
 pytestmark = pytest.mark.gpu
 
@@ -21,9 +22,10 @@ except ModuleNotFoundError:
 from _ridders import num_grad_ridders  # noqa: E402
 from gpu4pyscf import dft, scf  # noqa: E402
 from pyscf import gto  # noqa: E402
-from pyscf.dft import numint as pyscf_numint  # noqa: E402
 from test_pyscf_gradients import FULL_GRAD_REF  # noqa: E402
+from utils import patch_ao_screening  # noqa: E402
 
+from skala.features import Feature, FeatureMap  # noqa: E402
 from skala.functional.base import ExcFunctionalBase  # noqa: E402
 from skala.gpu4pyscf import SkalaKS  # noqa: E402
 from skala.gpu4pyscf.gradients import (  # noqa: E402
@@ -35,7 +37,6 @@ from skala.gpu4pyscf.gradients import (  # noqa: E402
 from skala.pyscf import SkalaKS as CpuSkalaKS  # noqa: E402
 from skala.pyscf.features import generate_features  # noqa: E402
 from skala.pyscf.gradients import SkalaRKSGradient as CpuSkalaRKSGradient  # noqa: E402
-from skala.pyscf.xc_integrator import _should_screen_aos  # noqa: E402
 from skala.utils import torch_allocator  # noqa: E402
 
 H2_SKALA_1_1_GRAD_REF = torch.tensor(
@@ -124,7 +125,7 @@ def get_grid_and_rdm1(mol: gto.Mole) -> tuple[dft.Grids, torch.Tensor]:
         grids=minimal_grid(mol),
     )
     mf.kernel()
-    rdm1 = torch.from_dlpack(mf.make_rdm1())  # type: ignore[attr-defined]
+    rdm1 = from_dlpack(mf.make_rdm1())
     return mf.grids, rdm1  # maybe_expand_and_divide(rdm1, len(rdm1.shape) == 2, 2)
 
 
@@ -132,11 +133,11 @@ def test_grid_coords_gradient(mol_name: str) -> None:
     class TestFunc(ExcFunctionalBase):
         def __init__(self) -> None:
             super().__init__()
-            self.features = ["grid_coords"]
+            self.features = [Feature.GRID_COORDS]
 
-        def get_exc(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
+        def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             """This actually calculates the total electron number"""
-            return mol["grid_coords"].sum()
+            return mol[Feature.GRID_COORDS].sum()
 
     mol = get_mol(mol_name)
     grid, rdm1 = get_grid_and_rdm1(mol)
@@ -159,11 +160,11 @@ def test_coarse_0_atomic_coords_gradient(mol_name: str) -> None:
     class TestFunc(ExcFunctionalBase):
         def __init__(self) -> None:
             super().__init__()
-            self.features = ["coarse_0_atomic_coords"]
+            self.features = [Feature.COARSE_0_ATOMIC_COORDS]
 
-        def get_exc(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
+        def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             """This actually calculates the total electron number"""
-            return torch.einsum("nx->", mol["coarse_0_atomic_coords"])
+            return torch.einsum("nx->", mol[Feature.COARSE_0_ATOMIC_COORDS])
 
     mol = get_mol(mol_name)
     grid, rdm1 = get_grid_and_rdm1(mol)
@@ -182,11 +183,11 @@ def test_grid_weights_gradient(mol_name: str) -> None:
     class TestFunc(ExcFunctionalBase):
         def __init__(self) -> None:
             super().__init__()
-            self.features = ["grid_weights"]
+            self.features = [Feature.GRID_WEIGHTS]
 
-        def get_exc(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
+        def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             """This actually calculates the total electron number"""
-            return mol["grid_weights"].sum()
+            return mol[Feature.GRID_WEIGHTS].sum()
 
     def finite_difference_nuc_grad(
         weight_sum: ExcFunctionalBase, mol: gto.Mole, rdm1: torch.Tensor
@@ -200,7 +201,7 @@ def test_grid_weights_gradient(mol_name: str) -> None:
         def weight_sum_as_nuc_coords_func(nuc_coords: torch.Tensor) -> torch.Tensor:
             """Exc wrapper for the finite difference"""
             mol.set_geom_(nuc_coords.cpu().numpy(), "bohr", symmetry=None)
-            mol_feats["grid_weights"] = torch.from_dlpack(minimal_grid(mol).weights)  # type: ignore[attr-defined]
+            mol_feats[Feature.GRID_WEIGHTS] = from_dlpack(minimal_grid(mol).weights)
 
             return weight_sum.get_exc(mol_feats)
 
@@ -215,7 +216,7 @@ def test_grid_weights_gradient(mol_name: str) -> None:
     num_grad, num_err = finite_difference_nuc_grad(exc_test, mol, rdm1)
     # estimate the minimum expected absolute error
     eps = (
-        exc_test.get_exc({"grid_weights": torch.from_dlpack(grid.weights)})  # type: ignore[attr-defined]
+        exc_test.get_exc({Feature.GRID_WEIGHTS: from_dlpack(grid.weights)})
         * torch.finfo(num_grad.dtype).eps
     )
 
@@ -234,11 +235,11 @@ def test_density_veff(mol_name: str) -> None:
     class TestFunc(ExcFunctionalBase):
         def __init__(self) -> None:
             super().__init__()
-            self.features = ["density", "grid_weights"]
+            self.features = [Feature.DENSITY, Feature.GRID_WEIGHTS]
 
-        def get_exc(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
+        def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             """This actually calculates the total electron number"""
-            return (mol["density"] @ mol["grid_weights"]).sum()
+            return (mol[Feature.DENSITY] @ mol[Feature.GRID_WEIGHTS]).sum()
 
     def finite_difference_nuc_grad(
         dens_sum: ExcFunctionalBase, mol: gto.Mole, rdm1: torch.Tensor
@@ -268,7 +269,7 @@ def test_density_veff(mol_name: str) -> None:
 
     # calculate analytic result
     veff = veff_and_expl_nuc_grad(
-        exc_test, mol, grid, rdm1, nuc_grad_feats={"density"}
+        exc_test, mol, grid, rdm1, nuc_grad_feats={Feature.DENSITY}
     )[0]
     ana_grad = 2 * nuc_grad_from_veff(mol, veff, rdm1)
 
@@ -289,15 +290,15 @@ def test_grad_veff(mol_name: str) -> None:
     class TestFunc(ExcFunctionalBase):
         def __init__(self) -> None:
             super().__init__()
-            self.features = ["grad", "grid_weights"]
+            self.features = [Feature.GRAD, Feature.GRID_WEIGHTS]
 
-        def get_exc(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
+        def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             return (
-                (mol["grad"] ** 2 @ mol["grid_weights"])
+                (mol[Feature.GRAD] ** 2 @ mol[Feature.GRID_WEIGHTS])
                 @ torch.tensor(
                     [1.0, 2.0, 3.0],
                     dtype=torch.float64,
-                    device=mol["grad"].device,
+                    device=mol[Feature.GRAD].device,
                 )
             ).sum()
 
@@ -329,7 +330,9 @@ def test_grad_veff(mol_name: str) -> None:
     num_grad, num_err = finite_difference_nuc_grad(exc_test, mol, rdm1)
 
     # calculate analytic result
-    veff = veff_and_expl_nuc_grad(exc_test, mol, grid, rdm1, nuc_grad_feats={"grad"})[0]
+    veff = veff_and_expl_nuc_grad(
+        exc_test, mol, grid, rdm1, nuc_grad_feats={Feature.GRAD}
+    )[0]
     ana_grad = 2 * nuc_grad_from_veff(mol, veff, rdm1)
 
     check_mat = (ana_grad - num_grad).abs() <= torch.max(
@@ -349,11 +352,11 @@ def test_kin_veff(mol_name: str) -> None:
     class TestFunc(ExcFunctionalBase):
         def __init__(self) -> None:
             super().__init__()
-            self.features = ["kin", "grid_weights"]
+            self.features = [Feature.KIN, Feature.GRID_WEIGHTS]
 
-        def get_exc(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
+        def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             """This actually calculates the total kinetic energy number"""
-            return (mol["kin"] @ mol["grid_weights"]).sum()
+            return (mol[Feature.KIN] @ mol[Feature.GRID_WEIGHTS]).sum()
 
     def finite_difference_nuc_grad(
         kin_func: ExcFunctionalBase, mol: gto.Mole, rdm1: torch.Tensor
@@ -383,7 +386,9 @@ def test_kin_veff(mol_name: str) -> None:
     num_grad, num_err = finite_difference_nuc_grad(exc_test, mol, rdm1)
 
     # calculate analytic result
-    veff = veff_and_expl_nuc_grad(exc_test, mol, grid, rdm1, nuc_grad_feats={"kin"})[0]
+    veff = veff_and_expl_nuc_grad(
+        exc_test, mol, grid, rdm1, nuc_grad_feats={Feature.KIN}
+    )[0]
     ana_grad = 2 * nuc_grad_from_veff(mol, veff, rdm1)
 
     check_mat = (ana_grad - num_grad).abs() <= torch.max(
@@ -462,7 +467,6 @@ def test_full_grad(
 
 
 def test_nuclear_gradient_cpu_gpu_dense_screened_agree(
-    monkeypatch: pytest.MonkeyPatch,
     load_functional_cached: Callable[..., ExcFunctionalBase | str],
 ) -> None:
     """Compare complete nuclear gradients across backend and SCF screening routes.
@@ -487,24 +491,19 @@ def test_nuclear_gradient_cpu_gpu_dense_screened_agree(
                 basis="sto-3g",
                 verbose=0,
             )
-            monkeypatch.setattr(
-                pyscf_numint,
-                "SWITCH_SIZE",
-                mol.nao_nr() - int(screened),
-            )
-            assert _should_screen_aos(mol) is screened
-            if backend == "cpu":
-                mean_field = CpuSkalaKS(mol, xc=functional, with_dftd3=False)
-                gradient_type = CpuSkalaRKSGradient
-            else:
-                mean_field = SkalaKS(mol, xc=functional, with_dftd3=False)
-                gradient_type = SkalaRKSGradient
-            mean_field.grids.level = 0
-            mean_field.grids.build(mol, sort_grids=False)
-            mean_field.conv_tol = 1e-10
-            mean_field.kernel()
-            assert mean_field.converged
-            gradient = gradient_type(mean_field).kernel()
+            with patch_ao_screening(screened):
+                if backend == "cpu":
+                    mean_field = CpuSkalaKS(mol, xc=functional, with_dftd3=False)
+                    gradient_type = CpuSkalaRKSGradient
+                else:
+                    mean_field = SkalaKS(mol, xc=functional, with_dftd3=False)
+                    gradient_type = SkalaRKSGradient
+                mean_field.grids.level = 0
+                mean_field.grids.build(mol, sort_grids=False)
+                mean_field.conv_tol = 1e-10
+                mean_field.kernel()
+                assert mean_field.converged
+                gradient = gradient_type(mean_field).kernel()
             route = f"{backend}-{'screened' if screened else 'dense'}"
             gradients[route] = torch.from_numpy(gradient)
 
@@ -537,15 +536,15 @@ def test_cuda_kernel_memory_stability() -> None:
     class TestFunc(ExcFunctionalBase):
         def __init__(self) -> None:
             super().__init__()
-            self.features = ["grad", "grid_weights"]
+            self.features = [Feature.GRAD, Feature.GRID_WEIGHTS]
 
-        def get_exc(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
+        def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             return (
-                (mol["grad"] ** 2 @ mol["grid_weights"])
+                (mol[Feature.GRAD] ** 2 @ mol[Feature.GRID_WEIGHTS])
                 @ torch.tensor(
                     [1.0, 2.0, 3.0],
                     dtype=torch.float64,
-                    device=mol["grad"].device,
+                    device=mol[Feature.GRAD].device,
                 )
             ).sum()
 
@@ -554,7 +553,7 @@ def test_cuda_kernel_memory_stability() -> None:
     # Warmup to avoid counting one-time allocations from CUDA runtime/libraries.
     for _ in range(2):
         veff = veff_and_expl_nuc_grad(
-            exc_test, mol, grid, rdm1, nuc_grad_feats={"grad"}
+            exc_test, mol, grid, rdm1, nuc_grad_feats={Feature.GRAD}
         )[0]
         _ = 2 * nuc_grad_from_veff(mol, veff, rdm1)
 
@@ -565,7 +564,7 @@ def test_cuda_kernel_memory_stability() -> None:
     torch.cuda.reset_peak_memory_stats()
     for _ in range(5):
         veff = veff_and_expl_nuc_grad(
-            exc_test, mol, grid, rdm1, nuc_grad_feats={"grad"}
+            exc_test, mol, grid, rdm1, nuc_grad_feats={Feature.GRAD}
         )[0]
         _ = 2 * nuc_grad_from_veff(mol, veff, rdm1)
         torch.cuda.synchronize()

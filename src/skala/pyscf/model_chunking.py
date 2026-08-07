@@ -8,26 +8,27 @@ atom-local shapes and coordinates.
 """
 
 import logging
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
+from typing import NamedTuple
 
 import torch
 from pyscf import gto
 from torch import Tensor
 
+from skala.features import Feature, FeatureMap
 from skala.pyscf import feature_math
 from skala.pyscf.backend import Grid
 from skala.pyscf.features import get_grid_features
 from skala.pyscf.memory_estimators import (
     estimate_global_raw_feature_buffer_memory,
-    estimate_max_model_grid_points,
+    estimate_max_gridpoint_chunk_size,
 )
 
 LOG = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
-class AtomGridChunk:
+class AtomGridChunk(NamedTuple):
     """Matching atom and grid slices for one model evaluation chunk."""
 
     atom_slice: slice
@@ -79,13 +80,12 @@ def _make_atom_grid_chunks(
     return chunks
 
 
-@dataclass(frozen=True)
-class ModelFeatureChunk:
+class ModelFeatureChunk(NamedTuple):
     """Chunk-local raw features and the corresponding model input dictionary."""
 
     grid_slice: slice
     raw_features: Tensor
-    model_features: dict[str, Tensor]
+    model_features: FeatureMap
 
 
 @dataclass(frozen=True)
@@ -93,10 +93,10 @@ class ModelFeatureChunker:
     """Reusable atom-aligned partition of raw and model features."""
 
     atom_major_raw_features: Tensor
-    grid_features: dict[str, Tensor]
+    grid_features: Mapping[Feature, Tensor]
     feature_function: feature_math.MGGAFeatureFunction
-    chunk_layouts: list[AtomGridChunk]
-    with_spin: bool
+    chunk_layouts: Sequence[AtomGridChunk]
+    is_spin_polarized: bool
 
     def __iter__(self) -> Iterator[ModelFeatureChunk]:
         """Yield detached raw features paired with atom-aligned model inputs."""
@@ -107,26 +107,29 @@ class ModelFeatureChunker:
                 .detach()
                 .requires_grad_()
             )
-            model_features: dict[str, Tensor] = {}
+            model_features: FeatureMap = {}
             for feature_name in (
-                "grid_coords",
-                "grid_weights",
-                "atomic_grid_weights",
+                Feature.GRID_COORDS,
+                Feature.GRID_WEIGHTS,
+                Feature.ATOMIC_GRID_WEIGHTS,
             ):
                 if feature_spec.requests(feature_name):
                     model_features[feature_name] = self.grid_features[feature_name][
                         layout.grid_slice
                     ]
 
-            for feature_name in ("coarse_0_atomic_coords", "atomic_grid_sizes"):
+            for feature_name in (
+                Feature.COARSE_0_ATOMIC_COORDS,
+                Feature.ATOMIC_GRID_SIZES,
+            ):
                 if feature_spec.requests(feature_name):
                     model_features[feature_name] = self.grid_features[feature_name][
                         layout.atom_slice
                     ]
 
-            if feature_spec.requests("atomic_grid_size_bound_shape"):
-                max_size = int(model_features["atomic_grid_sizes"].max().item())
-                model_features["atomic_grid_size_bound_shape"] = torch.zeros(
+            if feature_spec.requests(Feature.ATOMIC_GRID_SIZE_BOUND_SHAPE):
+                max_size = int(model_features[Feature.ATOMIC_GRID_SIZES].max().item())
+                model_features[Feature.ATOMIC_GRID_SIZE_BOUND_SHAPE] = torch.zeros(
                     max_size,
                     0,
                     dtype=torch.long,
@@ -137,7 +140,7 @@ class ModelFeatureChunker:
                 raw_features
             ).items():
                 model_features[feature_name] = feature_math.maybe_expand_and_divide(
-                    feature, not self.with_spin, 2
+                    feature, not self.is_spin_polarized, 2
                 )
             yield ModelFeatureChunk(
                 grid_slice=layout.grid_slice,
@@ -152,30 +155,32 @@ def prepare_model_feature_chunks(
     grids: Grid,
     atom_major_raw_features: Tensor,
     feature_function: feature_math.MGGAFeatureFunction,
-    func_deriv: int,
+    deriv_order: int,
     max_memory_in_mb: int | None = None,
     safety_fraction: float = 0.8,
 ) -> ModelFeatureChunker:
     """Prepare memory-sized, atom-aligned chunks for functional model evaluation."""
     feature_spec = feature_function.feature_spec
     if not feature_spec.supports_screened_evaluation:
-        raise ValueError("Atom-aligned model chunking requires 'atomic_grid_sizes'.")
+        raise ValueError(
+            f"Atom-aligned model chunking requires {Feature.ATOMIC_GRID_SIZES.value!r}."
+        )
 
     grid_features = get_grid_features(mol, dm, grids, feature_spec)
-    max_model_grid_points = estimate_max_model_grid_points(
+    max_model_grid_points = estimate_max_gridpoint_chunk_size(
         dm=dm,
         deriv=feature_function.deriv,
         max_memory_in_mb=max_memory_in_mb,
         safety_fraction=safety_fraction,
-        func_deriv=func_deriv,
+        func_deriv=deriv_order,
         reserved_memory_in_bytes=estimate_global_raw_feature_buffer_memory(
             dm,
             feature_function.nfeats,
             atom_major_raw_features.shape[-1],
-            func_deriv,
+            deriv_order,
         ),
     )
-    max_atom_grid = int(grid_features["atomic_grid_sizes"].max().item())
+    max_atom_grid = int(grid_features[Feature.ATOMIC_GRID_SIZES].max().item())
     if max_model_grid_points < max_atom_grid:
         LOG.warning(
             "Adjusted model chunk size %d to match the largest atomic grid %d. "
@@ -190,7 +195,7 @@ def prepare_model_feature_chunks(
         grid_features=grid_features,
         feature_function=feature_function,
         chunk_layouts=_make_atom_grid_chunks(
-            grid_features["atomic_grid_sizes"], max_model_grid_points
+            grid_features[Feature.ATOMIC_GRID_SIZES], max_model_grid_points
         ),
-        with_spin=dm.ndim == 3,
+        is_spin_polarized=dm.ndim == 3,
     )

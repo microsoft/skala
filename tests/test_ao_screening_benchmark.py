@@ -12,14 +12,13 @@ import numpy as np
 import pytest
 import torch
 from pyscf import dft, gto, lib
-from pyscf.dft import numint as pyscf_numint
 from pytest_benchmark.fixture import BenchmarkFixture
 from torch.utils.dlpack import from_dlpack
+from utils import patch_ao_screening
 
 from skala.functional import load_functional
 from skala.functional.base import ExcFunctionalBase
 from skala.pyscf.numint import SkalaNumInt
-from skala.pyscf.xc_integrator import _should_screen_aos
 
 THREAD_COUNT = 4
 MAX_MEMORY_MB = 2000
@@ -211,7 +210,7 @@ def device_benchmark_case(
     benchmark_spec: BenchmarkSpec,
     fixed_cpu_threads: None,
     load_functional_cached: Callable[..., ExcFunctionalBase | str],
-) -> BenchmarkCase:
+) -> Iterator[BenchmarkCase]:
     backend = cast(str, request.param)
     if backend == "cpu":
         functional = load_functional_cached("skala-1.1")
@@ -225,23 +224,20 @@ def device_benchmark_case(
         assert isinstance(functional, ExcFunctionalBase)
 
     case = _make_benchmark_case(benchmark_spec, functional, backend)
-    assert _should_screen_aos(case.mol)
-    return case
+    with patch_ao_screening(True):
+        yield case
 
 
 @pytest.fixture
-def screened_case(benchmark_case: BenchmarkCase) -> BenchmarkCase:
-    assert _should_screen_aos(benchmark_case.mol)
-    return benchmark_case
+def screened_case(benchmark_case: BenchmarkCase) -> Iterator[BenchmarkCase]:
+    with patch_ao_screening(True):
+        yield benchmark_case
 
 
 @pytest.fixture
-def dense_case(
-    benchmark_case: BenchmarkCase, monkeypatch: pytest.MonkeyPatch
-) -> BenchmarkCase:
-    monkeypatch.setattr(pyscf_numint, "SWITCH_SIZE", benchmark_case.mol.nao_nr())
-    assert not _should_screen_aos(benchmark_case.mol)
-    return benchmark_case
+def dense_case(benchmark_case: BenchmarkCase) -> Iterator[BenchmarkCase]:
+    with patch_ao_screening(False):
+        yield benchmark_case
 
 
 def _benchmark_device_xc(benchmark: BenchmarkFixture, case: BenchmarkCase) -> None:
@@ -258,15 +254,13 @@ def _run_gpu_xc(spec: BenchmarkSpec, screened: bool) -> int:
     functional = load_functional("skala-1.1", device=torch.device("cuda:0"))
     assert isinstance(functional, ExcFunctionalBase)
     case = _make_benchmark_case(spec, functional, "cuda")
-    assert _should_screen_aos(case.mol)
-    if not screened:
-        pyscf_numint.SWITCH_SIZE = 10**9
 
     torch.cuda.synchronize()
     torch.cuda.empty_cache()
     baseline_bytes = torch.cuda.memory_allocated()
     torch.cuda.reset_peak_memory_stats()
-    case.run()
+    with patch_ao_screening(screened):
+        case.run()
     torch.cuda.synchronize()
     return torch.cuda.max_memory_allocated() - baseline_bytes
 
@@ -287,13 +281,13 @@ def _memory_worker(
             functional = load_functional("skala-1.1")
             assert isinstance(functional, ExcFunctionalBase)
             case = _make_benchmark_case(spec, functional, "cpu")
-            if not screened:
-                pyscf_numint.SWITCH_SIZE = case.mol.nao_nr()
-            assert _should_screen_aos(case.mol) is screened
 
             with tempfile.TemporaryDirectory() as tmpdir:
                 profile_path = Path(tmpdir) / "allocations.bin"
-                with memray.Tracker(profile_path):
+                with (
+                    patch_ao_screening(screened),
+                    memray.Tracker(profile_path),
+                ):
                     case.run()
                 peak_bytes = memray.FileReader(profile_path).metadata.peak_memory
         elif backend == "cuda":
@@ -346,20 +340,19 @@ def test_screened_and_dense_values_agree(
     device_benchmark_case: BenchmarkCase,
     benchmark_spec: BenchmarkSpec,
     load_functional_cached: Callable[..., ExcFunctionalBase | str],
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     case = device_benchmark_case
-    assert _should_screen_aos(case.mol)
     screened = case.run()
 
-    monkeypatch.setattr(pyscf_numint, "SWITCH_SIZE", case.mol.nao_nr())
-    assert not _should_screen_aos(case.mol)
-    if case.backend == "cpu":
-        dense = case.run()
-    else:
-        cpu_functional = load_functional_cached("skala-1.1", device=torch.device("cpu"))
-        assert isinstance(cpu_functional, ExcFunctionalBase)
-        dense = _make_benchmark_case(benchmark_spec, cpu_functional, "cpu").run()
+    with patch_ao_screening(False):
+        if case.backend == "cpu":
+            dense = case.run()
+        else:
+            cpu_functional = load_functional_cached(
+                "skala-1.1", device=torch.device("cpu")
+            )
+            assert isinstance(cpu_functional, ExcFunctionalBase)
+            dense = _make_benchmark_case(benchmark_spec, cpu_functional, "cpu").run()
 
     scalar_rtol = 2e-10 if case.backend == "cpu" else 1e-8
     density_close = np.allclose(dense[0], screened[0], rtol=scalar_rtol, atol=1e-11)
@@ -397,14 +390,14 @@ def test_screened_and_dense_values_agree(
 
 
 @pytest.mark.benchmark(group="def2-qzvpp")
-def test_with_natural_ao_screening(
+def test_with_ao_screening(
     benchmark: BenchmarkFixture, screened_case: BenchmarkCase
 ) -> None:
     _benchmark_device_xc(benchmark, screened_case)
 
 
 @pytest.mark.benchmark(group="def2-qzvpp")
-def test_without_ao_screening_by_patching_threshold(
+def test_without_ao_screening_by_patching_decision(
     benchmark: BenchmarkFixture, dense_case: BenchmarkCase
 ) -> None:
     _benchmark_device_xc(benchmark, dense_case)
@@ -454,22 +447,15 @@ def test_screened_and_dense_peak_memory(
 
 
 @pytest.mark.profiling
-def test_profile_with_natural_ao_screening(
+def test_profile_with_ao_screening(
     device_benchmark_case: BenchmarkCase,
 ) -> None:
-    assert _should_screen_aos(device_benchmark_case.mol)
     device_benchmark_case.run()
 
 
 @pytest.mark.profiling
-def test_profile_without_ao_screening_by_patching_threshold(
+def test_profile_without_ao_screening_by_patching_decision(
     device_benchmark_case: BenchmarkCase,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        pyscf_numint,
-        "SWITCH_SIZE",
-        device_benchmark_case.mol.nao_nr(),
-    )
-    assert not _should_screen_aos(device_benchmark_case.mol)
-    device_benchmark_case.run()
+    with patch_ao_screening(False):
+        device_benchmark_case.run()
