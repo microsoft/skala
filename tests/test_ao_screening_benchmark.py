@@ -1,3 +1,10 @@
+"""Benchmark dense and screened AO integration across CPU and GPU backends.
+
+The module compares numerical agreement, runtime, and peak allocations on a small
+acene ladder. Profiling workloads run each route in an isolated process so allocator
+state and backend initialization do not contaminate the measurements.
+"""
+
 from __future__ import annotations
 
 import multiprocessing as mp

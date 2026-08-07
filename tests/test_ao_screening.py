@@ -1,4 +1,5 @@
 from collections.abc import Callable, Iterator
+from typing import Any
 
 import numpy as np
 import pytest
@@ -240,6 +241,13 @@ def test_decompose_grid_into_spatial_blocks_handles_identical_points() -> None:
 def test_prepare_spatially_sorted_cpu_grids(
     carbon: gto.Mole, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Keep block-local AO masks aligned with a reversible spatial grid ordering.
+
+    Screened AO evaluation reorders atom-major grid points into spatial blocks before
+    PySCF builds its screening mask. Coordinates, weights, and mask must share that
+    ordering, while the saved inverse permutation restores model features and leaves
+    the caller's original grid unchanged.
+    """
     coords = np.arange(18, dtype=np.float64).reshape(6, 3)
     weights = np.arange(6, dtype=np.float64) + 10
     grids = dft.Grids(carbon)
@@ -307,6 +315,7 @@ def test_prepare_spatially_sorted_cpu_grids(
 def test_grid_reuses_spatial_grid_layout_across_numints(
     carbon: gto.Mole, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Cache one spatial layout on each grid independently of the NumInt instance."""
     grids = dft.Grids(carbon)
     grids.coords = np.arange(18, dtype=np.float64).reshape(6, 3)
     grids.weights = np.arange(6, dtype=np.float64)
@@ -523,7 +532,13 @@ def test_first_and_second_order_use_same_screening_decision(
 
 
 def test_feature_block_helper_localizes_derivative_vectors() -> None:
-    """Use AO slices for linear JVPs and grid slices for feature VJPs."""
+    """Apply derivative vectors in the local coordinate space of one AO block.
+
+    A screened block contains only selected AO rows and a slice of the global grid.
+    The forward JVP must therefore use the active-AO density submatrix, while the
+    adjoint calculation must select only this block's grid cotangent. Comparing both
+    operations with direct local formulas catches mixing up AO and grid localization.
+    """
     feature_function = MGGAFeatureFunction(FeatureSpec([Feature.DENSITY]))
     block = _AOBlock(
         ao_values=torch.tensor([[1.0, 2.0], [3.0, 4.0]], dtype=torch.float64),
@@ -686,6 +701,7 @@ def test_cpu_screening_slices_and_scatters_full_derivatives(
 def test_cpu_all_active_block_uses_dense_sentinel(
     carbon: gto.Mole, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Represent an all-active block by ``None`` and a later sparse block by indices."""
     block_size = dft.gen_grid.BLKSIZE
     ngrids = 2 * block_size
     grids = dft.Grids(carbon)
@@ -729,6 +745,7 @@ def test_cpu_all_active_block_uses_dense_sentinel(
 def test_cpu_no_active_aos_returns_full_zero_derivatives(
     carbon: gto.Mole, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Use an empty screen mask and verify full-size zero features, VXC, and HVP."""
     ngrids = dft.gen_grid.BLKSIZE
     grids = dft.Grids(carbon)
     grids.coords = np.zeros((ngrids, 3))
@@ -784,17 +801,45 @@ def test_numint_reset_does_not_clear_grid_spatial_layout(carbon: gto.Mole) -> No
     assert vars(grids)["_skala_spatial_grid_layout"] is spatial_grid_layout
 
 
-@pytest.mark.parametrize("unrestricted", [False, True])
+@pytest.mark.parametrize(
+    ("atom", "spin", "mean_field_factory", "integration_method"),
+    [
+        pytest.param(
+            "H 0 0 0; H 0 0 0.74",
+            0,
+            dft.RKS,
+            SkalaNumInt.nr_rks,
+            id="rks",
+        ),
+        pytest.param(
+            "H 0 0 0",
+            1,
+            dft.UKS,
+            SkalaNumInt.nr_uks,
+            id="uks",
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    ("result_index", "rtol", "atol"),
+    [
+        pytest.param(0, 1e-10, 1e-11, id="electron-count"),
+        pytest.param(1, 1e-9, 1e-10, id="energy"),
+        pytest.param(2, 1e-8, 1e-10, id="potential"),
+    ],
+)
 def test_cpu_rks_uks_dense_screened_equivalence(
     load_functional_cached: Callable[..., ExcFunctionalBase | str],
-    unrestricted: bool,
+    atom: str,
+    spin: int,
+    mean_field_factory: Callable[[gto.Mole], Any],
+    integration_method: Callable[..., tuple[float | np.ndarray, float, np.ndarray]],
+    result_index: int,
+    rtol: float,
+    atol: float,
 ) -> None:
-    if unrestricted:
-        mol = gto.M(atom="H 0 0 0", basis="sto-3g", spin=1, verbose=0)
-        mean_field = dft.UKS(mol)
-    else:
-        mol = gto.M(atom="H 0 0 0; H 0 0 0.74", basis="sto-3g", spin=0, verbose=0)
-        mean_field = dft.RKS(mol)
+    mol = gto.M(atom=atom, basis="sto-3g", spin=spin, verbose=0)
+    mean_field = mean_field_factory(mol)
 
     functional = load_functional_cached("skala-1.1")
     assert isinstance(functional, ExcFunctionalBase)
@@ -803,22 +848,14 @@ def test_cpu_rks_uks_dense_screened_equivalence(
     dm = mean_field.get_init_guess()
 
     with patch_ao_screening(False):
-        dense = (
-            numint.nr_uks(mol, grids, None, dm)
-            if unrestricted
-            else numint.nr_rks(mol, grids, None, dm)
-        )
+        dense = integration_method(numint, mol, grids, None, dm)
 
     with patch_ao_screening(True):
-        screened = (
-            numint.nr_uks(mol, grids, None, dm)
-            if unrestricted
-            else numint.nr_rks(mol, grids, None, dm)
-        )
+        screened = integration_method(numint, mol, grids, None, dm)
 
-    assert np.allclose(dense[0], screened[0], rtol=1e-10, atol=1e-11)
-    assert np.isclose(dense[1], screened[1], rtol=1e-9, atol=1e-10)
-    assert np.allclose(dense[2], screened[2], rtol=1e-8, atol=1e-10)
+    assert np.allclose(
+        dense[result_index], screened[result_index], rtol=rtol, atol=atol
+    )
 
 
 def test_cpu_response_dense_screened_equivalence() -> None:

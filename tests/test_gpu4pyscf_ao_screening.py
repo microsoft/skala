@@ -46,10 +46,6 @@ C 4.2 0.0 0.0
 """
 
 
-def _to_numpy(value: object) -> np.ndarray:
-    return cupy.asnumpy(value) if isinstance(value, cupy.ndarray) else np.asarray(value)
-
-
 def test_prepare_spatially_sorted_gpu_grids() -> None:
     mol = gto.M(atom="H 0 0 0", basis="sto-3g", spin=1, verbose=0)
     coords = cupy.asarray(
@@ -88,15 +84,20 @@ def test_prepare_spatially_sorted_gpu_grids() -> None:
     assert layout.inverse_permutation.device.type == "cuda"
 
 
-@pytest.mark.parametrize("unrestricted", [False, True])
+@pytest.mark.parametrize(
+    ("atom", "spin", "integration_method_name"),
+    [
+        pytest.param("H 0 0 0; H 0 0 0.74", 0, "nr_rks", id="rks"),
+        pytest.param("H 0 0 0", 1, "nr_uks", id="uks"),
+    ],
+)
 def test_gpu_rks_uks_dense_screened_equivalence(
     load_functional_cached: Callable[..., ExcFunctionalBase | str],
-    unrestricted: bool,
+    atom: str,
+    spin: int,
+    integration_method_name: str,
 ) -> None:
-    if unrestricted:
-        mol = gto.M(atom="H 0 0 0", basis="sto-3g", spin=1, verbose=0)
-    else:
-        mol = gto.M(atom="H 0 0 0; H 0 0 0.74", basis="sto-3g", spin=0, verbose=0)
+    mol = gto.M(atom=atom, basis="sto-3g", spin=spin, verbose=0)
 
     functional = load_functional_cached("skala-1.1", device=torch.device("cuda:0"))
     assert isinstance(functional, ExcFunctionalBase)
@@ -105,40 +106,42 @@ def test_gpu_rks_uks_dense_screened_equivalence(
     ks.grids.alignment = 1
     ks.grids.build(sort_grids=False)
     dm = ks.get_init_guess()
+    integrate = getattr(ks._numint, integration_method_name)
 
     with patch_ao_screening(False):
-        dense = (
-            ks._numint.nr_uks(mol, ks.grids, None, dm)
-            if unrestricted
-            else ks._numint.nr_rks(mol, ks.grids, None, dm)
-        )
+        dense = integrate(mol, ks.grids, None, dm)
 
     with patch_ao_screening(True):
-        screened = (
-            ks._numint.nr_uks(mol, ks.grids, None, dm)
-            if unrestricted
-            else ks._numint.nr_rks(mol, ks.grids, None, dm)
-        )
+        screened = integrate(mol, ks.grids, None, dm)
 
-    assert np.allclose(_to_numpy(dense[0]), _to_numpy(screened[0]), rtol=1e-9)
+    cupy.testing.assert_allclose(dense[0], screened[0], rtol=1e-9)
     assert np.isclose(dense[1], screened[1], rtol=1e-9)
-    assert np.allclose(
-        _to_numpy(dense[2]), _to_numpy(screened[2]), rtol=1e-8, atol=2e-9
-    )
+    cupy.testing.assert_allclose(dense[2], screened[2], rtol=1e-8, atol=2e-9)
 
 
-def test_gpu_response_dense_screened_equivalence() -> None:
-    mol = gto.M(atom="H 0 0 0; H 0 0 0.74", basis="sto-3g", spin=0, verbose=0)
+@pytest.mark.parametrize(
+    ("atom", "spin", "spin_shape"),
+    [
+        pytest.param("H 0 0 0; H 0 0 0.74", 0, (), id="rks"),
+        pytest.param("H 0 0 0", 1, (2,), id="uks"),
+    ],
+)
+def test_gpu_response_dense_screened_equivalence(
+    atom: str, spin: int, spin_shape: tuple[int, ...]
+) -> None:
+    mol = gto.M(atom=atom, basis="sto-3g", spin=spin, verbose=0)
     ks = SkalaKS(mol, xc=QuadraticFunctional(), with_dftd3=False)
     ks.grids.level = 0
     ks.grids.alignment = 1
     ks.grids.build(sort_grids=False)
-    mo_coeff = cupy.eye(mol.nao_nr())
-    mo_occ = cupy.ones(mol.nao_nr())
+    matrix_shape = spin_shape + (mol.nao_nr(), mol.nao_nr())
+    mo_coeff = cupy.broadcast_to(cupy.eye(mol.nao_nr()), matrix_shape).copy()
+    mo_occ = cupy.ones(spin_shape + (mol.nao_nr(),))
     dm1 = cupy.arange(mol.nao_nr() ** 2, dtype=cupy.float64).reshape(
         mol.nao_nr(), mol.nao_nr()
     )
     dm1 += dm1.T
+    dm1 = cupy.broadcast_to(dm1, matrix_shape).copy()
 
     with patch_ao_screening(False):
         dense_response = ks._numint.gen_response(mo_coeff, mo_occ, ks=ks)
@@ -146,33 +149,9 @@ def test_gpu_response_dense_screened_equivalence() -> None:
     with patch_ao_screening(True):
         screened_response = ks._numint.gen_response(mo_coeff, mo_occ, ks=ks)
 
-    assert np.allclose(
-        _to_numpy(dense_response(dm1)),
-        _to_numpy(screened_response(dm1)),
-        rtol=1e-9,
-        atol=1e-10,
-    )
-
-
-def test_gpu_uks_response_dense_screened_equivalence() -> None:
-    mol = gto.M(atom="H 0 0 0", basis="sto-3g", spin=1, verbose=0)
-    ks = SkalaKS(mol, xc=QuadraticFunctional(), with_dftd3=False)
-    ks.grids.level = 0
-    ks.grids.alignment = 1
-    ks.grids.build(sort_grids=False)
-    mo_coeff = cupy.stack((cupy.eye(mol.nao_nr()), cupy.eye(mol.nao_nr())))
-    mo_occ = cupy.ones((2, mol.nao_nr()))
-    dm1 = cupy.ones((2, mol.nao_nr(), mol.nao_nr()))
-
-    with patch_ao_screening(False):
-        dense_response = ks._numint.gen_response(mo_coeff, mo_occ, ks=ks)
-
-    with patch_ao_screening(True):
-        screened_response = ks._numint.gen_response(mo_coeff, mo_occ, ks=ks)
-
-    np.testing.assert_allclose(
-        _to_numpy(screened_response(dm1)),
-        _to_numpy(dense_response(dm1)),
+    cupy.testing.assert_allclose(
+        screened_response(dm1),
+        dense_response(dm1),
         rtol=1e-9,
         atol=1e-10,
     )
@@ -214,9 +193,9 @@ def test_gpu_multiblock_mgga_response_dense_screened_equivalence() -> None:
     with patch_ao_screening(True):
         screened_response = ks._numint.gen_response(mo_coeff, mo_occ, ks=ks)
 
-    np.testing.assert_allclose(
-        _to_numpy(screened_response(dm1)),
-        _to_numpy(dense_response(dm1)),
+    cupy.testing.assert_allclose(
+        screened_response(dm1),
+        dense_response(dm1),
         rtol=1e-9,
         atol=1e-9,
     )

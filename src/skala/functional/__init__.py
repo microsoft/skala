@@ -80,12 +80,13 @@ def load_functional(
         name string for PySCF-native functionals.
 
     Example:
+        >>> from skala.features import Feature
         >>> func = load_functional("skala-1.1")
-        >>> func.features
-        ['density', 'kin', 'grad', 'grid_coords', 'grid_weights', ...
+        >>> func.features[:3] == [Feature.DENSITY, Feature.KIN, Feature.GRAD]
+        True
         >>> func = load_functional("lda")
-        >>> func.features
-        ['density', 'grid_weights']
+        >>> func.features == [Feature.DENSITY, Feature.GRID_WEIGHTS]
+        True
         >>> load_functional("b3lyp")
         'b3lyp'
     """
