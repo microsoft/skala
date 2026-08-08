@@ -2,7 +2,7 @@
 
 """Blockwise atomic-orbital feature evaluation and custom autograd."""
 
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from typing import NamedTuple, Protocol, TypeAlias, cast
 
 import numpy as np
@@ -32,7 +32,7 @@ class _ChunkEvalForwardContext(Protocol):
     dm: Tensor
     mol: gto.Mole
     grids: Grid
-    feature_function: feature_math.FeatureFunction
+    feature_function: feature_math.LinearFeature
     blksize: int | None
     compile_feature_function: bool
     gpu: bool
@@ -43,7 +43,7 @@ class _ChunkEvalBackwardContext(Protocol):
     dm: Tensor
     mol: gto.Mole
     grids: Grid
-    feature_function: feature_math.FeatureFunction
+    feature_function: feature_math.LinearFeature
     blksize: int | None
     compile_feature_function: bool
     gpu: bool
@@ -94,29 +94,26 @@ class _AOBlock(NamedTuple):
 
 
 def _evaluate_feature_block(
-    feature_function: feature_math.FeatureFunction,
+    feature_function: feature_math.LinearFeature,
     block: _AOBlock,
-    active_dm_submatrix: Tensor,
+    active_dm_submatrix: Tensor | None,
     compile_feature_function: bool,
     feature_cotangent: Tensor | None = None,
 ) -> Tensor:
     """Evaluate one active-AO feature block or its feature-space VJP."""
-
-    def evaluate_features(dm: Tensor) -> Tensor:
-        return feature_function(dm, block.ao_values)
-
-    evaluation_function: Callable[[Tensor], Tensor] = evaluate_features
     if feature_cotangent is not None:
         local_cotangent = feature_cotangent[..., block.grid_slice]
+        if compile_feature_function:
+            return torch.compile(feature_function.vjp)(block.ao_values, local_cotangent)
+        return feature_function.vjp(block.ao_values, local_cotangent)
 
-        def evaluate_vjp(dm: Tensor) -> Tensor:
-            return torch.func.vjp(evaluate_features, dm)[1](local_cotangent)[0]
-
-        evaluation_function = evaluate_vjp
-
+    if active_dm_submatrix is None:
+        raise ValueError("Feature evaluation requires a density matrix.")
     if compile_feature_function:
-        return torch.compile(evaluation_function)(active_dm_submatrix)
-    return evaluation_function(active_dm_submatrix)
+        return torch.compile(feature_function.forward)(
+            active_dm_submatrix, block.ao_values
+        )
+    return feature_function(active_dm_submatrix, block.ao_values)
 
 
 class _CPUAOBlockLoop:
@@ -148,7 +145,7 @@ class _CPUAOBlockLoop:
         dm: Tensor,
         mol: gto.Mole,
         grids: Grid,
-        feature_function: feature_math.FeatureFunction,
+        feature_function: feature_math.LinearFeature,
         blksize: int | None,
     ) -> None:
         self.dm = dm
@@ -236,7 +233,7 @@ class _GPUAOBlockLoop:
         dm: Tensor,
         mol: gto.Mole,
         grids: Grid,
-        feature_function: feature_math.FeatureFunction,
+        feature_function: feature_math.LinearFeature,
         blksize: int | None,
     ) -> None:
         check_gpu_imports_were_successful()
@@ -287,7 +284,7 @@ def _make_ao_block_loop(
     dm: Tensor,
     mol: gto.Mole,
     grids: Grid,
-    feature_function: feature_math.FeatureFunction,
+    feature_function: feature_math.LinearFeature,
     blksize: int | None,
     gpu: bool,
 ) -> _CPUAOBlockLoop | _GPUAOBlockLoop:
@@ -303,7 +300,7 @@ class ChunkEvalForward(Function):
             Tensor,
             gto.Mole,
             Grid,
-            feature_math.FeatureFunction,
+            feature_math.LinearFeature,
             int | None,
             bool,
             bool,
@@ -333,7 +330,7 @@ class ChunkEvalForward(Function):
         dm: torch.Tensor,
         mol: gto.Mole,
         grids: Grid,
-        feature_function: feature_math.FeatureFunction,
+        feature_function: feature_math.LinearFeature,
         blksize: int | None,
         compile_feature_function: bool,
         gpu: bool,
@@ -448,7 +445,7 @@ class ChunkEvalBackward(Function):
             torch.Tensor,
             gto.Mole,
             Grid,
-            feature_math.FeatureFunction,
+            feature_math.LinearFeature,
             int | None,
             bool,
             bool,
@@ -474,22 +471,20 @@ class ChunkEvalBackward(Function):
         dm: torch.Tensor,
         mol: gto.Mole,
         grids: Grid,
-        feature_function: feature_math.FeatureFunction,
+        feature_function: feature_math.LinearFeature,
         blksize: int | None,
         compile_feature_function: bool,
         gpu: bool,
         feature_cotangent: torch.Tensor,
     ) -> torch.Tensor:
         block_loop = _make_ao_block_loop(dm, mol, grids, feature_function, blksize, gpu)
-        dm_ordered = block_loop.order_aos(dm)
 
         out = torch.zeros_like(dm)
         for block in block_loop:
-            active_dm_submatrix = block.select_active_ao_submatrix(dm_ordered)
             block_result = _evaluate_feature_block(
                 feature_function,
                 block,
-                active_dm_submatrix,
+                None,
                 compile_feature_function,
                 feature_cotangent,
             )
@@ -539,7 +534,7 @@ def evaluate_full_grid(
     dm: torch.Tensor,
     mol: gto.Mole,
     coords: Array,
-    feature_function: feature_math.FeatureFunction,
+    feature_function: feature_math.LinearFeature,
     compile_feature_function: bool = False,
     gpu: bool = False,
 ) -> torch.Tensor:
@@ -562,7 +557,7 @@ def evaluate_full_grid(
 
 def _resolve_ao_block_size(
     mol: gto.Mole,
-    feature_function: feature_math.FeatureFunction,
+    feature_function: feature_math.LinearFeature,
     block_size: int | None,
     max_memory: int,
     gpu: bool,
@@ -592,7 +587,7 @@ def auto_chunk(
     dm: torch.Tensor,
     mol: gto.Mole,
     grids: Grid,
-    feature_function: feature_math.FeatureFunction,
+    feature_function: feature_math.LinearFeature,
     block_size: int | None = None,
     max_memory: int = 2000,
     gpu: bool = False,

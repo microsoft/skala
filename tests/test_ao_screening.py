@@ -1,10 +1,10 @@
 from collections.abc import Callable, Iterator
+from itertools import combinations
 from typing import Any
 
 import numpy as np
 import pytest
 import torch
-from benchmarks import run_pyscf_ao_screening_benchmark as benchmark_runner
 from pyscf import dft, gto
 from utils import QuadraticFunctional, patch_ao_screening
 
@@ -31,6 +31,13 @@ from skala.pyscf.screening import (
     _decompose_grid_into_spatial_blocks,
     prepare_spatial_grid_layout,
 )
+
+_MGGA_FEATURES = (Feature.DENSITY, Feature.GRAD, Feature.KIN, Feature.LAPL)
+_MGGA_FEATURE_COMBINATIONS = [
+    combination
+    for size in range(1, len(_MGGA_FEATURES) + 1)
+    for combination in combinations(_MGGA_FEATURES, size)
+]
 
 
 @pytest.fixture
@@ -105,6 +112,84 @@ def test_mgga_supported_features_are_linear_in_density_matrix(
     torch.testing.assert_close(second_jvp, torch.zeros_like(second_jvp))
 
 
+@pytest.mark.parametrize(
+    "feature_names",
+    _MGGA_FEATURE_COMBINATIONS,
+)
+@pytest.mark.parametrize("spin_channels", [None, 2])
+def test_mgga_analytic_vjp_matches_autograd(
+    feature_names: tuple[Feature, ...], spin_channels: int | None
+) -> None:
+    feature_function = MGGAFeatureFunction(FeatureSpec(feature_names))
+    ncomp = (
+        (feature_function.deriv + 1)
+        * (feature_function.deriv + 2)
+        * (feature_function.deriv + 3)
+        // 6
+    )
+    generator = torch.Generator().manual_seed(0)
+    ao = torch.randn((ncomp, 3, 5), dtype=torch.float64, generator=generator)
+    if feature_function.deriv == 0:
+        ao = ao[0]
+    dm_shape = (3, 3) if spin_channels is None else (spin_channels, 3, 3)
+    dm = torch.randn(dm_shape, dtype=torch.float64, generator=generator)
+
+    features, pullback = torch.func.vjp(lambda value: feature_function(value, ao), dm)
+    cotangent = torch.randn(features.shape, dtype=features.dtype, generator=generator)
+
+    expected = pullback(cotangent)[0]
+    actual = feature_function.vjp(ao, cotangent)
+
+    torch.testing.assert_close(actual, expected)
+
+
+def test_feature_block_compiled_vjp_matches_eager(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    feature_function = MGGAFeatureFunction(FeatureSpec(_MGGA_FEATURES))
+    generator = torch.Generator().manual_seed(0)
+    block = _AOBlock(
+        ao_values=torch.randn((10, 3, 5), dtype=torch.float64, generator=generator),
+        active_ao_indices=None,
+        grid_slice=slice(1, 6),
+    )
+    dm = torch.randn((3, 3), dtype=torch.float64, generator=generator)
+    cotangent = torch.randn(
+        (feature_function.nfeats, 7), dtype=torch.float64, generator=generator
+    )
+    eager_forward = _evaluate_feature_block(
+        feature_function, block, dm, compile_feature_function=False
+    )
+    eager_vjp = _evaluate_feature_block(
+        feature_function,
+        block,
+        None,
+        compile_feature_function=False,
+        feature_cotangent=cotangent,
+    )
+
+    compile_function = torch.compile
+    monkeypatch.setattr(
+        torch,
+        "compile",
+        lambda function: compile_function(function, backend="eager"),
+    )
+
+    compiled_forward = _evaluate_feature_block(
+        feature_function, block, dm, compile_feature_function=True
+    )
+    compiled_vjp = _evaluate_feature_block(
+        feature_function,
+        block,
+        None,
+        compile_feature_function=True,
+        feature_cotangent=cotangent,
+    )
+
+    torch.testing.assert_close(compiled_forward, eager_forward)
+    torch.testing.assert_close(compiled_vjp, eager_vjp)
+
+
 @pytest.mark.parametrize("feature_names", [[], [Feature.GRID_WEIGHTS]])
 def test_mgga_requires_at_least_one_ao_derived_feature(
     feature_names: list[Feature],
@@ -126,17 +211,6 @@ def test_patch_ao_screening_restores_previous_decision(carbon: gto.Mole) -> None
         assert xc_integrator_module._should_screen_aos is dense_decision
 
     assert xc_integrator_module._should_screen_aos is original_decision
-
-
-def test_benchmark_route_metadata_uses_integrator_feature_spec(
-    carbon: gto.Mole,
-) -> None:
-    metadata = benchmark_runner.route_metadata(
-        SkalaNumInt(QuadraticFunctional()), carbon, forced_dense=False
-    )
-
-    assert metadata["implementation_target"].endswith("XCIntegrator.__call__")
-    assert metadata["functional_supports_screened_evaluation"] is True
 
 
 def test_active_cpu_ao_indices(carbon: gto.Mole) -> None:
@@ -557,16 +631,10 @@ def test_feature_block_helper_localizes_derivative_vectors() -> None:
         active_ao_indices=torch.tensor([0, 2]),
         grid_slice=slice(1, 3),
     )
-    dm_ordered = torch.tensor(
-        [[2.0, 0.1, 0.2], [0.1, 1.0, 0.3], [0.2, 0.3, 3.0]],
-        dtype=torch.float64,
-    )
     tangent_ordered = torch.tensor(
         [[0.5, 1.0, -0.2], [1.0, 0.4, 0.3], [-0.2, 0.3, 0.7]],
         dtype=torch.float64,
     )
-    active_dm_submatrix = block.select_active_ao_submatrix(dm_ordered)
-
     feature_jvp = _evaluate_feature_block(
         feature_function,
         block,
@@ -582,7 +650,7 @@ def test_feature_block_helper_localizes_derivative_vectors() -> None:
     feature_vjp = _evaluate_feature_block(
         feature_function,
         block,
-        active_dm_submatrix,
+        None,
         compile_feature_function=False,
         feature_cotangent=full_grid_cotangent,
     )

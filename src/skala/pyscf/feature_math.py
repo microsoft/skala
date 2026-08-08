@@ -20,8 +20,8 @@ def maybe_expand_and_divide(
     return feature
 
 
-class FeatureFunction(nn.Module, ABC):
-    """Base class for raw features evaluated from density and AO tensors."""
+class LinearFeature(nn.Module, ABC):
+    """Linear raw-feature map from a density matrix and fixed AO values."""
 
     deriv: int
     nfeats: int
@@ -30,10 +30,14 @@ class FeatureFunction(nn.Module, ABC):
     def forward(self, dm: torch.Tensor, ao: torch.Tensor) -> torch.Tensor: ...
 
     @abstractmethod
+    def vjp(self, ao: torch.Tensor, cotangent: torch.Tensor) -> torch.Tensor:
+        """Apply the adjoint feature map to a feature-space cotangent."""
+
+    @abstractmethod
     def to_dict(self, features: torch.Tensor) -> FeatureMap: ...
 
 
-class MGGAFeatureFunction(FeatureFunction):
+class MGGAFeatureFunction(LinearFeature):
     """Evaluate the requested linear meta-GGA density features."""
 
     def __init__(self, feature_spec: FeatureSpec):
@@ -120,3 +124,49 @@ class MGGAFeatureFunction(FeatureFunction):
         if len(dm.shape) == 2:
             return features.reshape((self.nfeats, -1))
         return features.reshape((*dm.shape[:-2], self.nfeats, -1))
+
+    def vjp(self, ao: torch.Tensor, cotangent: torch.Tensor) -> torch.Tensor:
+        """Apply the analytic adjoint of the linear MGGA feature map."""
+        batch_shape = cotangent.shape[:-2]
+        ngrids = cotangent.shape[-1]
+        weights = cotangent.reshape(-1, self.nfeats, ngrids)
+        phi = ao if self.deriv == 0 else ao[0]
+        nao = phi.shape[-2]
+
+        if self.deriv == 0:
+            result = (weights[:, 0, None, :] * phi) @ phi.transpose(-1, -2)
+            return result.reshape(*batch_shape, nao, nao)
+
+        left = weights.new_zeros((weights.shape[0], nao, ngrids))
+        feature_index = 0
+        if self.feature_spec.with_density:
+            left += weights[:, feature_index, None, :] * phi
+            feature_index += 1
+
+        if self.feature_spec.with_grad:
+            left += 2 * torch.einsum(
+                "bcg,cig->big",
+                weights[:, feature_index : feature_index + 3],
+                ao[1:4],
+            )
+            feature_index += 3
+
+        derivative_weight = weights.new_zeros((weights.shape[0], ngrids))
+        if self.feature_spec.with_kin:
+            derivative_weight += 0.5 * weights[:, feature_index]
+            feature_index += 1
+
+        if self.feature_spec.with_lapl:
+            laplacian_weight = weights[:, feature_index]
+            derivative_weight += 2 * laplacian_weight
+            for component in (4, 7, 9):
+                left.addcmul_(laplacian_weight[:, None, :], ao[component], value=2)
+
+        result = left @ phi.transpose(-1, -2)
+        if self.feature_spec.with_kin or self.feature_spec.with_lapl:
+            for component in range(1, 4):
+                weighted_derivative = derivative_weight[:, None, :] * ao[component]
+                result += weighted_derivative @ ao[component].transpose(-1, -2)
+
+        result = 0.5 * (result + result.transpose(-1, -2))
+        return result.reshape(*batch_shape, nao, nao)
