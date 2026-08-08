@@ -144,11 +144,12 @@ class MGGAFeatureFunction(LinearFeature):
             feature_index += 1
 
         if self.feature_spec.with_grad:
-            left += 2 * torch.einsum(
-                "bcg,cig->big",
-                weights[:, feature_index : feature_index + 3],
-                ao[1:4],
-            )
+            for component in range(3):
+                left.addcmul_(
+                    weights[:, feature_index + component, None, :],
+                    ao[component + 1],
+                    value=2,
+                )
             feature_index += 3
 
         derivative_weight = weights.new_zeros((weights.shape[0], ngrids))
