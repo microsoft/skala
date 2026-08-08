@@ -3,8 +3,9 @@ import torch
 
 from skala.pyscf.memory_estimators import (
     estimate_global_raw_feature_buffer_memory,
-    estimate_max_gridpoint_chunk_size,
-    linear_peak_memory_model,
+    estimate_global_screened_buffer_memory,
+    estimate_max_model_atoms_per_chunk,
+    estimate_model_memory_per_grid_point,
 )
 
 
@@ -34,27 +35,50 @@ def test_global_raw_feature_buffer_memory_rejects_unsupported_order() -> None:
         )
 
 
-def test_reserved_memory_reduces_grid_chunk_size() -> None:
+def test_global_screened_buffer_memory_uses_atomic_grid_sizes() -> None:
     dm = torch.eye(10, dtype=torch.float64)
-    bytes_per_point, _ = linear_peak_memory_model(nao=10, deriv=1, func_deriv=1)
-    base_chunk_size = estimate_max_gridpoint_chunk_size(
-        dm,
-        deriv=1,
-        max_memory_in_mb=100,
-        safety_fraction=1.0,
-        func_deriv=1,
-    )
-    reserved_points = 123
-    reserved_chunk_size = estimate_max_gridpoint_chunk_size(
-        dm,
-        deriv=1,
-        max_memory_in_mb=100,
-        safety_fraction=1.0,
-        func_deriv=1,
-        reserved_memory_in_bytes=int(bytes_per_point * reserved_points),
+    atomic_grid_sizes = torch.tensor([10, 10, 20])
+
+    actual = estimate_global_screened_buffer_memory(
+        dm, nfeatures=5, atomic_grid_sizes=atomic_grid_sizes, func_deriv=1
     )
 
-    assert base_chunk_size - reserved_chunk_size == reserved_points
+    raw_feature_bytes = 4 * 5 * 40 * 8
+    dense_buffer_bytes = int(37.0 * 10**2)
+    assert actual == raw_feature_bytes + dense_buffer_bytes
+
+
+def test_model_atom_limits_are_estimated_per_atomic_grid_size() -> None:
+    dm = torch.eye(10, dtype=torch.float64)
+    atomic_grid_sizes = torch.tensor([10, 10, 20])
+
+    actual = estimate_max_model_atoms_per_chunk(
+        dm,
+        atomic_grid_sizes=atomic_grid_sizes,
+        nfeatures=5,
+        max_memory_in_mb=10,
+        safety_fraction=1.0,
+        func_deriv=1,
+    )
+
+    available_memory = 10_000_000 - estimate_global_screened_buffer_memory(
+        dm, 5, atomic_grid_sizes, 1
+    )
+    bytes_per_point = estimate_model_memory_per_grid_point(1)
+    assert actual == {
+        10: available_memory // (10 * bytes_per_point),
+        20: available_memory // (20 * bytes_per_point),
+    }
+
+
+@pytest.mark.parametrize(
+    ("func_deriv", "elements_per_point"),
+    [(0, 5830), (1, 6680), (2, 24230)],
+)
+def test_model_memory_per_grid_point_depends_on_functional_derivative(
+    func_deriv: int, elements_per_point: int
+) -> None:
+    assert estimate_model_memory_per_grid_point(func_deriv) == 8 * elements_per_point
 
 
 @pytest.mark.parametrize("safety_fraction", [-0.1, 0.0, 1.1])
@@ -64,9 +88,10 @@ def test_model_grid_point_limit_rejects_invalid_safety_fraction(
     with pytest.raises(
         ValueError, match="safety_fraction must be greater than 0 and at most 1"
     ):
-        estimate_max_gridpoint_chunk_size(
+        estimate_max_model_atoms_per_chunk(
             torch.eye(2, dtype=torch.float64),
-            deriv=1,
+            atomic_grid_sizes=torch.tensor([10]),
+            nfeatures=5,
             max_memory_in_mb=100,
             safety_fraction=safety_fraction,
         )

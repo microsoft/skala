@@ -4,6 +4,7 @@ from typing import Any
 import numpy as np
 import pytest
 import torch
+from benchmarks import run_pyscf_ao_screening_benchmark as benchmark_runner
 from pyscf import dft, gto
 from utils import QuadraticFunctional, patch_ao_screening
 
@@ -125,6 +126,17 @@ def test_patch_ao_screening_restores_previous_decision(carbon: gto.Mole) -> None
         assert xc_integrator_module._should_screen_aos is dense_decision
 
     assert xc_integrator_module._should_screen_aos is original_decision
+
+
+def test_benchmark_route_metadata_uses_integrator_feature_spec(
+    carbon: gto.Mole,
+) -> None:
+    metadata = benchmark_runner.route_metadata(
+        SkalaNumInt(QuadraticFunctional()), carbon, forced_dense=False
+    )
+
+    assert metadata["implementation_target"].endswith("XCIntegrator.__call__")
+    assert metadata["functional_supports_screened_evaluation"] is True
 
 
 def test_active_cpu_ao_indices(carbon: gto.Mole) -> None:
@@ -428,7 +440,7 @@ def test_first_and_second_order_use_same_screening_decision(
         def __iter__(self) -> Iterator[ModelFeatureChunk]:
             raw_features = self.raw_features.detach().requires_grad_()
             yield ModelFeatureChunk(
-                grid_slice=slice(0, 1),
+                grid_indices=torch.tensor([0]),
                 raw_features=raw_features,
                 model_features={
                     Feature.ATOMIC_GRID_SIZES: torch.tensor([1]),
@@ -858,8 +870,24 @@ def test_cpu_rks_uks_dense_screened_equivalence(
     )
 
 
+def test_cpu_quadratic_dense_screened_equivalence_heteronuclear() -> None:
+    mol = gto.M(atom="H 0 0 0; F 0 0 0.92", basis="sto-3g", spin=0, verbose=0)
+    grids = _minimal_atom_grid(mol)
+    numint = SkalaNumInt(QuadraticFunctional())
+    dm = dft.RKS(mol).get_init_guess()
+
+    with patch_ao_screening(False):
+        dense = numint.nr_rks(mol, grids, None, dm)
+
+    with patch_ao_screening(True):
+        screened = numint.nr_rks(mol, grids, None, dm)
+
+    for dense_value, screened_value in zip(dense, screened, strict=True):
+        assert np.allclose(dense_value, screened_value, rtol=1e-10, atol=1e-11)
+
+
 def test_cpu_response_dense_screened_equivalence() -> None:
-    mol = gto.M(atom="H 0 0 0; H 0 0 0.74", basis="sto-3g", spin=0, verbose=0)
+    mol = gto.M(atom="H 0 0 0; F 0 0 0.92", basis="sto-3g", spin=0, verbose=0)
     grids = _minimal_atom_grid(mol)
     ks = FakeKS(mol, grids)
     numint = SkalaNumInt(QuadraticFunctional())
@@ -891,8 +919,8 @@ def test_screened_ao_traversals_are_independent_of_model_chunking(
     atom_grid_size = grids.weights.size // mol.natm
     monkeypatch.setattr(
         model_chunking_module,
-        "estimate_max_gridpoint_chunk_size",
-        lambda *args, **kwargs: atom_grid_size,
+        "estimate_max_model_atoms_per_chunk",
+        lambda *args, **kwargs: {atom_grid_size: 1},
     )
 
     forward_calls = 0

@@ -57,7 +57,7 @@ def test_feature_spec_derives_atomic_layout_requirements(
 
     assert spec.names == frozenset({feature})
     assert spec.requires_atomic_layout
-    assert spec.supports_screened_evaluation is supports_screened_evaluation
+    assert spec.supports_spatial_decomposition is supports_screened_evaluation
 
 
 def test_evaluation_policy_defaults_and_is_immutable() -> None:

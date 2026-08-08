@@ -92,8 +92,8 @@ class FeatureSpec:
         return bool(self.names & _ATOMIC_LAYOUT_FEATURES)
 
     @property
-    def supports_screened_evaluation(self) -> bool:
-        """Return whether atom-aligned screened evaluation is supported."""
+    def supports_spatial_decomposition(self) -> bool:
+        """Return whether spatial decomposition is supported."""
         return Feature.ATOMIC_GRID_SIZES in self.names
 
 

@@ -400,7 +400,7 @@ def route_metadata(numint: Any, mol: Any, forced_dense: bool) -> dict[str, Any]:
         route_decision_callable = route_module._should_screen_aos
         route_decision = bool(route_decision_callable(mol))
         supports_screened_evaluation = bool(
-            numint.feature_spec.supports_screened_evaluation
+            route_owner.feature_spec.supports_spatial_decomposition
         )
         route_selector = "ao_threshold"
     elif "_functional_supports_atom_chunking" in referenced_names and hasattr(

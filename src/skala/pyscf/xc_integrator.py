@@ -84,7 +84,7 @@ class XCIntegrator:
     ) -> XCResult:
         """Evaluate electron count, XC energy, and XC potential."""
         self._validate_device(dm)
-        if self.feature_spec.supports_screened_evaluation and _should_screen_aos(mol):
+        if self.feature_spec.supports_spatial_decomposition and _should_screen_aos(mol):
             return self._integrate_screened(mol, grids, dm, max_memory)
         return self._integrate_dense(mol, grids, dm, max_memory)
 
@@ -98,7 +98,7 @@ class XCIntegrator:
     ) -> Callable[[Tensor], Tensor]:
         """Build an XC-only Hessian-vector product callable."""
         self._validate_device(dm0)
-        if self.feature_spec.supports_screened_evaluation and _should_screen_aos(mol):
+        if self.feature_spec.supports_spatial_decomposition and _should_screen_aos(mol):
             return self._gen_response_screened(
                 mol,
                 grids,
@@ -196,7 +196,9 @@ class XCIntegrator:
                 local_raw_features,
                 torch.ones_like(energy_chunk),
             )
-            atom_major_cotangent[..., chunk.grid_slice] = local_cotangent.detach()
+            atom_major_cotangent.index_copy_(
+                -1, chunk.grid_indices, local_cotangent.detach()
+            )
             electron_count += (
                 (mol_features[Feature.DENSITY] * mol_features[Feature.GRID_WEIGHTS])
                 .sum(dim=-1)
@@ -308,12 +310,12 @@ class XCIntegrator:
                     (local_hessian_action,) = torch.autograd.grad(
                         local_gradient,
                         local_raw_features,
-                        atom_major_tangent[..., chunk.grid_slice],
+                        atom_major_tangent.index_select(-1, chunk.grid_indices),
                     )
                 else:
                     local_hessian_action = torch.zeros_like(local_raw_features)
-                atom_major_hessian_action[..., chunk.grid_slice] = (
-                    local_hessian_action.detach()
+                atom_major_hessian_action.index_copy_(
+                    -1, chunk.grid_indices, local_hessian_action.detach()
                 )
                 del (
                     energy_chunk,
