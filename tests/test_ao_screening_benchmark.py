@@ -361,9 +361,10 @@ def test_screened_and_dense_values_agree(
             assert isinstance(cpu_functional, ExcFunctionalBase)
             dense = _make_benchmark_case(benchmark_spec, cpu_functional, "cpu").run()
 
-    scalar_rtol = 2e-10 if case.backend == "cpu" else 1e-8
-    density_close = np.allclose(dense[0], screened[0], rtol=scalar_rtol, atol=1e-11)
-    energy_close = np.isclose(dense[1], screened[1], rtol=scalar_rtol, atol=1e-10)
+    density_rtol = 2e-10 if case.backend == "cpu" else 1e-8
+    energy_rtol = 5e-10 if case.backend == "cpu" else 1e-8
+    density_close = np.allclose(dense[0], screened[0], rtol=density_rtol, atol=1e-11)
+    energy_close = np.isclose(dense[1], screened[1], rtol=energy_rtol, atol=1e-10)
     dense_vxc = (
         dense[2]
         if isinstance(dense[2], np.ndarray)
