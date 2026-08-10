@@ -323,7 +323,7 @@ def test_gpu_empty_ao_block_matches_dense_reference() -> None:
     )
     dm = torch.eye(mol.nao_nr(), dtype=torch.float64, device="cuda", requires_grad=True)
     screened = ChunkEvalForward.apply(  # type: ignore[no-untyped-call]
-        dm, mol, grids, feature_function, block_size, False, True
+        dm, mol, grids, feature_function, block_size, False
     )
     dense = evaluate_full_grid(dm, mol, coords, feature_function, gpu=True)
 
@@ -378,7 +378,7 @@ def test_gpu_sparse_mask_sorts_scatters_and_unsorts(
         torch.arange(1, mol.nao_nr() + 1, dtype=torch.float64, device="cuda")
     ).requires_grad_()
     features = ChunkEvalForward.apply(  # type: ignore[no-untyped-call]
-        dm, mol, grids, feature_function, None, False, True
+        dm, mol, grids, feature_function, None, False
     )
 
     sort_idx_t = torch.as_tensor(sort_idx, device="cuda")

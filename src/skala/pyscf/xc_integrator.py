@@ -170,7 +170,6 @@ class XCIntegrator:
                 feature_function,
                 spatial_grid_layout.block_size,
                 False,
-                dm.device.type == "cuda",
             ),
         )
         atom_major_raw_features = sorted_raw_features.index_select(
@@ -270,7 +269,6 @@ class XCIntegrator:
                 feature_function,
                 spatial_grid_layout.block_size,
                 False,
-                dm0.device.type == "cuda",
             ),
         )
         atom_major_raw_features = sorted_raw_features.index_select(
@@ -289,7 +287,6 @@ class XCIntegrator:
 
         def hessian_vector_product(dm1: Tensor) -> Tensor:
             atom_major_tangent = screened_feature_jvp(
-                dm0,
                 dm1,
                 mol,
                 spatial_grid_layout,

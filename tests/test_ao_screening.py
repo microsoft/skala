@@ -539,7 +539,6 @@ def test_first_and_second_order_use_same_screening_decision(
         return dm.sum().reshape(1, 1)
 
     def fake_screened_feature_jvp(
-        dm: torch.Tensor,
         dm_tangent: torch.Tensor,
         mol: gto.Mole,
         spatial_grid_layout: object,
@@ -662,18 +661,20 @@ def test_feature_block_helper_localizes_derivative_vectors() -> None:
 
 
 def test_chunk_eval_transforms_follow_linear_operator(carbon: gto.Mole) -> None:
-    """Check first and second JVPs and the feature-cotangent adjoint JVP."""
+    """Check spin-resolved first and second JVPs and the adjoint JVP."""
     grids = _minimal_atom_grid(carbon)
     feature_function = MGGAFeatureFunction(FeatureSpec([Feature.DENSITY]))
-    dm = torch.eye(carbon.nao_nr(), dtype=torch.float64)
+    identity = torch.eye(carbon.nao_nr(), dtype=torch.float64)
+    dm = torch.stack((identity, 2 * identity))
     tangent = torch.arange(1, dm.numel() + 1, dtype=dm.dtype).reshape(dm.shape)
 
     def evaluate(value: torch.Tensor) -> torch.Tensor:
         return ChunkEvalForward.apply(  # type: ignore[no-untyped-call]
-            value, carbon, grids, feature_function, None, False, False
+            value, carbon, grids, feature_function, None, False
         )
 
     features, feature_tangent = torch.func.jvp(evaluate, (dm,), (tangent,))
+    assert features.shape[:1] == dm.shape[:-2]
     torch.testing.assert_close(feature_tangent, evaluate(tangent))
 
     def first_jvp(value: torch.Tensor) -> torch.Tensor:
@@ -689,9 +690,15 @@ def test_chunk_eval_transforms_follow_linear_operator(carbon: gto.Mole) -> None:
 
     def apply_adjoint(value: torch.Tensor) -> torch.Tensor:
         return ChunkEvalBackward.apply(  # type: ignore[no-untyped-call]
-            dm, carbon, grids, feature_function, None, False, False, value
+            value, carbon, grids, feature_function, None, False
         )
 
+    dm_cotangent = apply_adjoint(feature_cotangent)
+    assert dm_cotangent.shape == dm.shape
+    torch.testing.assert_close(
+        torch.sum(features * feature_cotangent),
+        torch.sum(dm * dm_cotangent),
+    )
     _, adjoint_tangent = torch.func.jvp(
         apply_adjoint,
         (feature_cotangent,),
@@ -740,7 +747,7 @@ def test_cpu_screening_slices_and_scatters_full_derivatives(
         torch.arange(1, carbon.nao_nr() + 1, dtype=torch.float64)
     ).requires_grad_()
     features = ChunkEvalForward.apply(  # type: ignore[no-untyped-call]
-        dm, carbon, grids, feature_function, block_size, False, False
+        dm, carbon, grids, feature_function, block_size, False
     )
 
     expected_blocks = []
@@ -808,9 +815,8 @@ def test_cpu_all_active_block_uses_dense_sentinel(
 
     monkeypatch.setattr(dft.numint, "NumInt", FakeNumInt)
     feature_function = MGGAFeatureFunction(FeatureSpec([Feature.DENSITY]))
-    dm = torch.eye(carbon.nao_nr(), dtype=torch.float64)
 
-    blocks = list(_CPUAOBlockLoop(dm, carbon, grids, feature_function, block_size))
+    blocks = list(_CPUAOBlockLoop(carbon, grids, feature_function, block_size))
 
     assert len(blocks) == 2
     assert blocks[0].active_ao_indices is None
@@ -846,7 +852,7 @@ def test_cpu_no_active_aos_returns_full_zero_derivatives(
     dm = torch.eye(carbon.nao_nr(), dtype=torch.float64).requires_grad_()
 
     features = ChunkEvalForward.apply(  # type: ignore[no-untyped-call]
-        dm, carbon, grids, feature_function, ngrids, False, False
+        dm, carbon, grids, feature_function, ngrids, False
     )
     (vxc,) = torch.autograd.grad(features.square().sum(), dm, create_graph=True)
     (hvp,) = torch.autograd.grad(vxc, dm, torch.ones_like(dm))

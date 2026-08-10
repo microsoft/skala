@@ -12,7 +12,6 @@ from torch import Tensor
 from torch.autograd import Function
 from torch.autograd.function import FunctionCtx
 from torch.utils.dlpack import from_dlpack
-from typing_extensions import Unpack
 
 from skala.features import FeatureMap
 from skala.pyscf import feature_math
@@ -28,25 +27,14 @@ _ScreenIndex: TypeAlias = np.ndarray[tuple[int, int], np.dtype[np.uint8]]
 _AOIndices: TypeAlias = np.ndarray[tuple[int], np.dtype[np.intp]]
 
 
-class _ChunkEvalForwardContext(Protocol):
-    dm: Tensor
+class _ChunkEvalContext(Protocol):
     mol: gto.Mole
     grids: Grid
     feature_function: feature_math.LinearFeature
     blksize: int | None
     compile_feature_function: bool
-    gpu: bool
-    vectors_jvp: tuple[Tensor, ...]
-
-
-class _ChunkEvalBackwardContext(Protocol):
-    dm: Tensor
-    mol: gto.Mole
-    grids: Grid
-    feature_function: feature_math.LinearFeature
-    blksize: int | None
-    compile_feature_function: bool
-    gpu: bool
+    spin_shape: torch.Size
+    output_device: torch.device
 
 
 def _active_cpu_ao_indices(mol: gto.Mole, screen_index: _ScreenIndex) -> _AOIndices:
@@ -142,13 +130,11 @@ class _CPUAOBlockLoop:
 
     def __init__(
         self,
-        dm: Tensor,
         mol: gto.Mole,
         grids: Grid,
         feature_function: feature_math.LinearFeature,
         blksize: int | None,
     ) -> None:
-        self.dm = dm
         self.mol = mol
         assert isinstance(grids, dft.Grids)
         self.grids = grids
@@ -230,21 +216,20 @@ class _GPUAOBlockLoop:
 
     def __init__(
         self,
-        dm: Tensor,
+        device: torch.device,
         mol: gto.Mole,
         grids: Grid,
         feature_function: feature_math.LinearFeature,
         blksize: int | None,
     ) -> None:
         check_gpu_imports_were_successful()
-        self.dm = dm
         self.mol = mol
         self.grids = grids
         self.feature_function = feature_function
         self.blksize = blksize
         self.numint = dft_gpu.numint.NumInt().build(mol, grids.coords)
         self.numint.grid_blksize = blksize
-        self.sort_idx = torch.as_tensor(self.numint.gdftopt._ao_idx, device=dm.device)
+        self.sort_idx = torch.as_tensor(self.numint.gdftopt._ao_idx, device=device)
         self.unsort_idx = torch.argsort(self.sort_idx)
 
     def order_aos(self, matrix: Tensor) -> Tensor:
@@ -281,15 +266,15 @@ class _GPUAOBlockLoop:
 
 
 def _make_ao_block_loop(
-    dm: Tensor,
+    device: torch.device,
     mol: gto.Mole,
     grids: Grid,
     feature_function: feature_math.LinearFeature,
     blksize: int | None,
-    gpu: bool,
 ) -> _CPUAOBlockLoop | _GPUAOBlockLoop:
-    loop_type = _GPUAOBlockLoop if gpu else _CPUAOBlockLoop
-    return loop_type(dm, mol, grids, feature_function, blksize)
+    if device.type == "cuda":
+        return _GPUAOBlockLoop(device, mol, grids, feature_function, blksize)
+    return _CPUAOBlockLoop(mol, grids, feature_function, blksize)
 
 
 class ChunkEvalForward(Function):
@@ -303,27 +288,20 @@ class ChunkEvalForward(Function):
             feature_math.LinearFeature,
             int | None,
             bool,
-            bool,
-            # The starred spelling requires Python 3.11.
-            Unpack[tuple[Tensor, ...]],  # noqa: UP044
         ],
         output: torch.Tensor,
     ) -> None:
-        if len(inputs) < 7:
-            raise ValueError("ChunkEvalForward requires seven fixed inputs.")
-        context = cast(_ChunkEvalForwardContext, ctx)
+        context = cast(_ChunkEvalContext, ctx)
         (
-            context.dm,
+            dm,
             context.mol,
             context.grids,
             context.feature_function,
             context.blksize,
             context.compile_feature_function,
-            context.gpu,
-            *vectors_jvp,
         ) = inputs
-        context.vectors_jvp = tuple(vectors_jvp)
-        ctx.save_for_backward(context.dm)
+        context.spin_shape = dm.shape[:-2]
+        context.output_device = output.device
 
     @staticmethod
     def forward(
@@ -333,11 +311,11 @@ class ChunkEvalForward(Function):
         feature_function: feature_math.LinearFeature,
         blksize: int | None,
         compile_feature_function: bool,
-        gpu: bool,
-        *vectors_jvp: torch.Tensor,
     ) -> torch.Tensor:
         ngrids = grids.weights.size
-        block_loop = _make_ao_block_loop(dm, mol, grids, feature_function, blksize, gpu)
+        block_loop = _make_ao_block_loop(
+            dm.device, mol, grids, feature_function, blksize
+        )
 
         features = torch.zeros(
             *dm.shape[:-2],
@@ -346,12 +324,7 @@ class ChunkEvalForward(Function):
             device=dm.device,
             dtype=dm.dtype,
         )
-        # Raw AO features are linear in dm, so derivatives above first order vanish.
-        if len(vectors_jvp) > 1:
-            return features
-
-        evaluation_dm = vectors_jvp[0] if vectors_jvp else dm
-        evaluation_dm_ordered = block_loop.order_aos(evaluation_dm)
+        evaluation_dm_ordered = block_loop.order_aos(dm)
         for block in block_loop:
             active_dm_submatrix = block.select_active_ao_submatrix(
                 evaluation_dm_ordered
@@ -366,75 +339,44 @@ class ChunkEvalForward(Function):
         return features
 
     @staticmethod
-    def jvp(
-        ctx: _ChunkEvalForwardContext, *grad_inputs: torch.Tensor | None
-    ) -> torch.Tensor:
-        if len(ctx.vectors_jvp) > 1:
+    def jvp(ctx: _ChunkEvalContext, *grad_inputs: torch.Tensor | None) -> torch.Tensor:
+        dm_tangent = grad_inputs[0]
+        if dm_tangent is None:
             return torch.zeros(
-                *ctx.dm.shape[:-2],
+                *ctx.spin_shape,
                 ctx.feature_function.nfeats,
                 ctx.grids.weights.size,
-                device=ctx.dm.device,
-                dtype=ctx.dm.dtype,
+                device=ctx.output_device,
+                dtype=torch.float64,
             )
-        vector_tangent = grad_inputs[7] if ctx.vectors_jvp else grad_inputs[0]
-        if vector_tangent is None:
-            return torch.zeros(
-                *ctx.dm.shape[:-2],
-                ctx.feature_function.nfeats,
-                ctx.grids.weights.size,
-                device=ctx.dm.device,
-                dtype=ctx.dm.dtype,
-            )
-        return ChunkEvalForward.apply(
-            ctx.dm,
-            ctx.mol,
-            ctx.grids,
-            ctx.feature_function,
-            ctx.blksize,
-            ctx.compile_feature_function,
-            ctx.gpu,
-            vector_tangent,
-        )
-
-    @staticmethod
-    def backward(
-        ctx: _ChunkEvalForwardContext, *grad_outputs: torch.Tensor
-    ) -> tuple[torch.Tensor | None, ...]:
-        feature_cotangent = grad_outputs[0]
-        if ctx.vectors_jvp:
-            dm_grad = ctx.dm * 0
-        else:
-            dm_grad = ChunkEvalBackward.apply(
-                ctx.dm,
+        return cast(
+            Tensor,
+            ChunkEvalForward.apply(
+                dm_tangent,
                 ctx.mol,
                 ctx.grids,
                 ctx.feature_function,
                 ctx.blksize,
                 ctx.compile_feature_function,
-                ctx.gpu,
-                feature_cotangent,
-            )
-        grads: list[Tensor | None] = [dm_grad]
-        grads += [None] * 6
+            ),
+        )
 
-        for vector in ctx.vectors_jvp:
-            if len(ctx.vectors_jvp) == 1:
-                vector_grad = ChunkEvalBackward.apply(
-                    ctx.dm,
-                    ctx.mol,
-                    ctx.grids,
-                    ctx.feature_function,
-                    ctx.blksize,
-                    ctx.compile_feature_function,
-                    ctx.gpu,
-                    feature_cotangent,
-                )
-            else:
-                vector_grad = vector * 0
-            grads.append(vector_grad)
-
-        return tuple(grads)
+    @staticmethod
+    def backward(
+        ctx: _ChunkEvalContext, *grad_outputs: torch.Tensor
+    ) -> tuple[torch.Tensor | None, ...]:
+        feature_cotangent = grad_outputs[0]
+        dm_cotangent = ChunkEvalBackward.apply(
+            feature_cotangent,
+            ctx.mol,
+            ctx.grids,
+            ctx.feature_function,
+            ctx.blksize,
+            ctx.compile_feature_function,
+        )
+        # PyTorch expects one gradient slot per forward input; the remaining
+        # arguments are AO-evaluation metadata and are not differentiable.
+        return dm_cotangent, None, None, None, None, None
 
 
 class ChunkEvalBackward(Function):
@@ -448,38 +390,36 @@ class ChunkEvalBackward(Function):
             feature_math.LinearFeature,
             int | None,
             bool,
-            bool,
-            torch.Tensor,
         ],
         output: torch.Tensor,
     ) -> None:
-        context = cast(_ChunkEvalBackwardContext, ctx)
+        context = cast(_ChunkEvalContext, ctx)
         (
-            context.dm,
+            feature_cotangent,
             context.mol,
             context.grids,
             context.feature_function,
             context.blksize,
             context.compile_feature_function,
-            context.gpu,
-            _feature_cotangent,
         ) = inputs
-        ctx.save_for_backward(context.dm)
+        context.spin_shape = feature_cotangent.shape[:-2]
+        context.output_device = output.device
 
     @staticmethod
     def forward(
-        dm: torch.Tensor,
+        feature_cotangent: torch.Tensor,
         mol: gto.Mole,
         grids: Grid,
         feature_function: feature_math.LinearFeature,
         blksize: int | None,
         compile_feature_function: bool,
-        gpu: bool,
-        feature_cotangent: torch.Tensor,
     ) -> torch.Tensor:
-        block_loop = _make_ao_block_loop(dm, mol, grids, feature_function, blksize, gpu)
+        block_loop = _make_ao_block_loop(
+            feature_cotangent.device, mol, grids, feature_function, blksize
+        )
 
-        out = torch.zeros_like(dm)
+        nao = mol.nao_nr()
+        out = feature_cotangent.new_zeros(*feature_cotangent.shape[:-2], nao, nao)
         for block in block_loop:
             block_result = _evaluate_feature_block(
                 feature_function,
@@ -492,42 +432,44 @@ class ChunkEvalBackward(Function):
         return block_loop.restore_ao_order(out)
 
     @staticmethod
-    def jvp(
-        ctx: _ChunkEvalBackwardContext, *grad_inputs: torch.Tensor | None
-    ) -> torch.Tensor:
-        feature_cotangent_tangent = grad_inputs[7]
+    def jvp(ctx: _ChunkEvalContext, *grad_inputs: torch.Tensor | None) -> torch.Tensor:
+        feature_cotangent_tangent = grad_inputs[0]
         if feature_cotangent_tangent is None:
-            return torch.zeros_like(ctx.dm)
-        return ChunkEvalBackward.apply(
-            ctx.dm,
-            ctx.mol,
-            ctx.grids,
-            ctx.feature_function,
-            ctx.blksize,
-            ctx.compile_feature_function,
-            ctx.gpu,
-            feature_cotangent_tangent,
-        )
-
-    @staticmethod
-    def backward(
-        ctx: _ChunkEvalBackwardContext, *grad_outputs: torch.Tensor
-    ) -> tuple[torch.Tensor | None, ...]:
-        grads: list[Tensor | None] = [ctx.dm * 0]
-        grads += [None] * 6
-        grads.append(
-            ChunkEvalForward.apply(
-                ctx.dm,
+            nao = ctx.mol.nao_nr()
+            return torch.zeros(
+                *ctx.spin_shape,
+                nao,
+                nao,
+                device=ctx.output_device,
+                dtype=torch.float64,
+            )
+        return cast(
+            Tensor,
+            ChunkEvalBackward.apply(
+                feature_cotangent_tangent,
                 ctx.mol,
                 ctx.grids,
                 ctx.feature_function,
                 ctx.blksize,
                 ctx.compile_feature_function,
-                ctx.gpu,
-                grad_outputs[0],
-            )
+            ),
         )
-        return tuple(grads)
+
+    @staticmethod
+    def backward(
+        ctx: _ChunkEvalContext, *grad_outputs: torch.Tensor
+    ) -> tuple[torch.Tensor | None, ...]:
+        feature_cotangent_grad = ChunkEvalForward.apply(
+            grad_outputs[0],
+            ctx.mol,
+            ctx.grids,
+            ctx.feature_function,
+            ctx.blksize,
+            ctx.compile_feature_function,
+        )
+        # PyTorch expects one gradient slot per forward input; the remaining
+        # arguments are AO-evaluation metadata and are not differentiable.
+        return feature_cotangent_grad, None, None, None, None, None
 
 
 def evaluate_full_grid(
@@ -604,6 +546,6 @@ def auto_chunk(
         features = evaluate_full_grid(dm.double(), mol, grids.coords, feature_function)
     else:
         features = ChunkEvalForward.apply(
-            dm.double(), mol, grids, feature_function, blksize, False, gpu
+            dm.double(), mol, grids, feature_function, blksize, False
         )
     return feature_function.to_dict(features)

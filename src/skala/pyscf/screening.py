@@ -174,7 +174,6 @@ def prepare_spatial_grid_layout(
 
 
 def screened_feature_jvp(
-    dm: Tensor,
     dm_tangent: Tensor,
     mol: gto.Mole,
     spatial_grid_layout: SpatialGridLayout,
@@ -185,14 +184,12 @@ def screened_feature_jvp(
     sorted_tangent = cast(
         Tensor,
         ao_evaluation.ChunkEvalForward.apply(
-            dm,
+            dm_tangent,
             mol,
             spatial_grid_layout.sorted_grids,
             feature_function,
             spatial_grid_layout.block_size,
             compile_feature_function,
-            dm.device.type == "cuda",
-            dm_tangent,
         ),
     )
     return sorted_tangent.index_select(
