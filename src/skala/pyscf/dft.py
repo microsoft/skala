@@ -89,6 +89,7 @@ class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
         super().__init__(mol, xc="custom")
         self._keys.add("with_dftd3")
         self._numint = SkalaNumInt(xc, device=device or torch.device("cpu"))
+        self.small_rho_cutoff = 0  # pyscf 2.9 default is 1e-7
 
         d3 = xc.get_d3_settings()
         self.with_dftd3 = (
@@ -177,6 +178,7 @@ class SkalaUKS(dft.uks.UKS):  # type: ignore[misc]
         super().__init__(mol, xc="custom")
         self._keys.add("with_dftd3")
         self._numint = SkalaNumInt(xc, device=device or torch.device("cpu"))
+        self.small_rho_cutoff = 0  # pyscf 2.9 default is 1e-7
 
         d3 = xc.get_d3_settings()
         self.with_dftd3 = (

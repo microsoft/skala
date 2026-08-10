@@ -126,3 +126,15 @@ def test_skala_grids_require_unit_alignment() -> None:
     grids.alignment = 1
     with pytest.raises(ValueError, match="alignment must be 1"):
         grids.alignment = 8
+
+
+def test_skala_classes_disable_density_grid_pruning(
+    monkeypatch: pytest.MonkeyPatch,
+    skala_xc: ExcFunctionalBase,
+) -> None:
+    monkeypatch.setattr(dft.rks.KohnShamDFT, "small_rho_cutoff", 1e-7)
+    rks_mol = gto.M(atom="H 0 0 0; H 0 0 0.74", basis="sto-3g", verbose=0)
+    uks_mol = gto.M(atom="H", basis="sto-3g", spin=1, verbose=0)
+
+    assert SkalaRKS(rks_mol, xc=skala_xc).small_rho_cutoff == 0
+    assert SkalaUKS(uks_mol, xc=skala_xc).small_rho_cutoff == 0
