@@ -5,6 +5,7 @@ from utils import QuadraticFunctional, patch_ao_screening
 
 from skala.features import Feature, FeatureMap
 from skala.pyscf import xc_integrator as xc_integrator_module
+from skala.pyscf.grids import SkalaGrids
 from skala.pyscf.xc_integrator import XCIntegrator, XCResult
 
 
@@ -30,7 +31,7 @@ def test_screened_xc_derivatives_match_finite_differences() -> None:
     centered differences are therefore exact apart from floating-point roundoff.
     """
     mol = gto.M(atom="H 0 0 0; H 0 0 0.74", basis="sto-3g", verbose=0)
-    grids = dft.Grids(mol)
+    grids = SkalaGrids(mol)
     grids.level = 0
     grids.alignment = 1
     grids.build(sort_grids=False)
@@ -84,7 +85,7 @@ def test_xc_integrator_returns_tensors_and_xc_only_response(
     the Coulomb response that the higher-level NumInt wrapper adds.
     """
     mol = gto.M(atom="H 0 0 0; H 0 0 0.74", basis="sto-3g", verbose=0)
-    grids = dft.Grids(mol)
+    grids = SkalaGrids(mol)
 
     def fake_generate_features(
         mol: gto.Mole,
@@ -115,3 +116,15 @@ def test_xc_integrator_returns_tensors_and_xc_only_response(
     torch.testing.assert_close(result.energy, dm.new_tensor(128.0))
     torch.testing.assert_close(result.potential, torch.full_like(dm, 32.0))
     torch.testing.assert_close(response(torch.ones_like(dm)), torch.full_like(dm, 16.0))
+
+
+def test_xc_integrator_requires_skala_grids_for_density() -> None:
+    mol = gto.M(atom="H 0 0 0; H 0 0 0.74", basis="sto-3g", verbose=0)
+    grids = dft.Grids(mol)
+    integrator = XCIntegrator(QuadraticFunctional([Feature.DENSITY]))
+    dm = torch.eye(mol.nao_nr(), dtype=torch.float64)
+
+    with pytest.raises(TypeError, match=r"XC evaluation requires .*\.SkalaGrids"):
+        integrator(mol, grids, dm)
+    with pytest.raises(TypeError, match=r"XC evaluation requires .*\.SkalaGrids"):
+        integrator.gen_response(mol, grids, dm)

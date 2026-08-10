@@ -94,13 +94,15 @@ class SkalaNumInt(PySCFNumInt[Array]):
     -------
     >>> from pyscf import gto, dft
     >>> from skala.functional import load_functional
+    >>> from skala.pyscf.grids import SkalaGrids
     >>> from skala.pyscf.numint import SkalaNumInt
     >>>
     >>> mol = gto.M(atom="H 0 0 0; H 0 0 1", basis="def2-svp", verbose=0)
     >>> ks = dft.KS(mol)
     >>> ks._numint = SkalaNumInt(load_functional("skala-1.1"))
-    >>> ks.grids.build(mol, sort_grids=False)  # DOCTEST: Ellipsis
-    <pyscf.dft.gen_grid.Grids object at 0x...>
+    >>> ks.grids = SkalaGrids(mol)
+    >>> ks.grids.build(mol)  # DOCTEST: Ellipsis
+    <skala.pyscf.grids.SkalaGrids object at 0x...>
     >>> energy = ks.kernel()
     >>> print(energy)  # DOCTEST: Ellipsis
     -1.1425799...

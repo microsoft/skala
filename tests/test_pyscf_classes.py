@@ -1,13 +1,13 @@
 from collections.abc import Callable
 
 import pytest
-from pyscf import gto
+from pyscf import dft, gto
 
 from skala.functional.base import ExcFunctionalBase
 from skala.pyscf import SkalaKS
 from skala.pyscf.dft import SkalaRKS, SkalaUKS
 from skala.pyscf.gradients import SkalaRKSGradient, SkalaUKSGradient
-from skala.pyscf.grids import UnsortableGrids
+from skala.pyscf.grids import SkalaGrids
 
 
 @pytest.fixture(params=["skala-1.0", "skala-1.1"])
@@ -64,8 +64,7 @@ def test_skala_class(
     assert ks.xc == "custom"
     assert isinstance(ks, SkalaRKS if mol.spin == 0 else SkalaUKS)
     assert ks.with_dftd3 is not None if with_dftd3 else ks.with_dftd3 is None
-    if ks._needs_unsorted:
-        assert isinstance(ks.grids, UnsortableGrids)
+    assert isinstance(ks.grids, SkalaGrids)
 
     ks_scanner = ks.as_scanner()
     assert isinstance(ks_scanner, SkalaRKS if mol.spin == 0 else SkalaUKS)
@@ -78,20 +77,17 @@ def test_skala_class(
     grad = ks.nuc_grad_method()
     assert isinstance(grad, SkalaRKSGradient if mol.spin == 0 else SkalaUKSGradient)
     assert grad.with_dftd3 is not None if with_dftd3 else grad.with_dftd3 is None
-    if ks._needs_unsorted:
-        assert isinstance(grad.grids, UnsortableGrids)
+    assert isinstance(grad.grids, SkalaGrids)
 
     grad = ks.Gradients()
     assert isinstance(grad, SkalaRKSGradient if mol.spin == 0 else SkalaUKSGradient)
     assert grad.with_dftd3 is not None if with_dftd3 else grad.with_dftd3 is None
-    if ks._needs_unsorted:
-        assert isinstance(grad.grids, UnsortableGrids)
+    assert isinstance(grad.grids, SkalaGrids)
 
     ks = grad.base
     assert isinstance(ks, SkalaRKS if mol.spin == 0 else SkalaUKS)
     assert ks.with_dftd3 is not None if with_dftd3 else ks.with_dftd3 is None
-    if ks._needs_unsorted:
-        assert isinstance(ks.grids, UnsortableGrids)
+    assert isinstance(ks.grids, SkalaGrids)
 
 
 def test_skala_class_with_dftd3_and_native_functional_raises() -> None:
@@ -111,34 +107,22 @@ def test_skala_class_with_native_functional_and_no_dftd3_is_allowed() -> None:
     assert not isinstance(ks, (SkalaRKS, SkalaUKS))
 
 
-def test_grid_alignment_mismatch_raises(
-    load_functional_cached: Callable[..., ExcFunctionalBase | str],
+def test_initialize_grids_rejects_non_skala_grids(
+    skala_xc: ExcFunctionalBase,
 ) -> None:
-    """generate_features raises ValueError when grid has alignment padding."""
-    from unittest.mock import patch
-
-    import torch
-
-    from skala.pyscf.features import generate_features
-
     mol = gto.M(atom="H 0 0 0; H 0 0 0.74", basis="sto-3g", verbose=0)
-    func = load_functional_cached("skala-1.1")
-    assert not isinstance(func, str)
+    ks = SkalaRKS(mol, xc=skala_xc)
+    ks.grids = dft.gen_grid.Grids(mol)
 
-    def _build_grids_keep_padding(grids: gto.Mole, mol: gto.Mole) -> gto.Mole:
-        """Build grids WITHOUT disabling alignment, so padding is preserved."""
-        grids.build(mol, sort_grids=False)
-        return grids
+    with pytest.raises(TypeError, match="SkalaRKS requires .*SkalaGrids"):
+        ks.initialize_grids()
 
-    with patch("skala.pyscf.dft._build_grids_unsorted", _build_grids_keep_padding):
-        ks = SkalaKS(mol, xc=func, with_dftd3=False)
 
-    # The default PySCF alignment is 8, so grids may have padding.
-    # Force alignment to something large to guarantee a mismatch.
-    ks.grids.alignment = 128
-    ks.grids.build(mol, sort_grids=False)
+def test_skala_grids_require_unit_alignment() -> None:
+    mol = gto.M(atom="H", basis="sto-3g", spin=1, verbose=0)
+    grids = SkalaGrids(mol)
 
-    dm = torch.from_numpy(ks.get_init_guess())
-
-    with pytest.raises(ValueError, match="Grid size mismatch"):
-        generate_features(mol, dm, ks.grids, set(func.features))
+    assert grids.alignment == 1
+    grids.alignment = 1
+    with pytest.raises(ValueError, match="alignment must be 1"):
+        grids.alignment = 8

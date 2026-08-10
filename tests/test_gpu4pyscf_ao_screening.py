@@ -28,6 +28,7 @@ from utils import QuadraticFunctional, patch_ao_screening  # noqa: E402
 from skala.features import Feature  # noqa: E402
 from skala.functional.base import ExcFunctionalBase  # noqa: E402
 from skala.gpu4pyscf import SkalaKS  # noqa: E402
+from skala.gpu4pyscf.grids import SkalaGrids as GPU4PySCFSkalaGrids  # noqa: E402
 from skala.pyscf.ao_evaluation import (  # noqa: E402
     ChunkEvalForward,
     evaluate_full_grid,
@@ -35,8 +36,10 @@ from skala.pyscf.ao_evaluation import (  # noqa: E402
 from skala.pyscf.backend import dft_gpu  # noqa: E402
 from skala.pyscf.evaluation import FeatureSpec  # noqa: E402
 from skala.pyscf.feature_math import MGGAFeatureFunction  # noqa: E402
+from skala.pyscf.grids import SkalaGrids as PySCFSkalaGrids  # noqa: E402
 from skala.pyscf.numint import SkalaNumInt  # noqa: E402
 from skala.pyscf.screening import prepare_spatial_grid_layout  # noqa: E402
+from skala.pyscf.xc_integrator import XCIntegrator  # noqa: E402
 
 CARBON_CHAIN = """
 C 0.0 0.0 0.0
@@ -82,6 +85,37 @@ def test_prepare_spatially_sorted_gpu_grids() -> None:
     )
     assert layout.forward_permutation.device.type == "cuda"
     assert layout.inverse_permutation.device.type == "cuda"
+
+
+def test_gpu_atom_major_features_require_skala_grids() -> None:
+    mol = gto.M(atom="H 0 0 0", basis="sto-3g", spin=1, verbose=0)
+    grids = dft_gpu.Grids(mol)
+    integrator = XCIntegrator(QuadraticFunctional(), device=torch.device("cuda:0"))
+    dm = torch.eye(mol.nao_nr(), dtype=torch.float64, device="cuda:0")
+
+    with pytest.raises(TypeError, match=r"requires .*\.SkalaGrids"):
+        integrator(mol, grids, dm)
+    with pytest.raises(TypeError, match=r"requires .*\.SkalaGrids"):
+        integrator.gen_response(mol, grids, dm)
+
+
+def test_gpu_skala_grids_invalidate_spatial_layout() -> None:
+    mol = gto.M(atom="H 0 0 0", basis="sto-3g", spin=1, verbose=0)
+    grids = GPU4PySCFSkalaGrids(mol)
+    grids.level = 0
+    grids.alignment = 1
+    grids.build()
+    integrator = XCIntegrator(QuadraticFunctional(), device=torch.device("cuda:0"))
+
+    layout = integrator._get_spatial_grid_layout(mol, grids)
+    assert integrator._get_spatial_grid_layout(mol, grids) is layout
+
+    grids.reset()
+    assert grids.get_cached_spatial_grid_layout() is None
+    grids.level = 0
+    grids.alignment = 1
+    grids.build()
+    assert integrator._get_spatial_grid_layout(mol, grids) is not layout
 
 
 @pytest.mark.parametrize(
@@ -226,11 +260,11 @@ def test_gpu_screened_skala_matches_cpu_on_carbon_chain(
     sensitive to omitted derivative contributions.
     """
     mol = gto.M(atom=CARBON_CHAIN, basis="def2-qzvpp", verbose=0)
-    cpu_grids = dft.Grids(mol)
+    cpu_grids = PySCFSkalaGrids(mol)
     cpu_grids.level = 1
     cpu_grids.alignment = 1
     cpu_grids.build(sort_grids=False)
-    gpu_grids = dft_gpu.Grids(mol)
+    gpu_grids = GPU4PySCFSkalaGrids(mol)
     gpu_grids.level = 1
     gpu_grids.alignment = 1
     gpu_grids.build(sort_grids=False)

@@ -25,6 +25,7 @@ from utils import patch_ao_screening
 
 from skala.functional import load_functional
 from skala.functional.base import ExcFunctionalBase
+from skala.pyscf.grids import SkalaGrids
 from skala.pyscf.numint import SkalaNumInt
 
 THREAD_COUNT = 4
@@ -142,8 +143,9 @@ def _make_benchmark_case(
     initial_dm = dft.RKS(mol).get_init_guess()
 
     if backend == "cpu":
-        grids = dft.Grids(mol)
+        grids = SkalaGrids(mol)
         grids.level = 1
+        grids.alignment = 1
         grids.build(sort_grids=False)
         dm: Any = initial_dm
         numint: Any = SkalaNumInt(functional)
