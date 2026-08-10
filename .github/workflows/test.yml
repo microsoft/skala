@@ -78,7 +78,7 @@ jobs:
       shell: micromamba-shell {0}
 
   profiling:
-    name: "Profiling (Python=3.12 & PySCF=2.9)"
+    name: "Profiling (Python=3.12 & PySCF=2.13.1)"
     runs-on: ubuntu-latest
     needs:
       - lint
@@ -96,7 +96,7 @@ jobs:
         cache-downloads: true
         create-args: >-
           python=3.12
-          pyscf=2.9
+          pyscf=2.13.1
 
     - name: Install package in development mode
       run: |
