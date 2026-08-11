@@ -11,7 +11,9 @@ permissions:
 
 jobs:
   lint:
-    runs-on:  [microsoft-skala-gpu-pool]
+    runs-on:
+      - 'self-hosted'
+      - '1ES.Pool=microsoft-skala-gpu-pool'
     steps:
     - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
@@ -43,7 +45,7 @@ jobs:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
         pyscf-version: ["2.9", "2.11"]
         exclude: # Skip PySCF 2.11 on Python 3.12 because of multithreading crash when calling getints2c
-          - python-version: "3.12" 
+          - python-version: "3.12"
             pyscf-version: "2.11"
 
     name: "Python=${{ matrix.python-version }} & PySCF=${{ matrix.pyscf-version }}"
