@@ -181,16 +181,13 @@ def screened_feature_jvp(
     compile_feature_function: bool = False,
 ) -> Tensor:
     """Apply the raw-feature Jacobian and restore atom-major grid order."""
-    sorted_tangent = cast(
-        Tensor,
-        ao_evaluation.ChunkEvalForward.apply(
-            dm_tangent,
-            mol,
-            spatial_grid_layout.sorted_grids,
-            feature_function,
-            spatial_grid_layout.block_size,
-            compile_feature_function,
-        ),
+    sorted_tangent = ao_evaluation.evaluate_ao_features_blockwise(
+        dm_tangent,
+        mol,
+        spatial_grid_layout.sorted_grids,
+        feature_function,
+        spatial_grid_layout.block_size,
+        compile_feature_function,
     )
     return sorted_tangent.index_select(
         -1, spatial_grid_layout.inverse_permutation

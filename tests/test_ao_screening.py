@@ -10,17 +10,17 @@ from utils import QuadraticFunctional, patch_ao_screening
 
 from skala.features import Feature, FeatureMap
 from skala.functional.base import ExcFunctionalBase
+from skala.pyscf import ao_evaluation as ao_evaluation_module
 from skala.pyscf import model_chunking as model_chunking_module
 from skala.pyscf import screening as screening_module
 from skala.pyscf import xc_integrator as xc_integrator_module
 from skala.pyscf.ao_evaluation import (
-    ChunkEvalBackward,
-    ChunkEvalForward,
     _active_cpu_ao_indices,
     _AOBlock,
     _CPUAOBlockLoop,
     _evaluate_feature_block,
     _resolve_ao_block_size,
+    evaluate_ao_features_blockwise,
 )
 from skala.pyscf.evaluation import FeatureSpec
 from skala.pyscf.feature_math import MGGAFeatureFunction
@@ -533,7 +533,7 @@ def test_first_and_second_order_use_same_screening_decision(
     ) -> FakeSpatialGridLayout:
         return FakeSpatialGridLayout(grids)
 
-    def fake_chunk_eval_forward(
+    def fake_evaluate_ao_features_blockwise(
         dm: torch.Tensor,
         *args: object,
     ) -> torch.Tensor:
@@ -571,9 +571,9 @@ def test_first_and_second_order_use_same_screening_decision(
         fake_prepare_spatial_grid_layout,
     )
     monkeypatch.setattr(
-        ChunkEvalForward,
-        "apply",
-        staticmethod(fake_chunk_eval_forward),
+        ao_evaluation_module,
+        "evaluate_ao_features_blockwise",
+        fake_evaluate_ao_features_blockwise,
     )
     monkeypatch.setattr(
         xc_integrator_module,
@@ -662,7 +662,9 @@ def test_feature_block_helper_localizes_derivative_vectors() -> None:
     torch.testing.assert_close(feature_vjp, expected_vjp)
 
 
-def test_chunk_eval_transforms_follow_linear_operator(carbon: gto.Mole) -> None:
+def test_blockwise_ao_feature_transforms_follow_linear_operator(
+    carbon: gto.Mole,
+) -> None:
     """Check spin-resolved first and second JVPs and the adjoint JVP."""
     grids = _minimal_atom_grid(carbon)
     feature_function = MGGAFeatureFunction(FeatureSpec([Feature.DENSITY]))
@@ -671,7 +673,7 @@ def test_chunk_eval_transforms_follow_linear_operator(carbon: gto.Mole) -> None:
     tangent = torch.arange(1, dm.numel() + 1, dtype=dm.dtype).reshape(dm.shape)
 
     def evaluate(value: torch.Tensor) -> torch.Tensor:
-        return ChunkEvalForward.apply(  # type: ignore[no-untyped-call]
+        return evaluate_ao_features_blockwise(
             value, carbon, grids, feature_function, None, False
         )
 
@@ -691,8 +693,14 @@ def test_chunk_eval_transforms_follow_linear_operator(carbon: gto.Mole) -> None:
     cotangent_tangent = torch.flip(feature_cotangent, dims=(-1,))
 
     def apply_adjoint(value: torch.Tensor) -> torch.Tensor:
-        return ChunkEvalBackward.apply(  # type: ignore[no-untyped-call]
-            value, carbon, grids, feature_function, None, False
+        return evaluate_ao_features_blockwise(
+            value,
+            carbon,
+            grids,
+            feature_function,
+            None,
+            False,
+            adjoint=True,
         )
 
     dm_cotangent = apply_adjoint(feature_cotangent)
@@ -748,7 +756,7 @@ def test_cpu_screening_slices_and_scatters_full_derivatives(
     dm = torch.diag(
         torch.arange(1, carbon.nao_nr() + 1, dtype=torch.float64)
     ).requires_grad_()
-    features = ChunkEvalForward.apply(  # type: ignore[no-untyped-call]
+    features = evaluate_ao_features_blockwise(
         dm, carbon, grids, feature_function, block_size, False
     )
 
@@ -853,7 +861,7 @@ def test_cpu_no_active_aos_returns_full_zero_derivatives(
     feature_function = MGGAFeatureFunction(FeatureSpec([Feature.DENSITY]))
     dm = torch.eye(carbon.nao_nr(), dtype=torch.float64).requires_grad_()
 
-    features = ChunkEvalForward.apply(  # type: ignore[no-untyped-call]
+    features = evaluate_ao_features_blockwise(
         dm, carbon, grids, feature_function, ngrids, False
     )
     (vxc,) = torch.autograd.grad(features.square().sum(), dm, create_graph=True)
@@ -1031,21 +1039,21 @@ def test_screened_ao_traversals_are_independent_of_model_chunking(
 
     forward_calls = 0
     backward_calls = 0
-    original_forward_apply = ChunkEvalForward.apply
-    original_backward_apply = ChunkEvalBackward.apply
+    original_apply = ao_evaluation_module._BlockwiseAOFeatureOperator.apply
 
-    def counting_forward_apply(*args: object) -> torch.Tensor:
-        nonlocal forward_calls
-        forward_calls += 1
-        return original_forward_apply(*args)  # type: ignore[no-untyped-call]
+    def counting_apply(*args: object) -> torch.Tensor:
+        nonlocal forward_calls, backward_calls
+        if args[-1]:
+            backward_calls += 1
+        else:
+            forward_calls += 1
+        return original_apply(*args)  # type: ignore[no-untyped-call]
 
-    def counting_backward_apply(*args: object) -> torch.Tensor:
-        nonlocal backward_calls
-        backward_calls += 1
-        return original_backward_apply(*args)  # type: ignore[no-untyped-call]
-
-    monkeypatch.setattr(ChunkEvalForward, "apply", counting_forward_apply)
-    monkeypatch.setattr(ChunkEvalBackward, "apply", counting_backward_apply)
+    monkeypatch.setattr(
+        ao_evaluation_module._BlockwiseAOFeatureOperator,
+        "apply",
+        counting_apply,
+    )
     functional = QuadraticFunctional()
     numint = SkalaNumInt(functional)
 

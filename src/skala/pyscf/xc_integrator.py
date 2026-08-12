@@ -181,16 +181,13 @@ class XCIntegrator:
         energy = torch.tensor(0.0, device=self.device, dtype=dm_eval.dtype)
         feature_function = feature_math.MGGAFeatureFunction(self.feature_spec)
         spatial_grid_layout = self._get_spatial_grid_layout(mol, grids)
-        sorted_raw_features = cast(
-            Tensor,
-            ao_evaluation.ChunkEvalForward.apply(  # type: ignore[no-untyped-call]
-                dm_eval,
-                mol,
-                spatial_grid_layout.sorted_grids,
-                feature_function,
-                spatial_grid_layout.block_size,
-                False,
-            ),
+        sorted_raw_features = ao_evaluation.evaluate_ao_features_blockwise(
+            dm_eval,
+            mol,
+            spatial_grid_layout.sorted_grids,
+            feature_function,
+            spatial_grid_layout.block_size,
+            False,
         )
         atom_major_raw_features = sorted_raw_features.index_select(
             -1, spatial_grid_layout.inverse_permutation
@@ -280,16 +277,13 @@ class XCIntegrator:
         dm0 = dm0.requires_grad_()
         feature_function = feature_math.MGGAFeatureFunction(self.feature_spec)
         spatial_grid_layout = self._get_spatial_grid_layout(mol, grids)
-        sorted_raw_features = cast(
-            Tensor,
-            ao_evaluation.ChunkEvalForward.apply(  # type: ignore[no-untyped-call]
-                dm0.double(),
-                mol,
-                spatial_grid_layout.sorted_grids,
-                feature_function,
-                spatial_grid_layout.block_size,
-                False,
-            ),
+        sorted_raw_features = ao_evaluation.evaluate_ao_features_blockwise(
+            dm0.double(),
+            mol,
+            spatial_grid_layout.sorted_grids,
+            feature_function,
+            spatial_grid_layout.block_size,
+            False,
         )
         atom_major_raw_features = sorted_raw_features.index_select(
             -1, spatial_grid_layout.inverse_permutation

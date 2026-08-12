@@ -27,14 +27,16 @@ _ScreenIndex: TypeAlias = np.ndarray[tuple[int, int], np.dtype[np.uint8]]
 _AOIndices: TypeAlias = np.ndarray[tuple[int], np.dtype[np.intp]]
 
 
-class _ChunkEvalContext(Protocol):
+class _BlockwiseAOFeatureOperatorContext(Protocol):
     mol: gto.Mole
     grids: Grid
     feature_function: feature_math.LinearFeature
     blksize: int | None
     compile_feature_function: bool
-    spin_shape: torch.Size
+    adjoint: bool
+    output_shape: torch.Size
     output_device: torch.device
+    output_dtype: torch.dtype
 
 
 def _active_cpu_ao_indices(mol: gto.Mole, screen_index: _ScreenIndex) -> _AOIndices:
@@ -277,7 +279,89 @@ def _make_ao_block_loop(
     return _CPUAOBlockLoop(mol, grids, feature_function, blksize)
 
 
-class ChunkEvalForward(Function):
+def _evaluate_blockwise_ao_features(
+    dm: Tensor,
+    mol: gto.Mole,
+    grids: Grid,
+    feature_function: feature_math.LinearFeature,
+    blksize: int | None,
+    compile_feature_function: bool,
+) -> Tensor:
+    """Numerically apply the density-matrix-to-feature map blockwise.
+
+    This helper implements the primal direction but does not establish the
+    custom autograd boundary. Differentiable callers should use
+    :func:`evaluate_ao_features_blockwise`, which supplies explicit reverse-
+    and forward-mode rules without retaining every block's AO intermediates.
+    """
+    ngrids = grids.weights.size
+    block_loop = _make_ao_block_loop(dm.device, mol, grids, feature_function, blksize)
+
+    features = torch.zeros(
+        *dm.shape[:-2],
+        feature_function.nfeats,
+        ngrids,
+        device=dm.device,
+        dtype=dm.dtype,
+    )
+    evaluation_dm_ordered = block_loop.order_aos(dm)
+    for block in block_loop:
+        active_dm_submatrix = block.select_active_ao_submatrix(evaluation_dm_ordered)
+        temp_feature = _evaluate_feature_block(
+            feature_function,
+            block,
+            active_dm_submatrix,
+            compile_feature_function,
+        )
+        features[..., block.grid_slice] = temp_feature
+    return features
+
+
+def _apply_blockwise_ao_feature_adjoint(
+    feature_cotangent: Tensor,
+    mol: gto.Mole,
+    grids: Grid,
+    feature_function: feature_math.LinearFeature,
+    blksize: int | None,
+    compile_feature_function: bool,
+) -> Tensor:
+    """Numerically apply the adjoint and accumulate its AO-block contributions.
+
+    This helper implements the feature-cotangent-to-density-matrix direction.
+    It is called by the custom autograd operator for reverse-mode derivatives
+    and explicit adjoint evaluation; callers should enter through
+    :func:`evaluate_ao_features_blockwise` to obtain its complete AD behavior.
+    """
+    block_loop = _make_ao_block_loop(
+        feature_cotangent.device, mol, grids, feature_function, blksize
+    )
+
+    nao = mol.nao_nr()
+    out = feature_cotangent.new_zeros(*feature_cotangent.shape[:-2], nao, nao)
+    for block in block_loop:
+        block_result = _evaluate_feature_block(
+            feature_function,
+            block,
+            None,
+            compile_feature_function,
+            feature_cotangent,
+        )
+        block.add_active_ao_submatrix(out, block_result)
+    return block_loop.restore_ao_order(out)
+
+
+class _BlockwiseAOFeatureOperator(Function):
+    """Define PyTorch AD rules for the blockwise AO map and its adjoint.
+
+    The tensor contractions inside the numerical helpers are differentiable,
+    but PySCF/GPU4PySCF block traversal, screening, AO ordering, and array
+    conversions are external to PyTorch's graph. Tracing the helpers directly
+    can also retain the AO intermediates from every block. This custom function
+    instead presents the complete evaluation as one operation: ``backward``
+    reevaluates blocks in the opposite (primal or adjoint) direction, while
+    ``jvp`` reapplies the same direction because both maps are linear.
+    """
+
     @staticmethod
     def setup_context(
         ctx: FunctionCtx,
@@ -288,188 +372,144 @@ class ChunkEvalForward(Function):
             feature_math.LinearFeature,
             int | None,
             bool,
-        ],
-        output: torch.Tensor,
-    ) -> None:
-        context = cast(_ChunkEvalContext, ctx)
-        (
-            dm,
-            context.mol,
-            context.grids,
-            context.feature_function,
-            context.blksize,
-            context.compile_feature_function,
-        ) = inputs
-        context.spin_shape = dm.shape[:-2]
-        context.output_device = output.device
-
-    @staticmethod
-    def forward(
-        dm: torch.Tensor,
-        mol: gto.Mole,
-        grids: Grid,
-        feature_function: feature_math.LinearFeature,
-        blksize: int | None,
-        compile_feature_function: bool,
-    ) -> torch.Tensor:
-        ngrids = grids.weights.size
-        block_loop = _make_ao_block_loop(
-            dm.device, mol, grids, feature_function, blksize
-        )
-
-        features = torch.zeros(
-            *dm.shape[:-2],
-            feature_function.nfeats,
-            ngrids,
-            device=dm.device,
-            dtype=dm.dtype,
-        )
-        evaluation_dm_ordered = block_loop.order_aos(dm)
-        for block in block_loop:
-            active_dm_submatrix = block.select_active_ao_submatrix(
-                evaluation_dm_ordered
-            )
-            temp_feature = _evaluate_feature_block(
-                feature_function,
-                block,
-                active_dm_submatrix,
-                compile_feature_function,
-            )
-            features[..., block.grid_slice] = temp_feature
-        return features
-
-    @staticmethod
-    def jvp(ctx: _ChunkEvalContext, *grad_inputs: torch.Tensor | None) -> torch.Tensor:
-        dm_tangent = grad_inputs[0]
-        if dm_tangent is None:
-            return torch.zeros(
-                *ctx.spin_shape,
-                ctx.feature_function.nfeats,
-                ctx.grids.weights.size,
-                device=ctx.output_device,
-                dtype=torch.float64,
-            )
-        return cast(
-            Tensor,
-            ChunkEvalForward.apply(
-                dm_tangent,
-                ctx.mol,
-                ctx.grids,
-                ctx.feature_function,
-                ctx.blksize,
-                ctx.compile_feature_function,
-            ),
-        )
-
-    @staticmethod
-    def backward(
-        ctx: _ChunkEvalContext, *grad_outputs: torch.Tensor
-    ) -> tuple[torch.Tensor | None, ...]:
-        feature_cotangent = grad_outputs[0]
-        dm_cotangent = ChunkEvalBackward.apply(
-            feature_cotangent,
-            ctx.mol,
-            ctx.grids,
-            ctx.feature_function,
-            ctx.blksize,
-            ctx.compile_feature_function,
-        )
-        # PyTorch expects one gradient slot per forward input; the remaining
-        # arguments are AO-evaluation metadata and are not differentiable.
-        return dm_cotangent, None, None, None, None, None
-
-
-class ChunkEvalBackward(Function):
-    @staticmethod
-    def setup_context(
-        ctx: FunctionCtx,
-        inputs: tuple[
-            torch.Tensor,
-            gto.Mole,
-            Grid,
-            feature_math.LinearFeature,
-            int | None,
             bool,
         ],
         output: torch.Tensor,
     ) -> None:
-        context = cast(_ChunkEvalContext, ctx)
+        context = cast(_BlockwiseAOFeatureOperatorContext, ctx)
         (
-            feature_cotangent,
+            _,
             context.mol,
             context.grids,
             context.feature_function,
             context.blksize,
             context.compile_feature_function,
+            context.adjoint,
         ) = inputs
-        context.spin_shape = feature_cotangent.shape[:-2]
+        context.output_shape = output.shape
         context.output_device = output.device
+        context.output_dtype = output.dtype
 
     @staticmethod
     def forward(
-        feature_cotangent: torch.Tensor,
+        value: torch.Tensor,
         mol: gto.Mole,
         grids: Grid,
         feature_function: feature_math.LinearFeature,
         blksize: int | None,
         compile_feature_function: bool,
+        adjoint: bool,
     ) -> torch.Tensor:
-        block_loop = _make_ao_block_loop(
-            feature_cotangent.device, mol, grids, feature_function, blksize
+        if adjoint:
+            return _apply_blockwise_ao_feature_adjoint(
+                value,
+                mol,
+                grids,
+                feature_function,
+                blksize,
+                compile_feature_function,
+            )
+        return _evaluate_blockwise_ao_features(
+            value,
+            mol,
+            grids,
+            feature_function,
+            blksize,
+            compile_feature_function,
         )
 
-        nao = mol.nao_nr()
-        out = feature_cotangent.new_zeros(*feature_cotangent.shape[:-2], nao, nao)
-        for block in block_loop:
-            block_result = _evaluate_feature_block(
-                feature_function,
-                block,
-                None,
-                compile_feature_function,
-                feature_cotangent,
-            )
-            block.add_active_ao_submatrix(out, block_result)
-        return block_loop.restore_ao_order(out)
-
     @staticmethod
-    def jvp(ctx: _ChunkEvalContext, *grad_inputs: torch.Tensor | None) -> torch.Tensor:
-        feature_cotangent_tangent = grad_inputs[0]
-        if feature_cotangent_tangent is None:
-            nao = ctx.mol.nao_nr()
+    def jvp(
+        ctx: _BlockwiseAOFeatureOperatorContext,
+        *grad_inputs: torch.Tensor | None,
+    ) -> torch.Tensor:
+        value_tangent = grad_inputs[0]
+        if value_tangent is None:
             return torch.zeros(
-                *ctx.spin_shape,
-                nao,
-                nao,
+                ctx.output_shape,
                 device=ctx.output_device,
-                dtype=torch.float64,
+                dtype=ctx.output_dtype,
             )
         return cast(
             Tensor,
-            ChunkEvalBackward.apply(
-                feature_cotangent_tangent,
+            _BlockwiseAOFeatureOperator.apply(
+                value_tangent,
                 ctx.mol,
                 ctx.grids,
                 ctx.feature_function,
                 ctx.blksize,
                 ctx.compile_feature_function,
+                ctx.adjoint,
             ),
         )
 
     @staticmethod
     def backward(
-        ctx: _ChunkEvalContext, *grad_outputs: torch.Tensor
+        ctx: _BlockwiseAOFeatureOperatorContext,
+        *grad_outputs: torch.Tensor,
     ) -> tuple[torch.Tensor | None, ...]:
-        feature_cotangent_grad = ChunkEvalForward.apply(
+        input_cotangent = _BlockwiseAOFeatureOperator.apply(
             grad_outputs[0],
             ctx.mol,
             ctx.grids,
             ctx.feature_function,
             ctx.blksize,
             ctx.compile_feature_function,
+            not ctx.adjoint,
         )
         # PyTorch expects one gradient slot per forward input; the remaining
         # arguments are AO-evaluation metadata and are not differentiable.
-        return feature_cotangent_grad, None, None, None, None, None
+        return input_cotangent, None, None, None, None, None, None
+
+
+def evaluate_ao_features_blockwise(
+    value: Tensor,
+    mol: gto.Mole,
+    grids: Grid,
+    feature_function: feature_math.LinearFeature,
+    blksize: int | None,
+    compile_feature_function: bool = False,
+    *,
+    adjoint: bool = False,
+) -> Tensor:
+    """Apply the blockwise AO feature map through its custom autograd boundary.
+
+    With ``adjoint=False``, this maps a density matrix to raw features. With
+    ``adjoint=True``, it maps a feature cotangent back to a density-matrix
+    cotangent. Entering through this function attaches the explicit
+    :class:`_BlockwiseAOFeatureOperator` reverse- and forward-mode rules instead
+    of directly calling either numerical helper.
+
+    Args:
+        value: Density matrix with trailing shape ``(nao, nao)``, or feature
+            cotangent with trailing shape ``(nfeatures, ngrids)`` in adjoint
+            mode.
+        mol: Molecule defining the AO basis.
+        grids: Numerical integration grid and its AO screening metadata.
+        feature_function: Linear map from a density matrix and AO values to
+            raw features.
+        blksize: Number of grid points evaluated per backend block, or ``None``
+            to use the backend default.
+        compile_feature_function: Whether to compile each block contraction.
+        adjoint: Apply the feature map's adjoint instead of its primal direction.
+
+    Returns:
+        Raw features with trailing shape ``(nfeatures, ngrids)``, or a
+        density-matrix cotangent with trailing shape ``(nao, nao)`` in adjoint
+        mode.
+    """
+    return cast(
+        Tensor,
+        _BlockwiseAOFeatureOperator.apply(
+            value,
+            mol,
+            grids,
+            feature_function,
+            blksize,
+            compile_feature_function,
+            adjoint,
+        ),
+    )
 
 
 def evaluate_full_grid(
@@ -545,7 +585,7 @@ def auto_chunk(
     if blksize is not None and blksize >= grids.weights.shape[0]:
         features = evaluate_full_grid(dm.double(), mol, grids.coords, feature_function)
     else:
-        features = ChunkEvalForward.apply(
-            dm.double(), mol, grids, feature_function, blksize, False
+        features = evaluate_ao_features_blockwise(
+            dm.double(), mol, grids, feature_function, blksize
         )
     return feature_function.to_dict(features)

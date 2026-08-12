@@ -30,7 +30,7 @@ from skala.functional.base import ExcFunctionalBase  # noqa: E402
 from skala.gpu4pyscf import SkalaKS  # noqa: E402
 from skala.gpu4pyscf.grids import SkalaGrids as GPU4PySCFSkalaGrids  # noqa: E402
 from skala.pyscf.ao_evaluation import (  # noqa: E402
-    ChunkEvalForward,
+    evaluate_ao_features_blockwise,
     evaluate_full_grid,
 )
 from skala.pyscf.backend import dft_gpu  # noqa: E402
@@ -356,7 +356,7 @@ def test_gpu_empty_ao_block_matches_dense_reference() -> None:
         FeatureSpec([Feature.DENSITY, Feature.GRAD, Feature.KIN])
     )
     dm = torch.eye(mol.nao_nr(), dtype=torch.float64, device="cuda", requires_grad=True)
-    screened = ChunkEvalForward.apply(  # type: ignore[no-untyped-call]
+    screened = evaluate_ao_features_blockwise(
         dm, mol, grids, feature_function, block_size, False
     )
     dense = evaluate_full_grid(dm, mol, coords, feature_function, gpu=True)
@@ -411,7 +411,7 @@ def test_gpu_sparse_mask_sorts_scatters_and_unsorts(
     dm = torch.diag(
         torch.arange(1, mol.nao_nr() + 1, dtype=torch.float64, device="cuda")
     ).requires_grad_()
-    features = ChunkEvalForward.apply(  # type: ignore[no-untyped-call]
+    features = evaluate_ao_features_blockwise(
         dm, mol, grids, feature_function, None, False
     )
 
