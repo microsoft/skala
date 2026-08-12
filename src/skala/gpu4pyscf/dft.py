@@ -93,6 +93,7 @@ class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
             DFTD3Dispersion(mol, d3) if with_dftd3 and d3 is not None else None
         )
 
+self.small_rho_cutoff = 0
         self.grids = SkalaGrids(mol)(level=self.grids.level)
         self.cphf_grids = SkalaGrids(mol)(
             prune=self.cphf_grids.prune, atom_grid=self.cphf_grids.atom_grid
