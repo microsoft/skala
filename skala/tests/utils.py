@@ -89,22 +89,18 @@ class QuadraticFunctional(ExcFunctionalBase):
 
 
 @contextmanager
-def force_ao_screening(
-    enabled: bool,
-    module: ModuleType = xc_integrator_module,
-) -> Generator[None]:
+def force_ao_screening(enabled: bool) -> Generator[None]:
     """Temporarily force the AO-screening route decision.
 
     Args:
         enabled: Whether calls should select screened AO evaluation.
-        module: Module whose ``_should_screen_aos`` decision function is patched.
 
     Yields:
         Control while the forced decision is active. The previous function is
         restored when the context exits.
     """
     with patch.object(
-        module,
+        xc_integrator_module,
         "_should_screen_aos",
         return_value=enabled,
     ):
