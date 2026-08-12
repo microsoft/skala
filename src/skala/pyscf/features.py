@@ -5,18 +5,18 @@ Methods for generating and manipulating density features.
 """
 
 import logging
-from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator
 from copy import copy
 
 import numpy as np
 import torch
 from pyscf import dft, gto
-from torch import Tensor, nn
+from torch import Tensor
 from torch.autograd import Function
 from torch.autograd.function import FunctionCtx
 
 from skala.features import Feature, FeatureMap
+from skala.pyscf import feature_math
 from skala.pyscf.backend import (
     Array,
     Grid,
@@ -24,6 +24,7 @@ from skala.pyscf.backend import (
     dft_gpu,
     from_numpy_or_cupy,
 )
+from skala.pyscf.evaluation import FeatureSpec
 from skala.pyscf.memory_estimators import estimate_max_grid_chunk_size
 
 LOG = logging.getLogger(__name__)
@@ -43,18 +44,6 @@ _ATOMIC_GRID_FEATURES = {
     Feature.ATOMIC_GRID_SIZES,
     Feature.ATOMIC_GRID_SIZE_BOUND_SHAPE,
 }
-
-
-def maybe_expand_and_divide(
-    feature: torch.Tensor, expand: bool, divisor: float
-) -> torch.Tensor:
-    """
-    Expand feature along spin channels and divide its value by divisor if expand is True.
-    """
-    if expand:
-        return torch.stack([feature / divisor, feature / divisor], dim=0)
-    else:
-        return feature
 
 
 def chunked_features(
@@ -94,22 +83,12 @@ def chunked_features(
     with_spin = True if len(dm.shape) == 3 else False
 
     grid_features = get_grid_features(mol, dm, grids, features)
-    with_mgga_feature = (
-        "density" in features
-        or "grad" in features
-        or "kin" in features
-        or "lapl" in features
-    )
+    feature_spec = FeatureSpec(features)
 
     # Build the feature function once; it is reused for every chunk.
     ff = None
-    if with_mgga_feature:
-        ff = MGGAFeatureFunction(
-            with_density="density" in features,
-            with_grad="grad" in features,
-            with_kin="kin" in features,
-            with_lapl="lapl" in features,
-        )
+    if feature_spec.requires_ao_evaluation:
+        ff = feature_math.MGGAFeatureFunction(feature_spec)
 
     # Determine the chunk size automatically when not explicitly provided.
     if ff is not None:
@@ -148,7 +127,7 @@ def chunked_features(
                 max_size, 0, dtype=torch.long, device=dm.device
             )
 
-        if with_mgga_feature:
+        if feature_spec.requires_ao_evaluation:
             assert ff is not None
             feat_tensor = non_chunk(
                 dm.double(),
@@ -160,7 +139,9 @@ def chunked_features(
             )
 
             for k, v in ff.to_dict(feat_tensor).items():
-                feature_chunk[k] = maybe_expand_and_divide(v, not with_spin, 2)
+                feature_chunk[k] = feature_math.maybe_expand_and_divide(
+                    v, not with_spin, 2
+                )
 
         yield {Feature(name): value for name, value in feature_chunk.items()}
 
@@ -260,23 +241,13 @@ def generate_features(
 
     mol_features = get_grid_features(mol, dm, grids, features)
 
-    with_mgga_feature = (
-        "density" in features
-        or "grad" in features
-        or "kin" in features
-        or "lapl" in features
-    )
-    if with_mgga_feature:
+    feature_spec = FeatureSpec(features)
+    if feature_spec.requires_ao_evaluation:
         mgga_features = auto_chunk(
             dm,
             mol,
             grids,
-            MGGAFeatureFunction(
-                with_density="density" in features,
-                with_grad="grad" in features,
-                with_kin="kin" in features,
-                with_lapl="lapl" in features,
-            ),
+            feature_math.MGGAFeatureFunction(feature_spec),
             block_size=chunk_size,
             max_memory=max_memory,
             fix_block_size=chunk_size is None,
@@ -284,7 +255,7 @@ def generate_features(
         )
 
         for feature in mgga_features:
-            mol_features[feature] = maybe_expand_and_divide(
+            mol_features[feature] = feature_math.maybe_expand_and_divide(
                 mgga_features[feature], not with_spin, 2
             )
 
@@ -403,202 +374,6 @@ def partial_vjp_function_over_tangents(
     return reduced_vjp
 
 
-class FeatureFunction(nn.Module, ABC):
-    deriv: int
-    nfeats: int
-    only_linear_feats: bool
-
-    @abstractmethod
-    def forward(self, dm: torch.Tensor, ao: torch.Tensor) -> torch.Tensor: ...
-
-    @abstractmethod
-    def to_dict(self, features: torch.Tensor) -> dict[str, torch.Tensor]: ...
-
-
-class MGGAFeatureFunction(FeatureFunction):
-    with_density: bool
-    with_grad: bool
-    with_kin: bool
-    with_lapl: bool
-    with_ked_var: bool
-    with_ked_det: bool
-
-    def __init__(
-        self,
-        with_density: bool = True,
-        with_grad: bool = True,
-        with_kin: bool = True,
-        with_lapl: bool = False,
-        with_ked_var: bool = False,
-        with_ked_det: bool = False,
-    ):
-        super().__init__()
-
-        self.with_density = with_density
-        self.with_grad = with_grad
-        self.with_kin = with_kin
-        self.with_lapl = with_lapl
-        self.with_ked_var = with_ked_var
-        self.with_ked_det = with_ked_det
-
-        self.deriv = 0
-        if with_grad or with_kin or with_ked_var or with_ked_det:
-            self.deriv = 1
-        if with_lapl:
-            self.deriv = 2
-
-        self.nfeats = (
-            with_density
-            + with_grad * 3
-            + with_kin
-            + with_lapl
-            + with_ked_var
-            + with_ked_det
-        )
-
-        if self.nfeats == 0:
-            raise ValueError("At least one feature must be selected.")
-
-        self.only_linear_feats = not (with_ked_var or with_ked_det)
-
-    def to_dict(self, features: torch.Tensor) -> dict[str, torch.Tensor]:
-        """Convert the features to a dictionary with the keys being the feature names."""
-        feature_index = 0
-        feature_dict: dict[str, torch.Tensor] = {}
-        if self.with_density:
-            feature_dict["density"] = features[..., feature_index, :]
-            feature_index += 1
-        if self.with_grad:
-            feature_dict["grad"] = features[..., feature_index : feature_index + 3, :]
-            feature_index += 3
-        if self.with_kin:
-            feature_dict["kin"] = features[..., feature_index, :]
-            feature_index += 1
-        if self.with_lapl:
-            feature_dict["lapl"] = features[..., feature_index, :]
-            feature_index += 1
-        if self.with_ked_var:
-            feature_dict["ked_var"] = features[..., feature_index, :]
-            feature_index += 1
-        if self.with_ked_det:
-            feature_dict["ked_det"] = features[..., feature_index, :]
-            feature_index += 1
-        return feature_dict
-
-    def forward(self, dm: torch.Tensor, ao: torch.Tensor) -> torch.Tensor:
-        with_Q: bool = self.with_ked_var or self.with_ked_det
-
-        # Flatten all but the last two dimensions
-        # then restore the original shape at the end
-        dm_view = dm.view(-1, dm.shape[-2], dm.shape[-1])
-        # Explicit symmetrization for autodiff
-        dm_view = 0.5 * (dm_view + dm_view.transpose(-1, -2))
-
-        features = torch.zeros(
-            (dm_view.shape[0], self.nfeats, ao.shape[-1]),
-            device=dm.device,
-            dtype=dm.dtype,
-        )
-
-        # Handle the density only case, where ao has one dim less
-        if self.deriv == 0:
-            c0 = dm_view @ ao
-            features[..., 0, :] = torch.sum(c0 * ao[None, :, :], dim=-2)
-            if len(dm.shape) == 2:
-                return features.reshape((self.nfeats, -1))
-            else:
-                return features.reshape((*dm.shape[:-2], self.nfeats, -1))
-
-        c0 = dm_view @ ao[0]
-
-        feat_idx = 0
-        if self.with_density:
-            features[..., feat_idx, :] = torch.sum(c0 * ao[0][None, :, :], dim=-2)
-            feat_idx += 1
-
-        if self.with_grad:
-            for i in range(3):
-                features[..., feat_idx, :] = 2 * torch.sum(
-                    c0 * ao[i + 1][None, :, :], dim=-2
-                )
-                feat_idx += 1
-
-        if (self.with_kin or self.with_lapl) and not with_Q:
-            for i in range(3):
-                ci = dm_view @ ao[i + 1]
-                features[..., feat_idx, :] += 0.5 * torch.sum(
-                    ci * ao[i + 1][None, :, :], dim=-2
-                )
-
-            if self.with_kin:
-                feat_idx += 1
-                if self.with_lapl:
-                    features[..., feat_idx, :] = 4 * features[..., feat_idx - 1, :]
-            else:
-                # Multiply times four for the laplacian
-                features[..., feat_idx, :] *= 4.0
-
-            if self.with_lapl:
-                # 0 is without derivative
-                # 1 2 3 are x y z derivatives
-                # 4 5 6 are xx xy xz derivatives
-                # 7 8 9 are yy yz zz derivatives
-                for i in (4, 7, 9):
-                    features[..., feat_idx, :] += 2 * torch.sum(
-                        c0 * ao[i][None, :, :], dim=-2
-                    )
-
-        if with_Q:
-            Q = torch.zeros(
-                (dm_view.shape[0], ao.shape[-1], 3, 3), device=dm.device, dtype=dm.dtype
-            )
-
-            for i in range(3):
-                ci = dm_view @ ao[i + 1]
-                for j in range(i, 3):
-                    Q = torch.sum(ci * ao[j + 1][None, :, :], dim=-2)
-
-            if self.with_kin:
-                features[..., feat_idx, :] = 0.5 * torch.einsum("...ii->...", Q)
-                feat_idx += 1
-
-            if self.with_lapl:
-                features[..., feat_idx, :] = 2 * torch.einsum("...ii->...", Q)
-                # 0 is without derivative
-                # 1 2 3 are x y z derivatives
-                # 4 5 6 are xx xy xz derivatives
-                # 7 8 9 are yy yz zz derivatives
-                for i in (4, 7, 9):
-                    features[..., feat_idx, :] += 2 * torch.sum(
-                        c0 * ao[i][None, :, :], dim=-2
-                    )
-                feat_idx += 1
-
-            if self.with_ked_var:
-                if not self.with_kin:
-                    trace = torch.einsum("...ii->...", Q)
-                else:
-                    trace = 2 * features[:, feat_idx - 1, :]
-                features[..., feat_idx, :] = 0.5 * torch.sum(
-                    (
-                        trace[:, None, None]
-                        * torch.eye(3, device=dm.device, dtype=dm.dtype)[None, :, :]
-                        - Q
-                    )
-                    ** 2,
-                    dim=(-2, -1),
-                )
-                feat_idx += 1
-
-            if self.with_ked_det:
-                features[..., feat_idx, :] = torch.det(Q)
-                feat_idx += 1
-        if len(dm.shape) == 2:
-            return features.reshape((self.nfeats, -1))
-        else:
-            return features.reshape((*dm.shape[:-2], self.nfeats, -1))
-
-
 class ChunkEvalForward(Function):
     @staticmethod
     def setup_context(
@@ -607,7 +382,7 @@ class ChunkEvalForward(Function):
             torch.Tensor,
             gto.Mole,
             Grid,
-            FeatureFunction,
+            feature_math.LinearFeature,
             int,
             int,
             bool,
@@ -633,7 +408,7 @@ class ChunkEvalForward(Function):
         dm: torch.Tensor,
         mol: gto.Mole,
         grids: Grid,
-        feature_function: FeatureFunction,
+        feature_function: feature_math.LinearFeature,
         blksize: int,
         compile_feature_function: bool,
         gpu: bool,
@@ -661,7 +436,7 @@ class ChunkEvalForward(Function):
             device=dm.device,
             dtype=dm.dtype,
         )
-        if len(vectors_jvp) > 1 and feature_function.only_linear_feats:
+        if len(vectors_jvp) > 1:
             return features
 
         # Pre-sort DM and JVP vectors once (sort_idx is constant across blocks)
@@ -781,7 +556,7 @@ class ChunkEvalBackward(Function):
             torch.Tensor,
             gto.Mole,
             Grid,
-            FeatureFunction,
+            feature_math.LinearFeature,
             list[str],
             int,
             bool,
@@ -808,7 +583,7 @@ class ChunkEvalBackward(Function):
         dm: torch.Tensor,
         mol: gto.Mole,
         grids: Grid,
-        feature_function: FeatureFunction,
+        feature_function: feature_math.LinearFeature,
         derivative_types: list[str],
         blksize: int,
         compile_feature_function: bool,
@@ -831,7 +606,7 @@ class ChunkEvalBackward(Function):
 
         end: int = 0
         out = torch.zeros_like(dm)
-        if len(vectors) > 1 and feature_function.only_linear_feats:
+        if len(vectors) > 1:
             return out
 
         # Pre-sort DM and derivative vectors once (sort_idx is constant across blocks)
@@ -983,7 +758,7 @@ def non_chunk(
     dm: torch.Tensor,
     mol: gto.Mole,
     coords: Array,
-    feature_function: FeatureFunction,
+    feature_function: feature_math.LinearFeature,
     compile_feature_function: bool = False,
     gpu: bool = False,
 ) -> torch.Tensor:
@@ -1008,13 +783,13 @@ def auto_chunk(
     dm: torch.Tensor,
     mol: gto.Mole,
     grids: Grid,
-    feature_function: FeatureFunction,
+    feature_function: feature_math.LinearFeature,
     block_size: int | None = None,
     max_memory: int = 2000,
     fix_block_size: bool = True,
     compile_feature_function: bool = False,
     gpu: bool = False,
-) -> dict[str, torch.Tensor]:
+) -> FeatureMap:
     """
     Automatically splits feature evaluation into smaller chunks if needed.
 
@@ -1033,7 +808,7 @@ def auto_chunk(
     grids: Grid
         Grids object defining the points in space on which
         the feature function is evaluated.
-    feature_function: FeatureFunction
+    feature_function: feature_math.LinearFeature
         The object representing the feature function to evaluate. The number of derivatives (deriv) determines
         how many components to compute.
     gpu: bool, optional
@@ -1051,7 +826,7 @@ def auto_chunk(
 
     Returns
     -------
-    dict[str, torch.Tensor]:
+    FeatureMap:
         The evaluated feature function on the specified grids, either
         computed in smaller chunks or in a single pass, depending on the block size.
     """
