@@ -9,13 +9,14 @@ layers and symmetric contraction for higher-order body correlations.
 """
 
 import math
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 import torch
 from e3nn import o3
 from opt_einsum_fx import jitable, optimize_einsums_full
 from torch import fx, nn
 
+from skala.features import Feature, FeatureMap
 from skala.functional.base import ExcFunctionalBase, enhancement_density_inner_product
 from skala.functional.layers import ScaledSigmoid
 from skala.functional.utils.irreps import Irreps
@@ -25,9 +26,7 @@ from skala.functional.utils.symmetric_contraction import SymmetricContraction
 ANGSTROM_TO_BOHR = 1.88973
 
 
-def _prepare_features_raw(
-    mol: dict[str, torch.Tensor], eps: float = 1e-5
-) -> torch.Tensor:
+def _prepare_features_raw(mol: FeatureMap, eps: float = 1e-5) -> torch.Tensor:
     """Compute log-space semi-local features from packed density data.
 
     Args:
@@ -39,10 +38,10 @@ def _prepare_features_raw(
     """
     x = torch.cat(
         [
-            mol["density"].permute(1, 2, 0),
-            (mol["grad"] ** 2).sum(1).permute(1, 2, 0),
-            mol["kin"].permute(1, 2, 0),
-            (mol["grad"].sum(0) ** 2).sum(0).unsqueeze(-1),
+            mol[Feature.DENSITY].permute(1, 2, 0),
+            (mol[Feature.GRAD] ** 2).sum(1).permute(1, 2, 0),
+            mol[Feature.KIN].permute(1, 2, 0),
+            (mol[Feature.GRAD].sum(0) ** 2).sum(0).unsqueeze(-1),
         ],
         dim=-1,
     )
@@ -57,7 +56,7 @@ def _prepare_features_raw(
 class SemiLocalFeatures(nn.Module):
     """Compute semi-local (ab, ba) feature pairs with a pre-buffered permutation index."""
 
-    _PERM = [1, 0, 3, 2, 5, 4, 6]
+    _PERM: ClassVar[list[int]] = [1, 0, 3, 2, 5, 4, 6]
     _feature_perm: torch.Tensor
 
     def __init__(self) -> None:
@@ -68,9 +67,7 @@ class SemiLocalFeatures(nn.Module):
             persistent=False,
         )
 
-    def forward(
-        self, mol: dict[str, torch.Tensor]
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, mol: FeatureMap) -> tuple[torch.Tensor, torch.Tensor]:
         features = _prepare_features_raw(mol)
         features_ab = features
         features_ba = features.index_select(-1, self._feature_perm)
@@ -127,15 +124,15 @@ class SkalaFunctional(ExcFunctionalBase):
     """
 
     features = [
-        "density",
-        "kin",
-        "grad",
-        "grid_coords",
-        "grid_weights",
-        "atomic_grid_weights",
-        "atomic_grid_sizes",
-        "coarse_0_atomic_coords",
-        "atomic_grid_size_bound_shape",
+        Feature.DENSITY,
+        Feature.KIN,
+        Feature.GRAD,
+        Feature.GRID_COORDS,
+        Feature.GRID_WEIGHTS,
+        Feature.ATOMIC_GRID_WEIGHTS,
+        Feature.ATOMIC_GRID_SIZES,
+        Feature.COARSE_0_ATOMIC_COORDS,
+        Feature.ATOMIC_GRID_SIZE_BOUND_SHAPE,
     ]
 
     def __init__(
@@ -250,9 +247,7 @@ class SkalaFunctional(ExcFunctionalBase):
     def dtype(self) -> torch.dtype:
         return cast(nn.Linear, self.input_model[0]).weight.dtype
 
-    def pack_features(
-        self, mol_feats: dict[str, torch.Tensor]
-    ) -> dict[str, torch.Tensor]:
+    def pack_features(self, mol_feats: FeatureMap) -> FeatureMap:
         """Pack flat features into dense (grid_per_atom, atoms, …) layout.
 
         Args:
@@ -261,49 +256,52 @@ class SkalaFunctional(ExcFunctionalBase):
         Returns:
             Packed features dictionary.
         """
-        atomic_grid_sizes = mol_feats["atomic_grid_sizes"]
-        size_bound = mol_feats["atomic_grid_size_bound_shape"].shape[0]
+        atomic_grid_sizes = mol_feats[Feature.ATOMIC_GRID_SIZES]
+        size_bound = mol_feats[Feature.ATOMIC_GRID_SIZE_BOUND_SHAPE].shape[0]
 
-        packed_mol_feats: dict[str, torch.Tensor] = {}
+        packed_mol_feats: FeatureMap = {}
         for key in self.features:
-            if key == "atomic_grid_weights":
+            if key == Feature.ATOMIC_GRID_WEIGHTS:
                 packed_mol_feats[key] = pad_ragged(
                     mol_feats[key], atomic_grid_sizes, size_bound
                 ).T  # (max_grid_size, num_atoms)
-            elif key == "grid_weights":
+            elif key == Feature.GRID_WEIGHTS:
                 continue
-            elif key == "grid_coords":
+            elif key == Feature.GRID_COORDS:
                 packed_mol_feats[key] = pad_ragged(
                     mol_feats[key], atomic_grid_sizes, size_bound
                 ).permute(1, 0, 2)  # (max_grid_size, num_atoms, 3)
-            elif key == "coarse_0_atomic_coords":
+            elif key == Feature.COARSE_0_ATOMIC_COORDS:
                 packed_mol_feats[key] = mol_feats[key]
-            elif key == "density":
+            elif key == Feature.DENSITY:
                 packed_mol_feats[key] = pad_ragged(
                     mol_feats[key].T, atomic_grid_sizes, size_bound
                 ).permute(2, 1, 0)  # (2, max_grid_size, num_atoms)
-            elif key == "grad":
+            elif key == Feature.GRAD:
                 packed_mol_feats[key] = pad_ragged(
                     mol_feats[key].permute(2, 0, 1), atomic_grid_sizes, size_bound
                 ).permute(2, 3, 1, 0)  # (2, 3, max_grid_size, num_atoms)
-            elif key == "kin":
+            elif key == Feature.KIN:
                 packed_mol_feats[key] = pad_ragged(
                     mol_feats[key].T, atomic_grid_sizes, size_bound
                 ).permute(2, 1, 0)  # (2, max_grid_size, num_atoms)
-            elif key in ("atomic_grid_sizes", "atomic_grid_size_bound_shape"):
+            elif key in (
+                Feature.ATOMIC_GRID_SIZES,
+                Feature.ATOMIC_GRID_SIZE_BOUND_SHAPE,
+            ):
                 continue
             else:
                 raise ValueError(f"Unexpected key: {key}")
 
         return packed_mol_feats
 
-    def get_exc(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
+    def get_exc(self, mol: FeatureMap) -> torch.Tensor:
         exc_density = self._get_exc_density_padded(mol).double()
         grid_weights = (
             pad_ragged(
-                mol["grid_weights"],
-                mol["atomic_grid_sizes"],
-                mol["atomic_grid_size_bound_shape"].shape[0],
+                mol[Feature.GRID_WEIGHTS],
+                mol[Feature.ATOMIC_GRID_SIZES],
+                mol[Feature.ATOMIC_GRID_SIZE_BOUND_SHAPE].shape[0],
             )
             .T.double()
             .reshape(-1)
@@ -311,20 +309,20 @@ class SkalaFunctional(ExcFunctionalBase):
 
         return (exc_density * grid_weights).sum()
 
-    def get_exc_density(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
+    def get_exc_density(self, mol: FeatureMap) -> torch.Tensor:
         padded = self._get_exc_density_padded(mol)
-        sizes = mol["atomic_grid_sizes"]
-        size_bound = mol["atomic_grid_size_bound_shape"].shape[0]
+        sizes = mol[Feature.ATOMIC_GRID_SIZES]
+        size_bound = mol[Feature.ATOMIC_GRID_SIZE_BOUND_SHAPE].shape[0]
         num_atoms = sizes.shape[0]
-        total_grid_points = mol["grid_weights"].shape[0]
+        total_grid_points = mol[Feature.GRID_WEIGHTS].shape[0]
         padded_2d = padded.reshape(size_bound, num_atoms).T
         return unpad_ragged(padded_2d, sizes, total_grid_points)
 
-    def _get_exc_density_padded(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
+    def _get_exc_density_padded(self, mol: FeatureMap) -> torch.Tensor:
         mol = self.pack_features(mol)
-        grid_coords = mol["grid_coords"]
-        atomic_grid_weights = mol["atomic_grid_weights"]
-        coarse_coords = mol["coarse_0_atomic_coords"]
+        grid_coords = mol[Feature.GRID_COORDS]
+        atomic_grid_weights = mol[Feature.ATOMIC_GRID_WEIGHTS]
+        coarse_coords = mol[Feature.COARSE_0_ATOMIC_COORDS]
         features_ab, features_ba = self.semi_local_features(mol)
 
         # Learned symmetrized features
@@ -352,7 +350,7 @@ class SkalaFunctional(ExcFunctionalBase):
                 directions
             )  # (num_fine, num_coarse, (lmax+1)^2)
 
-            exp_m1_rho_total = torch.exp(-mol["density"].sum(0).unsqueeze(-1)).to(
+            exp_m1_rho_total = torch.exp(-mol[Feature.DENSITY].sum(0).unsqueeze(-1)).to(
                 self.dtype
             )
 
@@ -368,7 +366,7 @@ class SkalaFunctional(ExcFunctionalBase):
         enhancement_factor = self.output_model(features)
         return enhancement_density_inner_product(
             enhancement_factor=enhancement_factor.view(-1, 1),
-            density=mol["density"].reshape(2, -1),
+            density=mol[Feature.DENSITY].reshape(2, -1),
         )
 
     def reset_parameters(self) -> None:
@@ -912,7 +910,7 @@ def _o3_linear_codegen(
         for i_in, i_out in instr
     ]
 
-    outs: list[Any] = list()
+    outs: list[Any] = []
     for (i_in, i_out), w in zip(instr, weights, strict=True):
         x1_i = x1[:, slices[0][i_in][0] : slices[0][i_in][1]]  # type: ignore
         outs.append(

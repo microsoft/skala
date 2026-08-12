@@ -5,6 +5,7 @@ import torch
 from _ridders import num_grad_ridders
 from pyscf import dft, gto, scf
 
+from skala.features import Feature, FeatureMap
 from skala.functional.base import ExcFunctionalBase
 from skala.pyscf import SkalaKS
 from skala.pyscf.features import generate_features
@@ -58,11 +59,11 @@ def test_grid_coords_gradient(mol_name: str) -> None:
     class TestFunc(ExcFunctionalBase):
         def __init__(self) -> None:
             super().__init__()
-            self.features = ["grid_coords"]
+            self.features = [Feature.GRID_COORDS]
 
-        def get_exc(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
+        def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             """This actually calculates the total electron number"""
-            return mol["grid_coords"].sum()
+            return mol[Feature.GRID_COORDS].sum()
 
     mol = get_mol(mol_name)
     grid, rdm1 = get_grid_and_rdm1(mol)
@@ -85,11 +86,11 @@ def test_coarse_0_atomic_coords_gradient(mol_name: str) -> None:
     class TestFunc(ExcFunctionalBase):
         def __init__(self) -> None:
             super().__init__()
-            self.features = ["coarse_0_atomic_coords"]
+            self.features = [Feature.COARSE_0_ATOMIC_COORDS]
 
-        def get_exc(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
+        def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             """This actually calculates the total electron number"""
-            return torch.einsum("nx->", mol["coarse_0_atomic_coords"])
+            return torch.einsum("nx->", mol[Feature.COARSE_0_ATOMIC_COORDS])
 
     mol = get_mol(mol_name)
     grid, rdm1 = get_grid_and_rdm1(mol)
@@ -108,11 +109,11 @@ def test_grid_weights_gradient(mol_name: str) -> None:
     class TestFunc(ExcFunctionalBase):
         def __init__(self) -> None:
             super().__init__()
-            self.features = ["grid_weights"]
+            self.features = [Feature.GRID_WEIGHTS]
 
-        def get_exc(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
+        def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             """This actually calculates the total electron number"""
-            return mol["grid_weights"].sum()
+            return mol[Feature.GRID_WEIGHTS].sum()
 
     def finite_difference_nuc_grad(
         weight_sum: ExcFunctionalBase, mol: gto.Mole, rdm1: torch.Tensor
@@ -126,7 +127,9 @@ def test_grid_weights_gradient(mol_name: str) -> None:
         def weight_sum_as_nuc_coords_func(nuc_coords: torch.Tensor) -> torch.Tensor:
             """Exc wrapper for the finite difference"""
             mol.set_geom_(nuc_coords.numpy(), "bohr", symmetry=None)
-            mol_feats["grid_weights"] = torch.from_numpy(minimal_grid(mol).weights)
+            mol_feats[Feature.GRID_WEIGHTS] = torch.from_numpy(
+                minimal_grid(mol).weights
+            )
 
             return weight_sum.get_exc(mol_feats)
 
@@ -171,11 +174,11 @@ def test_density_veff(mol_name: str) -> None:
     class TestFunc(ExcFunctionalBase):
         def __init__(self) -> None:
             super().__init__()
-            self.features = ["density", "grid_weights"]
+            self.features = [Feature.DENSITY, Feature.GRID_WEIGHTS]
 
-        def get_exc(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
+        def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             """This actually calculates the total electron number"""
-            return (mol["density"] @ mol["grid_weights"]).sum()
+            return (mol[Feature.DENSITY] @ mol[Feature.GRID_WEIGHTS]).sum()
 
     def finite_difference_nuc_grad(
         dens_sum: ExcFunctionalBase, mol: gto.Mole, rdm1: torch.Tensor
@@ -203,7 +206,7 @@ def test_density_veff(mol_name: str) -> None:
 
     # calculate analytic result
     veff = veff_and_expl_nuc_grad(
-        exc_test, mol, grid, rdm1, nuc_grad_feats={"density"}
+        exc_test, mol, grid, rdm1, nuc_grad_feats={Feature.DENSITY}
     )[0]
     ana_grad = nuc_grad_from_veff(mol, veff, rdm1)
 
@@ -224,11 +227,11 @@ def test_grad_veff(mol_name: str) -> None:
     class TestFunc(ExcFunctionalBase):
         def __init__(self) -> None:
             super().__init__()
-            self.features = ["grad", "grid_weights"]
+            self.features = [Feature.GRAD, Feature.GRID_WEIGHTS]
 
-        def get_exc(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
+        def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             return (
-                (mol["grad"] ** 2 @ mol["grid_weights"])
+                (mol[Feature.GRAD] ** 2 @ mol[Feature.GRID_WEIGHTS])
                 @ torch.tensor([1.0, 2.0, 3.0], dtype=torch.float64)
             ).sum()
 
@@ -258,7 +261,9 @@ def test_grad_veff(mol_name: str) -> None:
     num_grad, num_err = finite_difference_nuc_grad(exc_test, mol, rdm1)
 
     # calculate analytic result
-    veff = veff_and_expl_nuc_grad(exc_test, mol, grid, rdm1, nuc_grad_feats={"grad"})[0]
+    veff = veff_and_expl_nuc_grad(
+        exc_test, mol, grid, rdm1, nuc_grad_feats={Feature.GRAD}
+    )[0]
     ana_grad = nuc_grad_from_veff(mol, veff, rdm1)
 
     # This gradient has large-magnitude components whose coarse finite-difference
@@ -286,11 +291,11 @@ def test_kin_veff(mol_name: str) -> None:
     class TestFunc(ExcFunctionalBase):
         def __init__(self) -> None:
             super().__init__()
-            self.features = ["kin", "grid_weights"]
+            self.features = [Feature.KIN, Feature.GRID_WEIGHTS]
 
-        def get_exc(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
+        def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             """This actually calculates the total kinetic energy number"""
-            return (mol["kin"] @ mol["grid_weights"]).sum()
+            return (mol[Feature.KIN] @ mol[Feature.GRID_WEIGHTS]).sum()
 
     def finite_difference_nuc_grad(
         kin_func: ExcFunctionalBase, mol: gto.Mole, rdm1: torch.Tensor
@@ -318,7 +323,9 @@ def test_kin_veff(mol_name: str) -> None:
     num_grad, num_err = finite_difference_nuc_grad(exc_test, mol, rdm1)
 
     # calculate analytic result
-    veff = veff_and_expl_nuc_grad(exc_test, mol, grid, rdm1, nuc_grad_feats={"kin"})[0]
+    veff = veff_and_expl_nuc_grad(
+        exc_test, mol, grid, rdm1, nuc_grad_feats={Feature.KIN}
+    )[0]
     ana_grad = nuc_grad_from_veff(mol, veff, rdm1)
 
     # Like test_grad_veff, the kinetic-energy gradient has large-magnitude
@@ -475,10 +482,10 @@ def test_atomic_grid_weights_gradient(mol_name: str) -> None:
     class TestFunc(ExcFunctionalBase):
         def __init__(self) -> None:
             super().__init__()
-            self.features = ["atomic_grid_weights"]
+            self.features = [Feature.ATOMIC_GRID_WEIGHTS]
 
-        def get_exc(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
-            return mol["atomic_grid_weights"].sum()
+        def get_exc(self, mol: FeatureMap) -> torch.Tensor:
+            return mol[Feature.ATOMIC_GRID_WEIGHTS].sum()
 
     mol = get_mol(mol_name)
     grid, rdm1 = get_grid_and_rdm1(mol)
@@ -504,17 +511,17 @@ def test_atomic_grid_features_passthrough(mol_name: str) -> None:
         def __init__(self) -> None:
             super().__init__()
             self.features = [
-                "density",
-                "grid_weights",
-                "atomic_grid_weights",
-                "atomic_grid_sizes",
-                "atomic_grid_size_bound_shape",
+                Feature.DENSITY,
+                Feature.GRID_WEIGHTS,
+                Feature.ATOMIC_GRID_WEIGHTS,
+                Feature.ATOMIC_GRID_SIZES,
+                Feature.ATOMIC_GRID_SIZE_BOUND_SHAPE,
             ]
 
-        def get_exc(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
+        def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             # Use density and grid_weights (differentiable) plus atomic_grid_weights (other_feat)
-            n_electrons = (mol["density"] @ mol["grid_weights"]).sum()
-            agw_sum = mol["atomic_grid_weights"].sum()
+            n_electrons = (mol[Feature.DENSITY] @ mol[Feature.GRID_WEIGHTS]).sum()
+            agw_sum = mol[Feature.ATOMIC_GRID_WEIGHTS].sum()
             return n_electrons + agw_sum
 
     mol = get_mol(mol_name)
@@ -540,15 +547,15 @@ def test_explicit_nuc_grad_feats_with_integer_features(mol_name: str) -> None:
         def __init__(self) -> None:
             super().__init__()
             self.features = [
-                "density",
-                "grid_weights",
-                "atomic_grid_weights",
-                "atomic_grid_sizes",
-                "atomic_grid_size_bound_shape",
+                Feature.DENSITY,
+                Feature.GRID_WEIGHTS,
+                Feature.ATOMIC_GRID_WEIGHTS,
+                Feature.ATOMIC_GRID_SIZES,
+                Feature.ATOMIC_GRID_SIZE_BOUND_SHAPE,
             ]
 
-        def get_exc(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
-            return (mol["density"] @ mol["grid_weights"]).sum()
+        def get_exc(self, mol: FeatureMap) -> torch.Tensor:
+            return (mol[Feature.DENSITY] @ mol[Feature.GRID_WEIGHTS]).sum()
 
     mol = get_mol(mol_name)
     grid, rdm1 = get_grid_and_rdm1(mol)
@@ -556,7 +563,7 @@ def test_explicit_nuc_grad_feats_with_integer_features(mol_name: str) -> None:
 
     exc_test = TestFunc()
     # Explicitly pass all features including integer ones — should auto-discard them
-    veff, nuc_grad = veff_and_expl_nuc_grad(
+    _vexc, nuc_grad = veff_and_expl_nuc_grad(
         exc_test, mol, grid, rdm1, nuc_grad_feats=set(exc_test.features)
     )
     assert nuc_grad.shape == (mol.natm, 3)

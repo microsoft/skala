@@ -15,6 +15,7 @@ from collections.abc import Callable, Iterator
 import pytest
 import torch
 
+from skala.features import Feature, FeatureMap
 from skala.functional import ExcFunctionalBase
 from skala.functional.model import (
     ANGSTROM_TO_BOHR,
@@ -53,22 +54,24 @@ def make_mol(
     grid_per_atom: int,
     device: str = "cpu",
     dtype: torch.dtype = torch.float64,
-) -> dict[str, torch.Tensor]:
+) -> FeatureMap:
     total_grid = num_atoms * grid_per_atom
     return {
-        "density": torch.randn(2, total_grid, dtype=dtype, device=device),
-        "grad": torch.randn(2, 3, total_grid, dtype=dtype, device=device),
-        "kin": torch.randn(2, total_grid, dtype=dtype, device=device),
-        "grid_coords": torch.randn(total_grid, 3, dtype=dtype, device=device),
-        "grid_weights": torch.randn(total_grid, dtype=dtype, device=device).abs(),
-        "atomic_grid_weights": torch.randn(
+        Feature.DENSITY: torch.randn(2, total_grid, dtype=dtype, device=device),
+        Feature.GRAD: torch.randn(2, 3, total_grid, dtype=dtype, device=device),
+        Feature.KIN: torch.randn(2, total_grid, dtype=dtype, device=device),
+        Feature.GRID_COORDS: torch.randn(total_grid, 3, dtype=dtype, device=device),
+        Feature.GRID_WEIGHTS: torch.randn(total_grid, dtype=dtype, device=device).abs(),
+        Feature.ATOMIC_GRID_WEIGHTS: torch.randn(
             total_grid, dtype=dtype, device=device
         ).abs(),
-        "atomic_grid_sizes": torch.tensor(
+        Feature.ATOMIC_GRID_SIZES: torch.tensor(
             [grid_per_atom] * num_atoms, dtype=torch.int64, device=device
         ),
-        "coarse_0_atomic_coords": torch.randn(num_atoms, 3, dtype=dtype, device=device),
-        "atomic_grid_size_bound_shape": torch.zeros(
+        Feature.COARSE_0_ATOMIC_COORDS: torch.randn(
+            num_atoms, 3, dtype=dtype, device=device
+        ),
+        Feature.ATOMIC_GRID_SIZE_BOUND_SHAPE: torch.zeros(
             grid_per_atom, 0, dtype=torch.int64, device=device
         ),
     }
@@ -78,24 +81,26 @@ def make_mol_variable_grid(
     atomic_grid_sizes: list[int],
     device: str = "cpu",
     dtype: torch.dtype = torch.float64,
-) -> dict[str, torch.Tensor]:
+) -> FeatureMap:
     """Create a mol dict with variable grid sizes per atom."""
     sizes = torch.tensor(atomic_grid_sizes, dtype=torch.int64, device=device)
     num_atoms = len(atomic_grid_sizes)
     total_grid = sum(atomic_grid_sizes)
     size_bound = max(atomic_grid_sizes)
     return {
-        "density": torch.randn(2, total_grid, dtype=dtype, device=device),
-        "grad": torch.randn(2, 3, total_grid, dtype=dtype, device=device),
-        "kin": torch.randn(2, total_grid, dtype=dtype, device=device),
-        "grid_coords": torch.randn(total_grid, 3, dtype=dtype, device=device),
-        "grid_weights": torch.randn(total_grid, dtype=dtype, device=device).abs(),
-        "atomic_grid_weights": torch.randn(
+        Feature.DENSITY: torch.randn(2, total_grid, dtype=dtype, device=device),
+        Feature.GRAD: torch.randn(2, 3, total_grid, dtype=dtype, device=device),
+        Feature.KIN: torch.randn(2, total_grid, dtype=dtype, device=device),
+        Feature.GRID_COORDS: torch.randn(total_grid, 3, dtype=dtype, device=device),
+        Feature.GRID_WEIGHTS: torch.randn(total_grid, dtype=dtype, device=device).abs(),
+        Feature.ATOMIC_GRID_WEIGHTS: torch.randn(
             total_grid, dtype=dtype, device=device
         ).abs(),
-        "atomic_grid_sizes": sizes,
-        "coarse_0_atomic_coords": torch.randn(num_atoms, 3, dtype=dtype, device=device),
-        "atomic_grid_size_bound_shape": torch.zeros(
+        Feature.ATOMIC_GRID_SIZES: sizes,
+        Feature.COARSE_0_ATOMIC_COORDS: torch.randn(
+            num_atoms, 3, dtype=dtype, device=device
+        ),
+        Feature.ATOMIC_GRID_SIZE_BOUND_SHAPE: torch.zeros(
             size_bound, 0, dtype=torch.int64, device=device
         ),
     }
@@ -183,21 +188,21 @@ def test_pack_features_snapshot() -> None:
     mol = make_mol(4, 10)
     packed = model.pack_features(mol)
 
-    assert packed["density"].shape == (2, 10, 4)
-    assert packed["kin"].shape == (2, 10, 4)
-    assert packed["grad"].shape == (2, 3, 10, 4)
-    assert packed["grid_coords"].shape == (10, 4, 3)
-    assert packed["atomic_grid_weights"].shape == (10, 4)
-    assert packed["coarse_0_atomic_coords"].shape == (4, 3)
+    assert packed[Feature.DENSITY].shape == (2, 10, 4)
+    assert packed[Feature.KIN].shape == (2, 10, 4)
+    assert packed[Feature.GRAD].shape == (2, 3, 10, 4)
+    assert packed[Feature.GRID_COORDS].shape == (10, 4, 3)
+    assert packed[Feature.ATOMIC_GRID_WEIGHTS].shape == (10, 4)
+    assert packed[Feature.COARSE_0_ATOMIC_COORDS].shape == (4, 3)
 
     torch.testing.assert_close(
-        packed["density"].sum(),
+        packed[Feature.DENSITY].sum(),
         torch.tensor(1.020635438470402e01, dtype=torch.float64),
         rtol=1e-5,
         atol=1e-5,
     )
     torch.testing.assert_close(
-        packed["atomic_grid_weights"].sum(),
+        packed[Feature.ATOMIC_GRID_WEIGHTS].sum(),
         torch.tensor(4.032819661608873e01, dtype=torch.float64),
         rtol=1e-5,
         atol=1e-5,

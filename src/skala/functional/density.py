@@ -14,13 +14,13 @@ from collections.abc import Callable
 import torch
 from torch import Tensor
 
+from skala.features import Feature, FeatureMap
+
 EPS = 1e-10
-IMMUTABLES = frozenset(["grid_coords", "grid_weights"])
+IMMUTABLES: frozenset[Feature] = frozenset([Feature.GRID_COORDS, Feature.GRID_WEIGHTS])
 
 
-def _map(
-    mol_features: dict[str, Tensor], f: Callable[[Tensor], Tensor]
-) -> dict[str, Tensor]:
+def _map(mol_features: FeatureMap, f: Callable[[Tensor], Tensor]) -> FeatureMap:
     """
     Apply a function to mutable molecular features.
 
@@ -43,8 +43,8 @@ def _map(
 
 
 def separate(
-    mol_features: dict[str, Tensor],
-) -> tuple[dict[str, Tensor], dict[str, Tensor]]:
+    mol_features: FeatureMap,
+) -> tuple[FeatureMap, FeatureMap]:
     """
     Separate molecular features into spin-up and spin-down components.
 
@@ -74,7 +74,7 @@ def separate(
     return mol_a, mol_b
 
 
-def scale_by(mol_features: dict[str, Tensor], factor: float) -> dict[str, Tensor]:
+def scale_by(mol_features: FeatureMap, factor: float) -> FeatureMap:
     """
     Scale molecular features by a constant factor.
 

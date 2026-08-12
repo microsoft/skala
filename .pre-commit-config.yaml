@@ -10,3 +10,18 @@ repos:
       # Run the formatter.
       - id: ruff-format
         args: [--config, pyproject.toml]
+
+  - repo: https://github.com/srstevenson/nb-clean
+    rev: f745b986570ef12cfbe0cfe20a7e0271c328914f  # frozen: 4.0.1
+    hooks:
+      - id: nb-clean
+
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy
+        entry: mypy
+        language: system
+        args: [--config-file, pyproject.toml, --num-workers, "4", .]
+        pass_filenames: false
+        always_run: true

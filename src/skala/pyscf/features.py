@@ -16,6 +16,7 @@ from torch import Tensor, nn
 from torch.autograd import Function
 from torch.autograd.function import FunctionCtx
 
+from skala.features import Feature, FeatureMap
 from skala.pyscf.backend import (
     Array,
     Grid,
@@ -27,14 +28,20 @@ from skala.pyscf.memory_estimators import estimate_max_grid_chunk_size
 
 LOG = logging.getLogger(__name__)
 
-DEFAULT_FEATURES = ["density", "kin", "grad", "grid_coords", "grid_weights"]
+DEFAULT_FEATURES = [
+    Feature.DENSITY,
+    Feature.KIN,
+    Feature.GRAD,
+    Feature.GRID_COORDS,
+    Feature.GRID_WEIGHTS,
+]
 DEFAULT_FEATURES_SET = set(DEFAULT_FEATURES)
 
 # Features that require per-atom grid decomposition.
 _ATOMIC_GRID_FEATURES = {
-    "atomic_grid_weights",
-    "atomic_grid_sizes",
-    "atomic_grid_size_bound_shape",
+    Feature.ATOMIC_GRID_WEIGHTS,
+    Feature.ATOMIC_GRID_SIZES,
+    Feature.ATOMIC_GRID_SIZE_BOUND_SHAPE,
 }
 
 
@@ -54,12 +61,12 @@ def chunked_features(
     mol: gto.Mole,
     dm: Tensor,
     grids: Grid,
-    features: set[str],
+    features: set[Feature],
     func_deriv: int,
     max_memory_in_mb: int | None = None,
     safety_fraction: float = 0.8,
     compile_feature_function: bool = False,
-) -> Iterator[dict[str, Tensor]]:
+) -> Iterator[FeatureMap]:
     """
     Chunked feature generation for a given molecule. The density features are generated in chunks to avoid memory issues.
 
@@ -155,7 +162,7 @@ def chunked_features(
             for k, v in ff.to_dict(feat_tensor).items():
                 feature_chunk[k] = maybe_expand_and_divide(v, not with_spin, 2)
 
-        yield feature_chunk
+        yield {Feature(name): value for name, value in feature_chunk.items()}
 
 
 def make_chunks(
@@ -212,11 +219,11 @@ def generate_features(
     mol: gto.Mole,
     dm: Tensor,
     grids: Grid,
-    features: set[str] | None = None,
+    features: set[Feature] | None = None,
     chunk_size: int | None = None,
     max_memory: int = 2000,
     gpu: bool = False,
-) -> dict[str, Tensor]:
+) -> FeatureMap:
     """Generate density features for a given molecule. The density features are stored in a dictionary
     with the keys matching the requested features.
 
@@ -281,14 +288,14 @@ def generate_features(
                 mgga_features[feature], not with_spin, 2
             )
 
-    return mol_features
+    return {Feature(name): value for name, value in mol_features.items()}
 
 
 def get_grid_features(
     mol: gto.Mole,
     dm: Tensor,
     grids: Grid,
-    requested_features: set[str],
+    requested_features: set[Feature],
 ) -> dict[str, Tensor]:
     grid_features = {}
 

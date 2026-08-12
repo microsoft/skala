@@ -13,6 +13,8 @@ from typing import Any
 import torch
 from torch import nn
 
+from skala.features import Feature, FeatureMap
+
 VxcType = tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
 
 
@@ -25,7 +27,7 @@ class ExcFunctionalBase(nn.Module):
     energy density from molecular features.
     """
 
-    features: list[str]
+    features: list[Feature]
     """List of features that this functional requires."""
 
     def get_d3_settings(self) -> str | None:
@@ -35,7 +37,7 @@ class ExcFunctionalBase(nn.Module):
         """
         return None
 
-    def get_exc_density(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
+    def get_exc_density(self, mol: FeatureMap) -> torch.Tensor:
         """
         Returns the exchange-correlation density for the given molecule.
         It should return a tensor of shape (G,) where G is the number of grid points
@@ -46,7 +48,7 @@ class ExcFunctionalBase(nn.Module):
             "get_exc_density not implemented for this functional."
         )
 
-    def get_exc(self, mol: dict[str, torch.Tensor]) -> torch.Tensor:
+    def get_exc(self, mol: FeatureMap) -> torch.Tensor:
         """
         Compute the exchange-correlation energy.
 
@@ -62,7 +64,7 @@ class ExcFunctionalBase(nn.Module):
             The total exchange-correlation energy.
         """
         exc_density = self.get_exc_density(mol).double()
-        grid_weights = mol["grid_weights"].double()
+        grid_weights = mol[Feature.GRID_WEIGHTS].double()
 
         return (exc_density * grid_weights).sum()
 

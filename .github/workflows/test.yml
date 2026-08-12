@@ -30,12 +30,7 @@ jobs:
 
     - name: Run pre-commit hooks
       run: |
-        pre-commit install
         pre-commit run --all-files
-      shell: micromamba-shell {0}
-
-    - name: Run mypy
-      run: mypy .
       shell: micromamba-shell {0}
 
   test:

@@ -7,6 +7,7 @@ import torch
 from pyscf import dft, gto
 from torch import Tensor
 
+from skala.features import Feature
 from skala.functional.base import ExcFunctionalBase
 from skala.pyscf.backend import (
     KS,
@@ -155,12 +156,12 @@ class SkalaNumInt(PySCFNumInt[Array]):
             mol,
             self.from_backend(dm),
             grids,
-            features={"density"},
+            features={Feature.DENSITY},
             chunk_size=self.chunk_size,
             max_memory=max_memory,
             gpu=self.device.type == "cuda",
         )
-        return self.to_backend(mol_features["density"].sum(0))  # type: ignore
+        return self.to_backend(mol_features[Feature.DENSITY].sum(0))  # type: ignore
 
     def __call__(
         self,
@@ -211,7 +212,7 @@ class SkalaNumInt(PySCFNumInt[Array]):
                     torch.ones_like(E_xc_chunk),
                 )
                 tot_dens += (
-                    (mol_features["density"] * mol_features["grid_weights"])
+                    (mol_features[Feature.DENSITY] * mol_features[Feature.GRID_WEIGHTS])
                     .sum(dim=-1)
                     .detach()
                 )
@@ -240,9 +241,9 @@ class SkalaNumInt(PySCFNumInt[Array]):
                 create_graph=second_order,
             )
 
-            rho = mol_features["density"]
+            rho = mol_features[Feature.DENSITY]
             grid_weights = mol_features.get(
-                "grid_weights", self.from_backend(grids.weights)
+                Feature.GRID_WEIGHTS, self.from_backend(grids.weights)
             )
             tot_dens = (rho * grid_weights).sum(dim=-1)
             return tot_dens, E_xc, V_xc

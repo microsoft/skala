@@ -8,6 +8,7 @@ dependencies:
   - dftd3-python
   - e3nn
   - h5py
+  - hdf5 >=2.1,<2.2
   - numpy
   - opt_einsum_fx
   - pyscf >=2.8,<2.14
@@ -23,7 +24,7 @@ dependencies:
   - pytest-cov
   - pytest-randomly
   - ruff
-  - mypy
+  - mypy >=2
   - pip:
     - huggingface_hub
     - gpu4pyscf-cuda12x >=1.6,<1.8,!=1.7.1,!=1.7.2

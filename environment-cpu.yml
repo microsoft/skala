@@ -8,6 +8,7 @@ dependencies:
   - dftd3-python
   - e3nn
   - h5py
+  - hdf5 >=2.1,<2.2
   - numpy <2.5
   - opt_einsum_fx
   - pyscf >=2.8,<2.14
@@ -20,6 +21,6 @@ dependencies:
   - pytest-cov
   - pytest-randomly
   - ruff
-  - mypy
+  - mypy >=2
   - pip:
     - huggingface_hub
