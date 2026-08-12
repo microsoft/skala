@@ -1,15 +1,27 @@
 """Shared functional and route-control helpers for tests."""
 
-from collections.abc import Generator, Iterable
+from collections.abc import Generator, Iterable, Mapping
 from contextlib import contextmanager
 from types import ModuleType
 from unittest.mock import patch
 
+import pytest
 import torch
 
 from skala.features import Feature, FeatureMap
 from skala.functional.base import ExcFunctionalBase
 from skala.pyscf import xc_integrator as xc_integrator_module
+
+
+def require_gpu() -> ModuleType:
+    """Require CUDA and import CuPy, skipping when either is unavailable.
+
+    Returns:
+        The imported CuPy module.
+    """
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA is not available.", allow_module_level=True)
+    return pytest.importorskip("cupy", reason="CuPy is not available.")
 
 
 class QuadraticFunctional(ExcFunctionalBase):
@@ -96,3 +108,73 @@ def force_ao_screening(
         return_value=enabled,
     ):
         yield
+
+
+FULL_GRAD_REF: Mapping[str, torch.Tensor] = {
+    "HF:pbe": torch.tensor(
+        [[0.0, 0.0, -1.0283181338840031e-01], [0.0, 0.0, 1.0283181338840475e-01]],
+        dtype=torch.float64,
+    ),
+    "H2O:pbe": torch.tensor(
+        [
+            [7.3868922411540083e-02, 0.0, 0.0],
+            [-3.6934461205758495e-02, 0.0, -1.3005275018782658e-01],
+            [-3.6934461205764268e-02, 0.0, 1.3005275018783147e-01],
+        ],
+        dtype=torch.float64,
+    ),
+    "H2O+:pbe": torch.tensor(
+        [
+            [1.3766133501961964e-01, 0.0, 0.0],
+            [-6.8830667509800936e-02, 0.0, -1.6302458647600626e-01],
+            [-6.8830667509806709e-02, 0.0, 1.6302458647600737e-01],
+        ],
+        dtype=torch.float64,
+    ),
+    "HF:skala-1.0": torch.tensor(
+        [
+            [0.0, 0.0, -0.11766455110756313],
+            [0.0, 0.0, 0.11766455110756091],
+        ],
+        dtype=torch.float64,
+    ),
+    "H2O:skala-1.0": torch.tensor(
+        [
+            [0.04761426020567949, 0.0, 0.0],
+            [-0.023807130986786884, 0.0, -0.12656276817486223],
+            [-0.023807129218868184, 0.0, 0.126562766972401],
+        ],
+        dtype=torch.float64,
+    ),
+    "H2O+:skala-1.0": torch.tensor(
+        [
+            [0.11016447311737299, 0.0, 0.0],
+            [-0.055082237334041384, 0.0, -0.15564537931499212],
+            [-0.05508223578332139, 0.0, 0.15564537861887162],
+        ],
+        dtype=torch.float64,
+    ),
+    "HF:skala-1.1": torch.tensor(
+        [
+            [0.0, 0.0, -0.11922130029704636],
+            [0.0, 0.0, 0.11922130029705125],
+        ],
+        dtype=torch.float64,
+    ),
+    "H2O:skala-1.1": torch.tensor(
+        [
+            [0.05518685428627901, 0.0, 0.0],
+            [-0.027593427632945478, 0.0, -0.12591870031741337],
+            [-0.027593426653364173, 0.0, 0.12591869974465286],
+        ],
+        dtype=torch.float64,
+    ),
+    "H2O+:skala-1.1": torch.tensor(
+        [
+            [0.11201511304824052, 0.0, 0.0],
+            [-0.05600755684684611, 0.0, -0.15729176960843216],
+            [-0.056007556201392195, 0.0, 0.15729176919222287],
+        ],
+        dtype=torch.float64,
+    ),
+}

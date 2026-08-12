@@ -16,7 +16,7 @@ atom-major layout expected by model features.
 
 from copy import copy
 from dataclasses import dataclass
-from typing import TypeAlias, cast
+from typing import cast
 
 import numpy as np
 import torch
@@ -24,11 +24,9 @@ from pyscf import dft, gto
 from torch import Tensor
 
 from skala.pyscf.backend import Grid, check_gpu_imports_were_successful
+from skala.typing import D1, D2, F64, I64
 
 CPU_AO_SCREENING_BLOCK_SIZE = 9 * dft.gen_grid.BLKSIZE
-
-_Float64Coordinates: TypeAlias = np.ndarray[tuple[int, int], np.dtype[np.float64]]
-_Int64Permutation: TypeAlias = np.ndarray[tuple[int], np.dtype[np.int64]]
 
 
 @dataclass(frozen=True)
@@ -42,8 +40,8 @@ class SpatialGridLayout:
 
 
 def _decompose_grid_into_spatial_blocks(
-    coords: _Float64Coordinates, block_size: int
-) -> tuple[_Int64Permutation, _Int64Permutation]:
+    coords: np.ndarray[D2, F64], block_size: int
+) -> tuple[np.ndarray[D1, I64], np.ndarray[D1, I64]]:
     """Decompose a molecular grid into spatial blocks and return its permutations.
 
     Recursively partitions points along their principal spatial direction. Every
@@ -66,7 +64,7 @@ def _decompose_grid_into_spatial_blocks(
     if block_size <= 0:
         raise ValueError("block_size must be positive")
 
-    def split_projections(indices: _Int64Permutation) -> np.ndarray:
+    def split_projections(indices: np.ndarray[D1, I64]) -> np.ndarray:
         point_coords = coords[indices]
         centered_coords = point_coords - point_coords.mean(axis=0)
         scatter = centered_coords.T @ centered_coords
@@ -87,7 +85,7 @@ def _decompose_grid_into_spatial_blocks(
             principal_direction = -principal_direction
         return centered_coords @ principal_direction
 
-    def partition(indices: _Int64Permutation) -> list[_Int64Permutation]:
+    def partition(indices: np.ndarray[D1, I64]) -> list[np.ndarray[D1, I64]]:
         if indices.size <= block_size:
             return [indices]
 
@@ -135,9 +133,9 @@ def prepare_spatial_grid_layout(
         check_gpu_imports_were_successful()
         import cupy
 
-        host_coords = cast(_Float64Coordinates, cupy.asnumpy(grids.coords))
+        host_coords = cast(np.ndarray[D2, F64], cupy.asnumpy(grids.coords))
     else:
-        host_coords = cast(_Float64Coordinates, grids.coords)
+        host_coords = cast(np.ndarray[D2, F64], grids.coords)
 
     forward, inverse = _decompose_grid_into_spatial_blocks(host_coords, block_size)
     sorted_grids = copy(grids)

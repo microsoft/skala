@@ -4,13 +4,11 @@ import pytest
 import torch
 from pyscf import gto
 
+from tests.utils import require_gpu
+
 pytestmark = pytest.mark.gpu
 
-if not torch.cuda.is_available():
-    pytest.skip(
-        "Skipping gpu4pyscf classes tests, because CUDA is not available.",
-        allow_module_level=True,
-    )
+require_gpu()
 
 from skala.functional.base import ExcFunctionalBase  # noqa: E402
 from skala.gpu4pyscf import SkalaKS  # noqa: E402

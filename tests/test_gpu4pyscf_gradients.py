@@ -4,20 +4,12 @@ import pytest
 import torch
 from torch.utils.dlpack import from_dlpack
 
+from tests.utils import FULL_GRAD_REF, force_ao_screening, require_gpu
+
 pytestmark = pytest.mark.gpu
 
-if not torch.cuda.is_available():
-    pytest.skip(
-        "Skipping gpu4pyscf gradients tests, because CUDA is not available.",
-        allow_module_level=True,
-    )
-try:
-    import cupy
-except ModuleNotFoundError:
-    pytest.skip(
-        "Skipping gpu4pyscf gradients tests, because CuPy is not available.",
-        allow_module_level=True,
-    )
+cupy = require_gpu()
+
 
 from gpu4pyscf import dft, scf  # noqa: E402
 from pyscf import gto  # noqa: E402
@@ -36,8 +28,6 @@ from skala.pyscf.features import generate_features  # noqa: E402
 from skala.pyscf.gradients import SkalaRKSGradient as CpuSkalaRKSGradient  # noqa: E402
 from skala.utils import torch_allocator  # noqa: E402
 from tests.ridders import num_grad_ridders  # noqa: E402
-from tests.test_pyscf_gradients import FULL_GRAD_REF  # noqa: E402
-from tests.utils import force_ao_screening  # noqa: E402
 
 H2_SKALA_1_1_GRAD_REF = torch.tensor(
     [

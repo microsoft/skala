@@ -7,21 +7,11 @@ import torch
 from pyscf import dft, gto
 from torch.utils.dlpack import from_dlpack
 
+from tests.utils import QuadraticFunctional, force_ao_screening, require_gpu
+
 pytestmark = pytest.mark.gpu
 
-if not torch.cuda.is_available():
-    pytest.skip(
-        "Skipping gpu4pyscf AO screening tests, because CUDA is not available.",
-        allow_module_level=True,
-    )
-
-try:
-    import cupy
-except ModuleNotFoundError:
-    pytest.skip(
-        "Skipping gpu4pyscf AO screening tests, because CuPy is not available.",
-        allow_module_level=True,
-    )
+cupy = require_gpu()
 
 from skala.features import Feature  # noqa: E402
 from skala.functional.base import ExcFunctionalBase  # noqa: E402
@@ -31,14 +21,14 @@ from skala.pyscf.ao_evaluation import (  # noqa: E402
     evaluate_ao_features_blockwise,
     evaluate_full_grid,
 )
-from skala.pyscf.backend import dft_gpu  # noqa: E402
+from skala.pyscf.backend import Array, dft_gpu  # noqa: E402
 from skala.pyscf.evaluation import FeatureSpec  # noqa: E402
 from skala.pyscf.feature_math import MGGAFeatureFunction  # noqa: E402
 from skala.pyscf.grids import SkalaGrids as PySCFSkalaGrids  # noqa: E402
 from skala.pyscf.numint import SkalaNumInt  # noqa: E402
 from skala.pyscf.spatial_grid_layout import prepare_spatial_grid_layout  # noqa: E402
 from skala.pyscf.xc_integrator import XCIntegrator  # noqa: E402
-from tests.utils import QuadraticFunctional, force_ao_screening  # noqa: E402
+from skala.typing import D2, F64  # noqa: E402
 
 CARBON_CHAIN = """
 C 0.0 0.0 0.0
@@ -383,7 +373,7 @@ def test_gpu_sparse_mask_sorts_scatters_and_unsorts(
     grids = SimpleNamespace(weights=weights, coords=coords)
 
     class FakeGpuNumInt:
-        def build(self, mol: gto.Mole, coords: cupy.ndarray) -> "FakeGpuNumInt":
+        def build(self, mol: gto.Mole, coords: Array[D2, F64]) -> "FakeGpuNumInt":
             self.gdftopt = SimpleNamespace(_ao_idx=sort_idx)
             return self
 

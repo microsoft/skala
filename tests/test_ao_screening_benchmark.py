@@ -26,7 +26,7 @@ from skala.functional import load_functional
 from skala.functional.base import ExcFunctionalBase
 from skala.pyscf.grids import SkalaGrids
 from skala.pyscf.numint import SkalaNumInt
-from tests.utils import force_ao_screening
+from tests.utils import force_ao_screening, require_gpu
 
 THREAD_COUNT = 4
 MAX_MEMORY_MB = 2000
@@ -225,9 +225,7 @@ def device_benchmark_case(
         functional = load_functional_cached("skala-1.1")
         assert isinstance(functional, ExcFunctionalBase)
     else:
-        if not torch.cuda.is_available():
-            pytest.skip("CUDA is not available")
-        pytest.importorskip("cupy")
+        require_gpu()
         pytest.importorskip("gpu4pyscf")
         functional = load_functional_cached("skala-1.1", device=torch.device("cuda:0"))
         assert isinstance(functional, ExcFunctionalBase)
@@ -433,9 +431,7 @@ def test_screened_and_dense_peak_memory(
     record_property: Callable[[str, object], None],
 ) -> None:
     if backend == "cuda":
-        if not torch.cuda.is_available():
-            pytest.skip("CUDA is not available")
-        pytest.importorskip("cupy")
+        require_gpu()
         pytest.importorskip("gpu4pyscf")
 
     screened_peak_bytes = _measure_peak_memory(spec, screened=True, backend=backend)

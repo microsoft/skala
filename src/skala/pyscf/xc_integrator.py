@@ -3,7 +3,8 @@
 """Tensor-level exchange-correlation integration."""
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, NamedTuple, TypeAlias, TypeGuard
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, TypeAlias, TypeGuard
 
 import torch
 from pyscf import gto
@@ -50,7 +51,8 @@ def _assert_skala_grid(grids: Grid, device: torch.device) -> TypeGuard["_SkalaGr
     return True
 
 
-class XCResult(NamedTuple):
+@dataclass(frozen=True)
+class XCResult:
     """Tensor-valued result of exchange-correlation integration."""
 
     electron_count: Tensor

@@ -3,7 +3,8 @@
 """Blockwise atomic-orbital feature evaluation and custom autograd."""
 
 from collections.abc import Iterator
-from typing import NamedTuple, Protocol, TypeAlias, cast
+from dataclasses import dataclass
+from typing import Protocol, cast
 
 import numpy as np
 import torch
@@ -22,9 +23,7 @@ from skala.pyscf.backend import (
     dft_gpu,
     from_numpy_or_cupy,
 )
-
-_ScreenIndex: TypeAlias = np.ndarray[tuple[int, int], np.dtype[np.uint8]]
-_AOIndices: TypeAlias = np.ndarray[tuple[int], np.dtype[np.intp]]
+from skala.typing import D1, D2, F64, I64, U8
 
 
 class _BlockwiseAOFeatureOperatorContext(Protocol):
@@ -39,7 +38,9 @@ class _BlockwiseAOFeatureOperatorContext(Protocol):
     output_dtype: torch.dtype
 
 
-def _active_cpu_ao_indices(mol: gto.Mole, screen_index: _ScreenIndex) -> _AOIndices:
+def _active_cpu_ao_indices(
+    mol: gto.Mole, screen_index: np.ndarray[D2, U8]
+) -> np.ndarray[D1, I64]:
     """Expand active shells in a PySCF screen-index slice to AO indices.
 
     A shell is active for the grid block if it is nonzero in any of the
@@ -51,7 +52,8 @@ def _active_cpu_ao_indices(mol: gto.Mole, screen_index: _ScreenIndex) -> _AOIndi
     return np.flatnonzero(np.repeat(active_shells, np.diff(ao_loc)))
 
 
-class _AOBlock(NamedTuple):
+@dataclass(frozen=True)
+class _AOBlock:
     """Evaluated AO data and index metadata for one contiguous grid block.
 
     ``ao_values`` contains only the active AO rows when screening is enabled.
@@ -152,7 +154,7 @@ class _CPUAOBlockLoop:
 
     def _active_ao_indices(
         self,
-        non0tab: _ScreenIndex,
+        non0tab: np.ndarray[D2, U8],
         grid_start: int,
         grid_end: int,
     ) -> Tensor | None:
@@ -515,7 +517,7 @@ def evaluate_ao_features_blockwise(
 def evaluate_full_grid(
     dm: torch.Tensor,
     mol: gto.Mole,
-    coords: Array,
+    coords: Array[D2, F64],
     feature_function: feature_math.LinearFeature,
     compile_feature_function: bool = False,
     gpu: bool = False,

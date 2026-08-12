@@ -9,7 +9,7 @@ atom-local shapes and coordinates.
 
 import logging
 from collections.abc import Iterator, Mapping
-from typing import NamedTuple
+from dataclasses import dataclass
 
 import torch
 from pyscf import gto
@@ -36,7 +36,8 @@ _ATOM_FEATURES = (
 )
 
 
-class AtomGridChunk(NamedTuple):
+@dataclass(frozen=True)
+class AtomGridChunk:
     """Matching atom and grid slices for one model evaluation chunk."""
 
     atom_slice: slice
@@ -81,7 +82,8 @@ def _make_atom_grid_chunks(
     return chunks
 
 
-class AtomGridOrder(NamedTuple):
+@dataclass(frozen=True)
+class AtomGridOrder:
     """Atom and grid-point indices in ascending atomic-grid-size order."""
 
     atom_indices: Tensor
@@ -110,7 +112,8 @@ def _make_atom_grid_order(atomic_grid_sizes: Tensor) -> AtomGridOrder:
     return AtomGridOrder(atom_indices=atom_indices, grid_indices=grid_indices)
 
 
-class ModelFeatureChunk(NamedTuple):
+@dataclass(frozen=True)
+class ModelFeatureChunk:
     """Chunk-local raw features and the corresponding model input dictionary."""
 
     grid_indices: Tensor

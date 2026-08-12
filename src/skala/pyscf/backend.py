@@ -2,6 +2,7 @@
 
 from typing import (
     TYPE_CHECKING,
+    Any,
     TypeAlias,
     TypeVar,
 )
@@ -11,11 +12,17 @@ import torch
 from pyscf import dft
 from torch import Tensor
 
+from skala.typing import F64
+
 GPU_EXCEPTION: BaseException | None = None
+
+_ShapeT_co = TypeVar("_ShapeT_co", bound=tuple[int, ...], covariant=True)
+_DTypeT_co = TypeVar("_DTypeT_co", bound=np.dtype[np.generic], covariant=True)
 
 __all__ = [
     "KS",
     "Array",
+    "ArrayF64",
     "Grid",
     "check_gpu_imports_were_successful",
     "dft_gpu",
@@ -32,7 +39,14 @@ if TYPE_CHECKING:
 
     GPU_EXCEPTION = None
 
-    Array = TypeVar("Array", np.ndarray, cupy.ndarray)
+    Array: TypeAlias = (
+        np.ndarray[_ShapeT_co, _DTypeT_co] | cupy.ndarray[_ShapeT_co, _DTypeT_co]
+    )
+    ArrayF64 = TypeVar(
+        "ArrayF64",
+        np.ndarray[Any, F64],
+        cupy.ndarray[Any, F64],
+    )
     Grid: TypeAlias = dft.Grids | dft_gpu.Grids
     KS: TypeAlias = dft.rks.RKS | dft.uks.UKS | dft_gpu.rks.RKS | dft_gpu.uks.UKS
 else:
@@ -55,7 +69,14 @@ else:
                 "Failed to configure CuPy to use the PyTorch allocator."
             ) from e
 
-        Array = TypeVar("Array", np.ndarray, cupy.ndarray)
+        Array: TypeAlias = (
+            np.ndarray[_ShapeT_co, _DTypeT_co] | cupy.ndarray[_ShapeT_co, _DTypeT_co]
+        )
+        ArrayF64 = TypeVar(
+            "ArrayF64",
+            np.ndarray[Any, F64],
+            cupy.ndarray[Any, F64],
+        )
         Grid: TypeAlias = dft.Grids | dft_gpu.Grids
         KS: TypeAlias = dft.rks.RKS | dft.uks.UKS | dft_gpu.rks.RKS | dft_gpu.uks.UKS
 
@@ -64,7 +85,8 @@ else:
         GPU_EXCEPTION = e
         dft_gpu = None
 
-        Array = TypeVar("Array", bound=np.ndarray)
+        Array: TypeAlias = np.ndarray[_ShapeT_co, _DTypeT_co]
+        ArrayF64 = TypeVar("ArrayF64", bound=np.ndarray[Any, F64])
         Grid: TypeAlias = dft.Grids
         KS: TypeAlias = dft.rks.RKS | dft.uks.UKS
 
@@ -75,7 +97,7 @@ def check_gpu_imports_were_successful() -> None:
 
 
 def from_numpy_or_cupy(
-    x: Array,
+    x: Array[_ShapeT_co, _DTypeT_co],
     *,
     device: torch.device | None = None,
     dtype: torch.dtype | None = None,
