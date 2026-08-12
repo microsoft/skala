@@ -40,7 +40,7 @@ class LinearFeature(nn.Module, ABC):
 class MGGAFeatureFunction(LinearFeature):
     """Evaluate the requested linear meta-GGA density features."""
 
-    def __init__(self, feature_spec: FeatureSpec):
+    def __init__(self, feature_spec: FeatureSpec) -> None:
         super().__init__()
 
         if not feature_spec.requires_ao_evaluation:
