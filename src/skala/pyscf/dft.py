@@ -50,7 +50,6 @@ The provided classes support the same transformations and methods as the origina
 <pyscf.scf.hf.DFSkalaRKS_Scanner object at ...>
 """
 
-import logging
 import warnings
 from collections.abc import Callable
 from typing import Any, cast
@@ -62,38 +61,10 @@ from pyscf import dft, gto
 from pyscf.df import df_jk
 
 from skala.functional.base import ExcFunctionalBase
-from skala.pyscf.features import _ATOMIC_GRID_FEATURES
 from skala.pyscf.gradients import SkalaRKSGradient, SkalaUKSGradient
-from skala.pyscf.grids import UnsortableGrids
+from skala.pyscf.grids import SkalaGrids
 from skala.pyscf.numint import SkalaNumInt
 from skala.pyscf.utils import pyscf_version_newer_than_2_10
-
-logger = logging.getLogger(__name__)
-
-
-def _needs_unsorted_grids(func: ExcFunctionalBase) -> bool:
-    """Return True when the functional needs per-atom grid ordering."""
-    return bool(set(func.features) & _ATOMIC_GRID_FEATURES)
-
-
-def _build_grids_unsorted(
-    grids: dft.gen_grid.Grids, mol: gto.Mole
-) -> dft.gen_grid.Grids:
-    """Build grids without sorting, preserving per-atom ordering.
-
-    Also disables grid alignment padding, which would introduce extra
-    zero-weight grid points that are not accounted for in the per-atom
-    grid size decomposition used by the Skala functional.
-    """
-    if grids.alignment != 1:
-        logger.debug(
-            "Overriding grids.alignment from %d to 1. "
-            "The Skala functional requires unsorted, unpadded grids.",
-            grids.alignment,
-        )
-        grids.alignment = 1
-    grids.build(mol, sort_grids=False)
-    return grids
 
 
 class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
@@ -101,7 +72,7 @@ class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
 
     xc: str
 
-    grids: dft.gen_grid.Grids
+    grids: SkalaGrids
     """Numerical integration grids."""
 
     with_dftd3: DFTD3Dispersion | None = None
@@ -118,23 +89,23 @@ class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
         super().__init__(mol, xc="custom")
         self._keys.add("with_dftd3")
         self._numint = SkalaNumInt(xc, device=device or torch.device("cpu"))
-        self._needs_unsorted = _needs_unsorted_grids(xc)
+        self.small_rho_cutoff = 0  # pyscf 2.9 default is 1e-7
 
         d3 = xc.get_d3_settings()
         self.with_dftd3 = (
             DFTD3Dispersion(mol, d3) if with_dftd3 and d3 is not None else None
         )
 
-        if self._needs_unsorted:
-            self.grids = UnsortableGrids(mol)(level=self.grids.level)
-            _build_grids_unsorted(self.grids, mol)
+        self.grids = SkalaGrids(mol)(level=self.grids.level)
 
     def initialize_grids(
         self, mol: gto.Mole | None = None, dm: np.ndarray | None = None
     ) -> "SkalaRKS":
-        # Ensure grids stay unsorted even if user changed grid settings after __init__
-        if self._needs_unsorted and self.grids.coords is None:
-            _build_grids_unsorted(self.grids, mol or self.mol)
+        if not isinstance(self.grids, SkalaGrids):
+            raise TypeError(
+                "SkalaRKS requires skala.pyscf.grids.SkalaGrids, got "
+                f"{type(self.grids).__module__}.{type(self.grids).__name__}"
+            )
         return super().initialize_grids(mol or self.mol, dm)
 
     def energy_nuc(self) -> float:
@@ -190,7 +161,7 @@ class SkalaUKS(dft.uks.UKS):  # type: ignore[misc]
 
     xc: str
 
-    grids: dft.gen_grid.Grids
+    grids: SkalaGrids
     """Numerical integration grids."""
 
     with_dftd3: DFTD3Dispersion | None = None
@@ -207,23 +178,23 @@ class SkalaUKS(dft.uks.UKS):  # type: ignore[misc]
         super().__init__(mol, xc="custom")
         self._keys.add("with_dftd3")
         self._numint = SkalaNumInt(xc, device=device or torch.device("cpu"))
-        self._needs_unsorted = _needs_unsorted_grids(xc)
+        self.small_rho_cutoff = 0  # pyscf 2.9 default is 1e-7
 
         d3 = xc.get_d3_settings()
         self.with_dftd3 = (
             DFTD3Dispersion(mol, d3) if with_dftd3 and d3 is not None else None
         )
 
-        if self._needs_unsorted:
-            self.grids = UnsortableGrids(mol)(level=self.grids.level)
-            _build_grids_unsorted(self.grids, mol)
+        self.grids = SkalaGrids(mol)(level=self.grids.level)
 
     def initialize_grids(
         self, mol: gto.Mole | None = None, dm: np.ndarray | None = None
     ) -> "SkalaUKS":
-        # Ensure grids stay unsorted even if user changed grid settings after __init__
-        if self._needs_unsorted and self.grids.coords is None:
-            _build_grids_unsorted(self.grids, mol or self.mol)
+        if not isinstance(self.grids, SkalaGrids):
+            raise TypeError(
+                "SkalaUKS requires skala.pyscf.grids.SkalaGrids, got "
+                f"{type(self.grids).__module__}.{type(self.grids).__name__}"
+            )
         return super().initialize_grids(mol or self.mol, dm)
 
     def energy_nuc(self) -> float:

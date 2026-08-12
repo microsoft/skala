@@ -1,15 +1,40 @@
 # SPDX-License-Identifier: MIT
 
 from logging import getLogger
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from gpu4pyscf.dft import gen_grid
 from pyscf import gto
 
+if TYPE_CHECKING:
+    from skala.pyscf.screening import SpatialGridLayout
+
 LOG = getLogger(__name__)
 
 
-class UnsortableGrids(gen_grid.Grids):  # type: ignore
+class SkalaGrids(gen_grid.Grids):  # type: ignore
+    """GPU4PySCF grids with atom-major ordering and Skala layout caching."""
+
+    _spatial_grid_layout: "SpatialGridLayout | None"
+    _initializing: bool
+
+    def __init__(self, mol: gto.Mole | None = None) -> None:
+        super().__setattr__("_initializing", True)
+        super().__init__(mol)
+        super().__setattr__("alignment", 1)
+        super().__setattr__("_initializing", False)
+
+    def __setattr__(self, key: str, value: Any) -> None:
+        if (
+            key == "alignment"
+            and value != 1
+            and not getattr(self, "_initializing", False)
+        ):
+            raise ValueError(f"SkalaGrids alignment must be 1, got {value}")
+        if key in {"coords", "weights", "cutoff"}:
+            super().__setattr__("_spatial_grid_layout", None)
+        super().__setattr__(key, value)
+
     def build(
         self,
         mol: gto.Mole | None = None,

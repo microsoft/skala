@@ -16,10 +16,13 @@ dependencies:
   - pytorch * cpu_*
   - qcelemental
 # Testing and development
+  - memray
   - pre-commit
   - pytest
+  - pytest-benchmark
   - pytest-cov
   - pytest-randomly
+  - pytest-timeout
   - ruff
   - mypy >=2
   - pip:

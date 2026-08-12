@@ -4,17 +4,19 @@ import pytest
 import torch
 from pyscf import gto
 
+pytestmark = pytest.mark.gpu
+
 if not torch.cuda.is_available():
     pytest.skip(
         "Skipping gpu4pyscf classes tests, because CUDA is not available.",
         allow_module_level=True,
     )
 
-from skala.functional.base import ExcFunctionalBase
-from skala.gpu4pyscf import SkalaKS
-from skala.gpu4pyscf.dft import SkalaRKS, SkalaUKS
-from skala.gpu4pyscf.gradients import SkalaRKSGradient, SkalaUKSGradient
-from skala.gpu4pyscf.grids import UnsortableGrids
+from skala.functional.base import ExcFunctionalBase  # noqa: E402
+from skala.gpu4pyscf import SkalaKS  # noqa: E402
+from skala.gpu4pyscf.dft import SkalaRKS, SkalaUKS  # noqa: E402
+from skala.gpu4pyscf.gradients import SkalaRKSGradient, SkalaUKSGradient  # noqa: E402
+from skala.gpu4pyscf.grids import SkalaGrids  # noqa: E402
 
 
 @pytest.fixture(params=["skala-1.0", "skala-1.1"])
@@ -71,8 +73,7 @@ def test_skala_class(
     assert ks.xc == "custom"
     assert isinstance(ks, SkalaRKS if mol.spin == 0 else SkalaUKS)
     assert ks.with_dftd3 is not None if with_dftd3 else ks.with_dftd3 is None
-    if ks._needs_unsorted:
-        assert isinstance(ks.grids, UnsortableGrids)
+    assert isinstance(ks.grids, SkalaGrids)
 
     ks_scanner = ks.as_scanner()
     assert isinstance(ks_scanner, SkalaRKS if mol.spin == 0 else SkalaUKS)
@@ -85,20 +86,27 @@ def test_skala_class(
     grad = ks.nuc_grad_method()
     assert isinstance(grad, SkalaRKSGradient if mol.spin == 0 else SkalaUKSGradient)
     assert grad.with_dftd3 is not None if with_dftd3 else grad.with_dftd3 is None
-    if ks._needs_unsorted:
-        assert isinstance(grad.grids, UnsortableGrids)
+    assert isinstance(grad.grids, SkalaGrids)
 
     grad = ks.Gradients()
     assert isinstance(grad, SkalaRKSGradient if mol.spin == 0 else SkalaUKSGradient)
     assert grad.with_dftd3 is not None if with_dftd3 else grad.with_dftd3 is None
-    if ks._needs_unsorted:
-        assert isinstance(grad.grids, UnsortableGrids)
+    assert isinstance(grad.grids, SkalaGrids)
 
     ks = grad.base
     assert isinstance(ks, SkalaRKS if mol.spin == 0 else SkalaUKS)
     assert ks.with_dftd3 is not None if with_dftd3 else ks.with_dftd3 is None
-    if ks._needs_unsorted:
-        assert isinstance(ks.grids, UnsortableGrids)
+    assert isinstance(ks.grids, SkalaGrids)
+
+
+def test_skala_grids_require_unit_alignment() -> None:
+    mol = gto.M(atom="H", basis="sto-3g", spin=1, verbose=0)
+    grids = SkalaGrids(mol)
+
+    assert grids.alignment == 1
+    grids.alignment = 1
+    with pytest.raises(ValueError, match="alignment must be 1"):
+        grids.alignment = 256
 
 
 def test_unsortable_grids_disable_all_gpu4pyscf_sorting(

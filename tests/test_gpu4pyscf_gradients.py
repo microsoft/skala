@@ -4,6 +4,8 @@ import pytest
 import torch
 from torch.utils.dlpack import from_dlpack
 
+pytestmark = pytest.mark.gpu
+
 if not torch.cuda.is_available():
     pytest.skip(
         "Skipping gpu4pyscf gradients tests, because CUDA is not available.",
@@ -21,6 +23,7 @@ from _ridders import num_grad_ridders  # noqa: E402
 from gpu4pyscf import dft, scf  # noqa: E402
 from pyscf import gto  # noqa: E402
 from test_pyscf_gradients import FULL_GRAD_REF  # noqa: E402
+from utils import patch_ao_screening  # noqa: E402
 
 from skala.features import Feature, FeatureMap  # noqa: E402
 from skala.functional.base import ExcFunctionalBase  # noqa: E402
@@ -31,8 +34,26 @@ from skala.gpu4pyscf.gradients import (  # noqa: E402
     nuc_grad_from_veff,
     veff_and_expl_nuc_grad,
 )
+from skala.pyscf import SkalaKS as CpuSkalaKS  # noqa: E402
 from skala.pyscf.features import generate_features  # noqa: E402
+from skala.pyscf.gradients import SkalaRKSGradient as CpuSkalaRKSGradient  # noqa: E402
 from skala.utils import torch_allocator  # noqa: E402
+
+H2_SKALA_1_1_GRAD_REF = torch.tensor(
+    [
+        [
+            2.6170957571276746e-10,
+            2.1217813541405875e-10,
+            -1.345246115431109e-02,
+        ],
+        [
+            -2.6170957571276746e-10,
+            -2.1217813541405844e-10,
+            1.3452461154311535e-02,
+        ],
+    ],
+    dtype=torch.float64,
+)
 
 
 def test_torch_allocator_is_active_after_import() -> None:
@@ -444,6 +465,67 @@ def test_full_grad(
         f"Reference: {ref_grad}\n"
         f"Difference: {ana_grad - ref_grad}"
     )
+
+
+def test_nuclear_gradient_cpu_gpu_dense_screened_agree(
+    load_functional_cached: Callable[..., ExcFunctionalBase | str],
+) -> None:
+    """Compare complete nuclear gradients across backend and SCF screening routes.
+
+    AO screening controls the SCF feature/Vxc path that produces the converged
+    density. The analytic nuclear-gradient contraction then uses the same atom-major
+    implementation for the dense and screened densities on each backend.
+    """
+    cpu_functional = load_functional_cached("skala-1.1")
+    gpu_functional = load_functional_cached("skala-1.1", device=torch.device("cuda:0"))
+    assert isinstance(cpu_functional, ExcFunctionalBase)
+    assert isinstance(gpu_functional, ExcFunctionalBase)
+
+    gradients: dict[str, torch.Tensor] = {}
+    for backend, functional in (
+        ("cpu", cpu_functional),
+        ("gpu", gpu_functional),
+    ):
+        for screened in (False, True):
+            mol = gto.M(
+                atom="H 0 0 0; H 0 0 0.74",
+                basis="sto-3g",
+                verbose=0,
+            )
+            with patch_ao_screening(screened):
+                if backend == "cpu":
+                    mean_field = CpuSkalaKS(mol, xc=functional, with_dftd3=False)
+                    gradient_type = CpuSkalaRKSGradient
+                else:
+                    mean_field = SkalaKS(mol, xc=functional, with_dftd3=False)
+                    gradient_type = SkalaRKSGradient
+                mean_field.grids.level = 0
+                mean_field.grids.build(mol, sort_grids=False)
+                mean_field.conv_tol = 1e-10
+                mean_field.kernel()
+                assert mean_field.converged
+                gradient = gradient_type(mean_field).kernel()
+            route = f"{backend}-{'screened' if screened else 'dense'}"
+            gradients[route] = torch.from_numpy(gradient)
+
+    for route, gradient in gradients.items():
+        torch.testing.assert_close(
+            gradient,
+            H2_SKALA_1_1_GRAD_REF,
+            rtol=1e-7,
+            atol=1e-8,
+            msg=f"{route} does not match the stored nuclear-gradient reference",
+        )
+
+    cpu_dense = gradients["cpu-dense"]
+    for route, gradient in gradients.items():
+        torch.testing.assert_close(
+            gradient,
+            cpu_dense,
+            rtol=1e-7,
+            atol=1e-8,
+            msg=f"{route} does not match cpu-dense",
+        )
 
 
 def test_cuda_kernel_memory_stability() -> None:
