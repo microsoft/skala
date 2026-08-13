@@ -99,7 +99,7 @@ jobs:
 
     - name: Verify CUDA is available
       run: |
-        python -c "import torch; assert torch.cuda.is_available()"
+        python -c "import cupy, torch; assert torch.cuda.is_available(); cupy.linalg.norm(cupy.arange(3.0)).get()"
       shell: micromamba-shell {0}
 
     - name: Run GPU tests and doctests

@@ -16,6 +16,7 @@ dependencies:
   - pytorch-gpu
   - qcelemental
   - cuda-version >=12,<13
+  - cuda-nvcc >=12,<13
   - cutensor >=2
   # Testing and development
   - pre-commit
