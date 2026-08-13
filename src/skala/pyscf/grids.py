@@ -1,13 +1,17 @@
 # SPDX-License-Identifier: MIT
 
 from logging import getLogger
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
+import torch
 from pyscf import gto
 from pyscf.dft import gen_grid
 
-if TYPE_CHECKING:
-    from skala.pyscf.screening import SpatialGridLayout
+from skala.pyscf.spatial_grid_layout import (
+    CPU_AO_SCREENING_BLOCK_SIZE,
+    SpatialGridLayout,
+    prepare_spatial_grid_layout,
+)
 
 LOG = getLogger(__name__)
 
@@ -21,6 +25,7 @@ class SkalaGrids(gen_grid.Grids):  # type: ignore
     def __init__(self, mol: gto.Mole | None = None) -> None:
         super().__setattr__("_initializing", True)
         super().__init__(mol)
+        super().__setattr__("_spatial_grid_layout", None)
         super().__setattr__("alignment", 1)
         super().__setattr__("_initializing", False)
 
@@ -46,10 +51,17 @@ class SkalaGrids(gen_grid.Grids):  # type: ignore
             LOG.debug("sorted grids not supported, forcing unsorted grids")
         return super().build(mol, with_non0tab, sort_grids=False, **kwargs)
 
-    def get_cached_spatial_grid_layout(self) -> "SpatialGridLayout | None":
-        """Return the spatial layout cached for the current grid state."""
-        return getattr(self, "_spatial_grid_layout", None)
-
-    def cache_spatial_grid_layout(self, layout: "SpatialGridLayout") -> None:
-        """Cache a spatial layout until layout-defining grid state changes."""
-        self._spatial_grid_layout = layout
+    def prepare_spatial_grid_layout(
+        self,
+        mol: gto.Mole,
+        device: torch.device,
+    ) -> SpatialGridLayout:
+        """Return the cached spatial layout, creating it when needed."""
+        if self._spatial_grid_layout is None:
+            self._spatial_grid_layout = prepare_spatial_grid_layout(
+                mol,
+                self,
+                CPU_AO_SCREENING_BLOCK_SIZE,
+                device,
+            )
+        return self._spatial_grid_layout

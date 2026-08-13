@@ -11,8 +11,9 @@ from utils import QuadraticFunctional, patch_ao_screening
 from skala.features import Feature, FeatureMap
 from skala.functional.base import ExcFunctionalBase
 from skala.pyscf import ao_evaluation as ao_evaluation_module
+from skala.pyscf import grids as grids_module
 from skala.pyscf import model_chunking as model_chunking_module
-from skala.pyscf import screening as screening_module
+from skala.pyscf import spatial_grid_layout as spatial_grid_layout_module
 from skala.pyscf import xc_integrator as xc_integrator_module
 from skala.pyscf.ao_evaluation import (
     _active_cpu_ao_indices,
@@ -27,7 +28,7 @@ from skala.pyscf.feature_math import MGGAFeatureFunction
 from skala.pyscf.grids import SkalaGrids
 from skala.pyscf.model_chunking import ModelFeatureChunk
 from skala.pyscf.numint import SkalaNumInt
-from skala.pyscf.screening import (
+from skala.pyscf.spatial_grid_layout import (
     SpatialGridLayout,
     _decompose_grid_into_spatial_blocks,
     prepare_spatial_grid_layout,
@@ -357,7 +358,7 @@ def test_prepare_spatially_sorted_cpu_grids(
         return forward, inverse
 
     monkeypatch.setattr(
-        screening_module,
+        spatial_grid_layout_module,
         "_decompose_grid_into_spatial_blocks",
         fake_decompose_grid_into_spatial_blocks,
     )
@@ -428,7 +429,7 @@ def test_grid_reuses_spatial_grid_layout_across_numints(
         return layout
 
     monkeypatch.setattr(
-        xc_integrator_module,
+        grids_module,
         "prepare_spatial_grid_layout",
         fake_prepare_spatial_grid_layout,
     )
@@ -437,7 +438,7 @@ def test_grid_reuses_spatial_grid_layout_across_numints(
 
     layout = numint.integrator._get_spatial_grid_layout(carbon, grids)
     assert other_numint.integrator._get_spatial_grid_layout(carbon, grids) is layout
-    assert grids.get_cached_spatial_grid_layout() is layout
+    assert grids._spatial_grid_layout is layout
     assert len(layouts) == 1
 
     numint.reset()
@@ -445,7 +446,7 @@ def test_grid_reuses_spatial_grid_layout_across_numints(
 
     other_layout = numint.integrator._get_spatial_grid_layout(carbon, other_grids)
     assert other_layout is not layout
-    assert other_grids.get_cached_spatial_grid_layout() is other_layout
+    assert other_grids._spatial_grid_layout is other_layout
     assert len(layouts) == 2
 
 
@@ -540,14 +541,6 @@ def test_first_and_second_order_use_same_screening_decision(
         routes.append("screened")
         return dm.sum().reshape(1, 1)
 
-    def fake_screened_feature_jvp(
-        dm_tangent: torch.Tensor,
-        mol: gto.Mole,
-        spatial_grid_layout: object,
-        feature_function: MGGAFeatureFunction,
-    ) -> torch.Tensor:
-        return dm_tangent.sum().reshape(1, 1)
-
     def fake_prepare_model_feature_chunks(
         mol: gto.Mole,
         dm: torch.Tensor,
@@ -566,7 +559,7 @@ def test_first_and_second_order_use_same_screening_decision(
         xc_integrator_module, "generate_features", fake_generate_features
     )
     monkeypatch.setattr(
-        xc_integrator_module,
+        grids_module,
         "prepare_spatial_grid_layout",
         fake_prepare_spatial_grid_layout,
     )
@@ -579,11 +572,6 @@ def test_first_and_second_order_use_same_screening_decision(
         xc_integrator_module,
         "prepare_model_feature_chunks",
         fake_prepare_model_feature_chunks,
-    )
-    monkeypatch.setattr(
-        xc_integrator_module,
-        "screened_feature_jvp",
-        fake_screened_feature_jvp,
     )
     numint = SkalaNumInt(QuadraticFunctional())
     dm = torch.eye(carbon.nao_nr(), dtype=torch.float64)
@@ -901,7 +889,7 @@ def test_skala_grids_invalidate_spatial_layout(carbon: gto.Mole) -> None:
     assert integrator._get_spatial_grid_layout(carbon, grids) is layout
 
     grids.reset()
-    assert grids.get_cached_spatial_grid_layout() is None
+    assert grids._spatial_grid_layout is None
     grids.level = 0
     grids.alignment = 1
     grids.build(sort_grids=False)
@@ -909,7 +897,7 @@ def test_skala_grids_invalidate_spatial_layout(carbon: gto.Mole) -> None:
     assert rebuilt_layout is not layout
 
     grids.cutoff /= 10
-    assert grids.get_cached_spatial_grid_layout() is None
+    assert grids._spatial_grid_layout is None
 
 
 def test_numint_reset_does_not_clear_grid_spatial_layout(carbon: gto.Mole) -> None:
@@ -921,10 +909,10 @@ def test_numint_reset_does_not_clear_grid_spatial_layout(carbon: gto.Mole) -> No
         block_size=dft.gen_grid.BLKSIZE,
         device=torch.device("cpu"),
     )
-    grids.cache_spatial_grid_layout(spatial_grid_layout)
+    grids._spatial_grid_layout = spatial_grid_layout
 
     assert numint.reset() is numint
-    assert grids.get_cached_spatial_grid_layout() is spatial_grid_layout
+    assert grids._spatial_grid_layout is spatial_grid_layout
 
 
 @pytest.mark.parametrize(

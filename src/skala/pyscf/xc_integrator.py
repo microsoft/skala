@@ -3,7 +3,7 @@
 """Tensor-level exchange-correlation integration."""
 
 from collections.abc import Callable
-from typing import NamedTuple, Protocol, cast
+from typing import TYPE_CHECKING, NamedTuple, TypeAlias, TypeGuard
 
 import torch
 from pyscf import gto
@@ -18,24 +18,36 @@ from skala.pyscf.evaluation import EvaluationPolicy, FeatureSpec
 from skala.pyscf.features import generate_features
 from skala.pyscf.grids import SkalaGrids as PySCFSkalaGrids
 from skala.pyscf.model_chunking import prepare_model_feature_chunks
-from skala.pyscf.screening import (
-    CPU_AO_SCREENING_BLOCK_SIZE,
-    SpatialGridLayout,
-    prepare_spatial_grid_layout,
-    screened_feature_jvp,
-)
+from skala.pyscf.spatial_grid_layout import SpatialGridLayout
 
+if TYPE_CHECKING:
+    from skala.gpu4pyscf.grids import SkalaGrids as GPU4PySCFSkalaGrids
 
-class _SpatialGridCache(Protocol):
-    def get_cached_spatial_grid_layout(self) -> SpatialGridLayout | None: ...
-
-    def cache_spatial_grid_layout(self, layout: SpatialGridLayout) -> None: ...
+    _SkalaGrid: TypeAlias = PySCFSkalaGrids | GPU4PySCFSkalaGrids
 
 
 def _should_screen_aos(mol: gto.Mole) -> bool:
     """Return whether PySCF's sparse-contraction crossover is exceeded."""
     # we use a smaller threshold because for MetaGGAs the AO evaluation is more expensive
     return 2 * mol.nao_nr() > pyscf_numint.SWITCH_SIZE
+
+
+def _assert_skala_grid(grids: Grid, device: torch.device) -> TypeGuard["_SkalaGrid"]:
+    if device.type == "cuda":
+        check_gpu_imports_were_successful()
+        from skala.gpu4pyscf.grids import SkalaGrids as GPU4PySCFSkalaGrids
+
+        expected_type = GPU4PySCFSkalaGrids
+    else:
+        expected_type = PySCFSkalaGrids
+
+    if not isinstance(grids, expected_type):
+        raise TypeError(
+            f"{device.type.upper()} Skala XC evaluation requires "
+            f"{expected_type.__module__}.{expected_type.__name__}, got "
+            f"{type(grids).__module__}.{type(grids).__name__}"
+        )
+    return True
 
 
 class XCResult(NamedTuple):
@@ -91,7 +103,7 @@ class XCIntegrator:
     ) -> XCResult:
         """Evaluate electron count, XC energy, and XC potential."""
         self._validate_device(dm)
-        self._require_skala_grids(grids)
+        _assert_skala_grid(grids, self.device)
         if self.feature_spec.supports_spatial_decomposition and _should_screen_aos(mol):
             return self._integrate_screened(mol, grids, dm, max_memory)
         return self._integrate_dense(mol, grids, dm, max_memory)
@@ -106,7 +118,7 @@ class XCIntegrator:
     ) -> Callable[[Tensor], Tensor]:
         """Build an XC-only Hessian-vector product callable."""
         self._validate_device(dm0)
-        self._require_skala_grids(grids)
+        _assert_skala_grid(grids, self.device)
         if self.feature_spec.supports_spatial_decomposition and _should_screen_aos(mol):
             return self._gen_response_screened(
                 mol,
@@ -127,46 +139,10 @@ class XCIntegrator:
                 f"Density matrix device {dm.device} does not match functional device {self.device}"
             )
 
-    def _require_skala_grids(self, grids: Grid) -> _SpatialGridCache:
-        if self.device.type == "cuda":
-            check_gpu_imports_were_successful()
-            from skala.gpu4pyscf.grids import SkalaGrids as GPU4PySCFSkalaGrids
-
-            expected_type = GPU4PySCFSkalaGrids
-        else:
-            expected_type = PySCFSkalaGrids
-
-        if not isinstance(grids, expected_type):
-            raise TypeError(
-                f"{self.device.type.upper()} Skala XC evaluation requires "
-                f"{expected_type.__module__}.{expected_type.__name__}, got "
-                f"{type(grids).__module__}.{type(grids).__name__}"
-            )
-        return cast(_SpatialGridCache, grids)
-
-    def _get_spatial_grid_layout(
-        self,
-        mol: gto.Mole,
-        grids: Grid,
-    ) -> SpatialGridLayout:
-        grid_cache = self._require_skala_grids(grids)
-        spatial_grid_layout = grid_cache.get_cached_spatial_grid_layout()
-        if spatial_grid_layout is not None:
-            return spatial_grid_layout
-
-        if self.device.type == "cuda":
-            check_gpu_imports_were_successful()
-            from gpu4pyscf.dft import numint as dft_gpu_numint
-
-            block_size = int(dft_gpu_numint.MIN_BLK_SIZE)
-        else:
-            block_size = CPU_AO_SCREENING_BLOCK_SIZE
-
-        spatial_grid_layout = prepare_spatial_grid_layout(
-            mol, grids, block_size, self.device
-        )
-        grid_cache.cache_spatial_grid_layout(spatial_grid_layout)
-        return spatial_grid_layout
+    def _get_spatial_grid_layout(self, mol: gto.Mole, grids: Grid) -> SpatialGridLayout:
+        if _assert_skala_grid(grids, self.device):
+            return grids.prepare_spatial_grid_layout(mol, self.device)
+        raise AssertionError("unreachable")
 
     def _integrate_screened(
         self,
@@ -300,12 +276,16 @@ class XCIntegrator:
         )
 
         def hessian_vector_product(dm1: Tensor) -> Tensor:
-            atom_major_tangent = screened_feature_jvp(
+            sorted_tangent = ao_evaluation.evaluate_ao_features_blockwise(
                 dm1,
                 mol,
-                spatial_grid_layout,
+                spatial_grid_layout.sorted_grids,
                 feature_function,
+                spatial_grid_layout.block_size,
             )
+            atom_major_tangent = sorted_tangent.index_select(
+                -1, spatial_grid_layout.inverse_permutation
+            ).detach()
             atom_major_hessian_action = torch.zeros_like(atom_major_raw_features)
             for chunk in model_chunks:
                 local_raw_features = chunk.raw_features

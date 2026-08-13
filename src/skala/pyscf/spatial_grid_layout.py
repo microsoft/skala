@@ -1,25 +1,17 @@
 # SPDX-License-Identifier: MIT
 
-"""Extend PySCF and GPU4PySCF grids for screened Skala evaluation.
+"""Prepare spatially ordered PySCF and GPU4PySCF integration grids.
 
 Skala's AO evaluator benefits from spatially local grid blocks, while PySCF and
 GPU4PySCF provide integration grids in atom-major order with backend-specific AO
-screening metadata. This module is the extension layer interposed between those
-backend-owned grid objects and Skala's feature evaluation. It deliberately avoids
-subclassing either grid implementation so the same screened path can serve both.
+screening metadata. This module derives a reusable :class:`SpatialGridLayout`
+without modifying the backend-owned source grid.
 
-Grid preparation produces a :class:`SpatialGridLayout`, which is cached on the source
-grid for later evaluations. The source grid's integration data remains unchanged. A
-shallow grid copy receives spatially reordered coordinates and weights. For PySCF,
-its ``non0tab`` shell-screening table is rebuilt; for GPU4PySCF, ``_non0ao_idx`` is
-cleared so the backend can rebuild it for the new order. The cached forward and
-inverse permutations bridge spatial AO evaluation and the atom-major layout expected
-by model features.
-
-:func:`prepare_spatial_grid_layout` owns this reusable grid extension. The integrator
-attaches it to the source grid and owns density-dependent feature evaluation.
-Atom-aligned model batching is a separate process owned by
-:mod:`skala.pyscf.model_chunking`.
+A shallow grid copy receives spatially reordered coordinates and weights. For
+PySCF, its ``non0tab`` shell-screening table is rebuilt; for GPU4PySCF,
+``_non0ao_idx`` is cleared so the backend can rebuild it for the new order. The
+cached forward and inverse permutations bridge spatial AO evaluation and the
+atom-major layout expected by model features.
 """
 
 from copy import copy
@@ -31,7 +23,6 @@ import torch
 from pyscf import dft, gto
 from torch import Tensor
 
-from skala.pyscf import ao_evaluation, feature_math
 from skala.pyscf.backend import Grid, check_gpu_imports_were_successful
 
 CPU_AO_SCREENING_BLOCK_SIZE = 9 * dft.gen_grid.BLKSIZE
@@ -171,24 +162,3 @@ def prepare_spatial_grid_layout(
         forward_permutation=torch.as_tensor(forward, device=device),
         inverse_permutation=torch.as_tensor(inverse, device=device),
     )
-
-
-def screened_feature_jvp(
-    dm_tangent: Tensor,
-    mol: gto.Mole,
-    spatial_grid_layout: SpatialGridLayout,
-    feature_function: feature_math.MGGAFeatureFunction,
-    compile_feature_function: bool = False,
-) -> Tensor:
-    """Apply the raw-feature Jacobian and restore atom-major grid order."""
-    sorted_tangent = ao_evaluation.evaluate_ao_features_blockwise(
-        dm_tangent,
-        mol,
-        spatial_grid_layout.sorted_grids,
-        feature_function,
-        spatial_grid_layout.block_size,
-        compile_feature_function,
-    )
-    return sorted_tangent.index_select(
-        -1, spatial_grid_layout.inverse_permutation
-    ).detach()

@@ -1,13 +1,16 @@
 # SPDX-License-Identifier: MIT
 
 from logging import getLogger
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-from gpu4pyscf.dft import gen_grid
+import torch
+from gpu4pyscf.dft import gen_grid, numint
 from pyscf import gto
 
-if TYPE_CHECKING:
-    from skala.pyscf.screening import SpatialGridLayout
+from skala.pyscf.spatial_grid_layout import (
+    SpatialGridLayout,
+    prepare_spatial_grid_layout,
+)
 
 LOG = getLogger(__name__)
 
@@ -21,6 +24,7 @@ class SkalaGrids(gen_grid.Grids):  # type: ignore
     def __init__(self, mol: gto.Mole | None = None) -> None:
         super().__setattr__("_initializing", True)
         super().__init__(mol)
+        super().__setattr__("_spatial_grid_layout", None)
         super().__setattr__("alignment", 1)
         super().__setattr__("_initializing", False)
 
@@ -42,7 +46,7 @@ class SkalaGrids(gen_grid.Grids):  # type: ignore
         sort_grids: bool = True,
         sort_grids_of_each_atom: bool = False,
         **kwargs: Any,
-    ) -> "UnsortableGrids":
+    ) -> "SkalaGrids":
         if sort_grids or sort_grids_of_each_atom:
             LOG.debug("sorted grids not supported, forcing unsorted grids")
         return super().build(
@@ -52,3 +56,18 @@ class SkalaGrids(gen_grid.Grids):  # type: ignore
             sort_grids_of_each_atom=False,
             **kwargs,
         )
+
+    def prepare_spatial_grid_layout(
+        self,
+        mol: gto.Mole,
+        device: torch.device,
+    ) -> SpatialGridLayout:
+        """Return the cached spatial layout, creating it when needed."""
+        if self._spatial_grid_layout is None:
+            self._spatial_grid_layout = prepare_spatial_grid_layout(
+                mol,
+                self,
+                int(numint.MIN_BLK_SIZE),
+                device,
+            )
+        return self._spatial_grid_layout

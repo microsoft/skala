@@ -38,7 +38,7 @@ from skala.pyscf.evaluation import FeatureSpec  # noqa: E402
 from skala.pyscf.feature_math import MGGAFeatureFunction  # noqa: E402
 from skala.pyscf.grids import SkalaGrids as PySCFSkalaGrids  # noqa: E402
 from skala.pyscf.numint import SkalaNumInt  # noqa: E402
-from skala.pyscf.screening import prepare_spatial_grid_layout  # noqa: E402
+from skala.pyscf.spatial_grid_layout import prepare_spatial_grid_layout  # noqa: E402
 from skala.pyscf.xc_integrator import XCIntegrator  # noqa: E402
 
 CARBON_CHAIN = """
@@ -111,7 +111,7 @@ def test_gpu_skala_grids_invalidate_spatial_layout() -> None:
     assert integrator._get_spatial_grid_layout(mol, grids) is layout
 
     grids.reset()
-    assert grids.get_cached_spatial_grid_layout() is None
+    assert grids._spatial_grid_layout is None
     grids.level = 0
     grids.alignment = 1
     grids.build()
