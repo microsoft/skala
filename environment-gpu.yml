@@ -18,7 +18,7 @@ dependencies:
   - cuda-version >=12,<13
   - cuda-nvcc >=12,<13
   - cutensor >=2
-  # Testing and development
+  # Testing and development dependencies
   - pre-commit
   - pytest
   - pytest-cov
