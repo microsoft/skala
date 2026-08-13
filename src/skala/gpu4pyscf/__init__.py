@@ -86,11 +86,11 @@ def SkalaKS(
     >>> ks = ks.set(verbose=0)
     >>> energy = ks.kernel()
     >>> print(energy)  # DOCTEST: Ellipsis
-    -1.142773...
+    -1.143024...
     >>> ks = ks.nuc_grad_method()
     >>> gradient = ks.kernel()
     >>> print(abs(gradient).mean())  # DOCTEST: Ellipsis
-    0.029477...
+    0.029415...
     """
     if isinstance(xc, str):
         xc = load_functional(xc, device=torch.device("cuda:0"))
@@ -165,12 +165,12 @@ def SkalaRKS(
     >>> import torch
     >>>
     >>> mol = gto.M(atom="H 0 0 0; H 0 0 1", basis="def2-svp")
-    >>> ks = SkalaRKS(mol, xc=load_functional("skala-1.1", device=torch.device("cuda:0")), with_density_fit=True)(verbose=0)
+    >>> ks = SkalaRKS(mol, xc=load_functional("skala-1.1", device=torch.device("cuda:0")), with_density_fit=True, auxbasis="def2-svp-jkfit")(verbose=0)
     >>> ks  # DOCTEST: Ellipsis
     <gpu4pyscf.df.df_jk.DFSkalaRKS object at ...>
     >>> energy = ks.kernel()
     >>> print(energy)  # DOCTEST: Ellipsis
-    -1.142773...
+    -1.143024...
     """
     if isinstance(xc, str):
         xc = load_functional(xc, device=torch.device("cuda:0"))
@@ -247,7 +247,7 @@ def SkalaUKS(
     <gpu4pyscf.df.df_jk.DFSkalaUKS object at ...>
     >>> energy = ks.kernel()
     >>> print(energy)  # DOCTEST: Ellipsis
-    -0.499031...
+    -0.499123...
     """
     if isinstance(xc, str):
         xc = load_functional(xc, device=torch.device("cuda:0"))

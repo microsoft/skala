@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   lint:
-    runs-on: microsoft-skala-gpu-pool
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
@@ -75,4 +75,39 @@ jobs:
         --durations=50 --durations-min=1.0
         --pyargs skala
         tests/
+      shell: micromamba-shell {0}
+
+  gpu-test:
+    runs-on: microsoft-skala-gpu-pool
+    needs:
+      - lint
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+    - name: Setup micromamba
+      uses: mamba-org/setup-micromamba@4b9113af4fba0e9e1124b252dd6497a419e7396d # v1
+      with:
+        environment-file: environment-gpu.yml
+        environment-name: skala-gpu
+        cache-environment: true
+        cache-downloads: true
+
+    - name: Install package in development mode
+      run: |
+        pip install -e . --no-deps
+      shell: micromamba-shell {0}
+
+    - name: Verify CUDA is available
+      run: |
+        python -c "import torch; assert torch.cuda.is_available()"
+      shell: micromamba-shell {0}
+
+    - name: Run GPU tests and doctests
+      run: >-
+        pytest
+        -v
+        --doctest-modules
+        src/skala/gpu4pyscf/
+        tests/test_gpu4pyscf_classes.py
+        tests/test_gpu4pyscf_gradients.py
       shell: micromamba-shell {0}
