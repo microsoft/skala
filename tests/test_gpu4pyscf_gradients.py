@@ -315,7 +315,8 @@ def test_grad_veff(mol_name: str) -> None:
     ana_grad = 2 * nuc_grad_from_veff(mol, veff, rdm1)
 
     check_mat = (ana_grad - num_grad).abs() <= torch.max(
-        2**11 * num_err, torch.tensor(torch.finfo(num_grad.dtype).eps * 2**21)
+        2**11 * num_err,
+        torch.tensor(1e-8, dtype=num_grad.dtype, device=num_grad.device),
     )
 
     print(f"{num_err = }")

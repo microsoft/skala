@@ -15,7 +15,6 @@ dependencies:
   - python
   - pytorch-gpu
   - qcelemental
-  - cuda-toolkit >=12,<13
   - cuda-version >=12,<13
   - cutensor >=2
   # Testing and development

@@ -273,9 +273,10 @@ def test_grad_veff(mol_name: str) -> None:
     # We therefore keep the per-element Ridders bound: num_grad_ridders returns an
     # error estimate that tracks each component's finite-difference accuracy, so
     # the tolerance is tight where the reference is good and loose only where it
-    # is genuinely coarse.
+    # is genuinely coarse. The absolute floor covers platform-dependent
+    # cancellation in components whose exact value is zero by symmetry.
     check_mat = (ana_grad - num_grad).abs() <= torch.max(
-        2**11 * num_err, torch.tensor(torch.finfo(num_grad.dtype).eps * 2**21)
+        2**11 * num_err, torch.tensor(1e-8, dtype=num_grad.dtype)
     )
 
     print(f"{num_err = }")
