@@ -123,6 +123,7 @@ def test_mgga_supported_features_are_linear_in_density_matrix(
 def test_mgga_analytic_vjp_matches_autograd(
     feature_names: tuple[Feature, ...], spin_channels: int | None
 ) -> None:
+    """Match the analytic MGGA VJP to autograd for every feature and spin layout."""
     feature_function = MGGAFeatureFunction(FeatureSpec(feature_names))
     ncomp = (
         (feature_function.deriv + 1)
@@ -149,6 +150,7 @@ def test_mgga_analytic_vjp_matches_autograd(
 def test_feature_block_compiled_vjp_matches_eager(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Match compiled blockwise feature evaluation and VJP to eager execution."""
     feature_function = MGGAFeatureFunction(FeatureSpec(_MGGA_FEATURES))
     generator = torch.Generator().manual_seed(0)
     block = _AOBlock(
@@ -197,6 +199,7 @@ def test_feature_block_compiled_vjp_matches_eager(
 def test_mgga_requires_at_least_one_ao_derived_feature(
     feature_names: list[Feature],
 ) -> None:
+    """Reject MGGA feature functions that contain no AO-derived feature."""
     with pytest.raises(
         ValueError, match="At least one AO-derived feature must be selected"
     ):
@@ -204,6 +207,7 @@ def test_mgga_requires_at_least_one_ao_derived_feature(
 
 
 def test_patch_ao_screening_restores_previous_decision(carbon: gto.Mole) -> None:
+    """Restore the previous screening decision after nested route patches exit."""
     original_decision = xc_integrator_module._should_screen_aos
 
     with patch_ao_screening(False):
@@ -217,6 +221,7 @@ def test_patch_ao_screening_restores_previous_decision(carbon: gto.Mole) -> None
 
 
 def test_active_cpu_ao_indices(carbon: gto.Mole) -> None:
+    """Expand active CPU shells to AO indices and preserve an empty selection."""
     ao_loc = carbon.ao_loc_nr()
     screen_index = np.zeros((2, carbon.nbas), dtype=np.uint8)
     screen_index[0, 0] = 1
@@ -237,6 +242,7 @@ def test_active_cpu_ao_indices(carbon: gto.Mole) -> None:
 
 
 def test_resolve_ao_block_size_modes(carbon: gto.Mole) -> None:
+    """Resolve aligned CPU block sizes and reject explicit GPU block sizing."""
     feature_function = MGGAFeatureFunction(FeatureSpec([Feature.DENSITY]))
     backend_block_size = dft.gen_grid.BLKSIZE
 
@@ -274,6 +280,7 @@ def test_resolve_ao_block_size_modes(carbon: gto.Mole) -> None:
 def test_decompose_grid_into_spatial_blocks_restores_original_order(
     ngrids: int, block_size: int
 ) -> None:
+    """Produce complete spatial blocks and an inverse restoring original order."""
     coords = np.arange(3 * ngrids, dtype=np.float64).reshape(ngrids, 3)
 
     forward, inverse = _decompose_grid_into_spatial_blocks(coords, block_size)
@@ -288,6 +295,7 @@ def test_decompose_grid_into_spatial_blocks_restores_original_order(
 
 
 def test_decompose_grid_into_spatial_blocks_groups_interleaved_clusters() -> None:
+    """Group interleaved spatial clusters into homogeneous evaluator blocks."""
     block_size = 3
     labels = np.tile(np.arange(4), block_size)
     offsets = np.repeat(np.arange(block_size), 4)
@@ -302,6 +310,7 @@ def test_decompose_grid_into_spatial_blocks_groups_interleaved_clusters() -> Non
 
 
 def test_decompose_grid_into_spatial_blocks_uses_principal_direction() -> None:
+    """Partition an oblique point cloud along its principal spatial direction."""
     longitudinal = np.arange(-3.5, 4.0)
     transverse = 0.45 * (np.square(longitudinal) - np.mean(np.square(longitudinal)))
     coords = np.column_stack(
@@ -319,6 +328,7 @@ def test_decompose_grid_into_spatial_blocks_uses_principal_direction() -> None:
 
 
 def test_decompose_grid_into_spatial_blocks_handles_identical_points() -> None:
+    """Keep a deterministic permutation when all grid coordinates are identical."""
     coords = np.ones((10, 3), dtype=np.float64)
 
     forward, inverse = _decompose_grid_into_spatial_blocks(coords, block_size=4)
@@ -464,6 +474,7 @@ class FakeKS:
 
 
 def test_call_rejects_second_order_evaluation(carbon: gto.Mole) -> None:
+    """Direct callers must use gen_response instead of second_order evaluation."""
     numint = SkalaNumInt(QuadraticFunctional())
 
     with pytest.raises(NotImplementedError, match="second-order evaluation"):
@@ -484,6 +495,7 @@ def test_first_and_second_order_use_same_screening_decision(
     expected: bool,
     response_safety_fraction: float | None,
 ) -> None:
+    """Route energy and response consistently and propagate response memory policy."""
     routes: list[str] = []
     safety_fractions: list[float] = []
 
@@ -596,7 +608,8 @@ def test_first_and_second_order_use_same_screening_decision(
 
     assert result.shape == (carbon.nao_nr(), carbon.nao_nr())
     expected_route = "screened" if expected else "dense"
-    assert routes == [expected_route, expected_route]
+    expected_route_count = 3 if expected else 2
+    assert routes == [expected_route] * expected_route_count
     if expected:
         assert safety_fractions == [
             0.8,
@@ -708,6 +721,7 @@ def test_blockwise_ao_feature_transforms_follow_linear_operator(
 def test_cpu_screening_slices_and_scatters_full_derivatives(
     carbon: gto.Mole, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Slice active CPU AOs per block and scatter VXC and HVP to full matrices."""
     block_size = dft.gen_grid.BLKSIZE
     ngrids = 2 * block_size
     grids = dft.Grids(carbon)
@@ -871,6 +885,7 @@ def _minimal_atom_grid(mol: gto.Mole) -> SkalaGrids:
 
 
 def test_atom_major_features_require_skala_grids(carbon: gto.Mole) -> None:
+    """Reject backend grids that do not preserve Skala's atom-major layout."""
     integrator = XCIntegrator(QuadraticFunctional())
     grids = dft.Grids(carbon)
     dm = torch.eye(carbon.nao_nr(), dtype=torch.float64)
@@ -882,6 +897,7 @@ def test_atom_major_features_require_skala_grids(carbon: gto.Mole) -> None:
 
 
 def test_skala_grids_invalidate_spatial_layout(carbon: gto.Mole) -> None:
+    """Invalidate and rebuild a cached spatial layout after grid state changes."""
     integrator = XCIntegrator(QuadraticFunctional())
     grids = _minimal_atom_grid(carbon)
 
@@ -901,6 +917,7 @@ def test_skala_grids_invalidate_spatial_layout(carbon: gto.Mole) -> None:
 
 
 def test_numint_reset_does_not_clear_grid_spatial_layout(carbon: gto.Mole) -> None:
+    """Preserve the grid-owned spatial layout when resetting a NumInt instance."""
     numint = SkalaNumInt(QuadraticFunctional())
     grids = _minimal_atom_grid(carbon)
     spatial_grid_layout = prepare_spatial_grid_layout(
@@ -952,6 +969,7 @@ def test_cpu_rks_uks_dense_screened_equivalence(
     rtol: float,
     atol: float,
 ) -> None:
+    """Match dense and screened CPU results for restricted and unrestricted spins."""
     mol = gto.M(atom=atom, basis="sto-3g", spin=spin, verbose=0)
     mean_field = mean_field_factory(mol)
 
@@ -973,6 +991,7 @@ def test_cpu_rks_uks_dense_screened_equivalence(
 
 
 def test_cpu_quadratic_dense_screened_equivalence_heteronuclear() -> None:
+    """Match dense and screened quadratic integration on a heteronuclear grid."""
     mol = gto.M(atom="H 0 0 0; F 0 0 0.92", basis="sto-3g", spin=0, verbose=0)
     grids = _minimal_atom_grid(mol)
     numint = SkalaNumInt(QuadraticFunctional())
@@ -988,7 +1007,51 @@ def test_cpu_quadratic_dense_screened_equivalence_heteronuclear() -> None:
         assert np.allclose(dense_value, screened_value, rtol=1e-10, atol=1e-11)
 
 
+@pytest.mark.parametrize(
+    ("features", "energy_feature"),
+    [
+        pytest.param(
+            [Feature.ATOMIC_GRID_SIZES, Feature.GRAD, Feature.GRID_WEIGHTS],
+            Feature.GRAD,
+            id="density",
+        ),
+        pytest.param(
+            [Feature.ATOMIC_GRID_SIZES, Feature.DENSITY],
+            Feature.DENSITY,
+            id="grid-weights",
+        ),
+    ],
+)
+def test_screened_integration_adds_bookkeeping_features(
+    features: list[Feature], energy_feature: Feature
+) -> None:
+    """Add density and grid weights needed for screened integration bookkeeping."""
+
+    class BookkeepingFunctional(ExcFunctionalBase):
+        def __init__(self) -> None:
+            super().__init__()
+            self.features = features
+
+        def get_exc(self, mol: FeatureMap) -> torch.Tensor:
+            return mol[energy_feature].square().sum()
+
+    mol = gto.M(atom="H 0 0 0; H 0 0 0.74", basis="sto-3g", verbose=0)
+    grids = _minimal_atom_grid(mol)
+    integrator = XCIntegrator(BookkeepingFunctional())
+    dm = torch.as_tensor(dft.RKS(mol).get_init_guess())
+
+    with patch_ao_screening(False):
+        dense = integrator(mol, grids, dm.clone())
+    with patch_ao_screening(True):
+        screened = integrator(mol, grids, dm.clone())
+
+    torch.testing.assert_close(screened.electron_count, dense.electron_count)
+    torch.testing.assert_close(screened.energy, dense.energy)
+    torch.testing.assert_close(screened.potential, dense.potential)
+
+
 def test_cpu_response_dense_screened_equivalence() -> None:
+    """Match dense and screened CPU Hessian actions for a quadratic functional."""
     mol = gto.M(atom="H 0 0 0; F 0 0 0.92", basis="sto-3g", spin=0, verbose=0)
     grids = _minimal_atom_grid(mol)
     ks = FakeKS(mol, grids)
@@ -1011,11 +1074,46 @@ def test_cpu_response_dense_screened_equivalence() -> None:
     )
 
 
+@pytest.mark.parametrize("screened", [False, True], ids=["dense", "screened"])
+def test_response_of_linear_functional_is_zero(screened: bool) -> None:
+    """Return a zero Hessian action when the XC potential is constant.
+
+    Energy is linear in the density-derived feature, so its first derivative is
+    independent of the density matrix and its directional derivative is zero. The
+    dense case exercises the constant-potential guard; the screened case exercises
+    the corresponding constant chunk-gradient guard.
+    """
+
+    class LinearFunctional(ExcFunctionalBase):
+        def __init__(self) -> None:
+            super().__init__()
+            self.features = [
+                Feature.ATOMIC_GRID_SIZES,
+                Feature.DENSITY,
+                Feature.GRID_WEIGHTS,
+            ]
+
+        def get_exc(self, mol: FeatureMap) -> torch.Tensor:
+            return (mol[Feature.DENSITY] * mol[Feature.GRID_WEIGHTS]).sum()
+
+    mol = gto.M(atom="H 0 0 0; H 0 0 0.74", basis="sto-3g", verbose=0)
+    grids = _minimal_atom_grid(mol)
+    integrator = XCIntegrator(LinearFunctional())
+    dm = torch.as_tensor(dft.RKS(mol).get_init_guess())
+
+    with patch_ao_screening(screened):
+        response = integrator.gen_response(mol, grids, dm)
+        hessian_action = response(torch.ones_like(dm))
+
+    torch.testing.assert_close(hessian_action, torch.zeros_like(dm))
+
+
 @pytest.mark.parametrize("func_deriv", [1, 2])
 def test_screened_ao_traversals_are_independent_of_model_chunking(
     monkeypatch: pytest.MonkeyPatch,
     func_deriv: int,
 ) -> None:
+    """Keep global screened AO traversal counts independent of model chunk count."""
     mol = gto.M(atom="H 0 0 0; H 0 0 0.74", basis="sto-3g", verbose=0)
     grids = _minimal_atom_grid(mol)
     atom_grid_size = grids.weights.size // mol.natm

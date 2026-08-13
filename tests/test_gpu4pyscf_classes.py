@@ -109,7 +109,7 @@ def test_skala_grids_require_unit_alignment() -> None:
         grids.alignment = 256
 
 
-def test_unsortable_grids_disable_all_gpu4pyscf_sorting(
+def test_skala_grids_disable_all_gpu4pyscf_sorting(
     mol: gto.Mole, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     build_options: dict[str, bool] = {}
@@ -125,8 +125,22 @@ def test_unsortable_grids_disable_all_gpu4pyscf_sorting(
 
     monkeypatch.setattr("gpu4pyscf.dft.gen_grid.Grids.build", build)
 
-    grids = UnsortableGrids(mol)
+    grids = SkalaGrids(mol)
     grids.build(sort_grids=True, sort_grids_of_each_atom=True)
 
     assert build_options["sort_grids"] is False
     assert build_options["sort_grids_of_each_atom"] is False
+
+
+def test_skala_classes_disable_density_grid_pruning(
+    monkeypatch: pytest.MonkeyPatch,
+    skala_xc: ExcFunctionalBase,
+) -> None:
+    from gpu4pyscf.dft import rks
+
+    monkeypatch.setattr(rks.KohnShamDFT, "small_rho_cutoff", 1e-7)
+    rks_mol = gto.M(atom="H 0 0 0; H 0 0 0.74", basis="sto-3g", verbose=0)
+    uks_mol = gto.M(atom="H", basis="sto-3g", spin=1, verbose=0)
+
+    assert SkalaRKS(rks_mol, xc=skala_xc).small_rho_cutoff == 0
+    assert SkalaUKS(uks_mol, xc=skala_xc).small_rho_cutoff == 0

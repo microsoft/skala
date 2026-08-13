@@ -155,7 +155,10 @@ class XCIntegrator:
         dm_eval = dm.double()
         electron_count = torch.zeros(2, device=self.device, dtype=dm_eval.dtype)
         energy = torch.tensor(0.0, device=self.device, dtype=dm_eval.dtype)
-        feature_function = feature_math.MGGAFeatureFunction(self.feature_spec)
+        integration_feature_spec = FeatureSpec(
+            self.feature_spec.names | {Feature.DENSITY, Feature.GRID_WEIGHTS}
+        )
+        feature_function = feature_math.MGGAFeatureFunction(integration_feature_spec)
         spatial_grid_layout = self._get_spatial_grid_layout(mol, grids)
         sorted_raw_features = ao_evaluation.evaluate_ao_features_blockwise(
             dm_eval,
@@ -297,14 +300,17 @@ class XCIntegrator:
                     torch.ones_like(energy_chunk),
                     create_graph=True,
                 )
-                if local_gradient.requires_grad:
+                # A gradient independent of the raw features is constant, so its
+                # directional derivative (the local Hessian action) is zero.
+                if not local_gradient.requires_grad:
+                    local_hessian_action = torch.zeros_like(local_raw_features)
+                else:
                     (local_hessian_action,) = torch.autograd.grad(
                         local_gradient,
                         local_raw_features,
                         atom_major_tangent.index_select(-1, chunk.grid_indices),
                     )
-                else:
-                    local_hessian_action = torch.zeros_like(local_raw_features)
+
                 atom_major_hessian_action.index_copy_(
                     -1, chunk.grid_indices, local_hessian_action.detach()
                 )
@@ -347,6 +353,10 @@ class XCIntegrator:
         ).potential
 
         def hessian_vector_product(dm1: Tensor) -> Tensor:
+            # A potential independent of dm0 is constant, so its directional
+            # derivative (the density-matrix Hessian action) is zero.
+            if not potential.requires_grad:
+                return torch.zeros_like(dm0)
             return torch.autograd.grad(
                 potential,
                 dm0,

@@ -90,6 +90,8 @@ jobs:
     runs-on: microsoft-skala-gpu-pool
     needs:
       - lint
+    env:
+      OMP_NUM_THREADS: 4
     steps:
     - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
@@ -111,14 +113,20 @@ jobs:
         python -c "import cupy, torch; assert torch.cuda.is_available(); cupy.linalg.norm(cupy.arange(3.0)).get()"
       shell: micromamba-shell {0}
 
-    - name: Run GPU tests and doctests
+    - name: Run GPU tests
+      run: >-
+        pytest
+        -v
+        -m "gpu and not profiling"
+        tests/
+      shell: micromamba-shell {0}
+
+    - name: Run GPU doctests
       run: >-
         pytest
         -v
         --doctest-modules
         src/skala/gpu4pyscf/
-        tests/test_gpu4pyscf_classes.py
-        tests/test_gpu4pyscf_gradients.py
       shell: micromamba-shell {0}
 
   profiling:
