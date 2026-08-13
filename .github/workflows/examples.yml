@@ -41,7 +41,8 @@ jobs:
       with:
         environment-file: environment-cpu.yml
         environment-name: skala-dev
-        cache-environment: true
+        # Recreate native environments per runner; restored environments caused SIGILL failures.
+        cache-environment: false
         cache-downloads: true
 
     - name: Install Skala
@@ -81,7 +82,8 @@ jobs:
       with:
         environment-file: skala/examples/${{ matrix.example }}/gauxc_integration/environment-${{ matrix.toolchain }}.yml
         environment-name: gauxc-dev
-        cache-environment: true
+        # Recreate native environments per runner; restored environments caused SIGILL failures.
+        cache-environment: false
         cache-downloads: true
 
     - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -170,7 +172,8 @@ jobs:
       with:
         environment-file: examples/fortran/ftorch_integration/environment.yml
         environment-name: ftorch-dev
-        cache-environment: true
+        # Recreate native environments per runner; restored environments caused SIGILL failures.
+        cache-environment: false
         cache-downloads: true
 
     - name: Configure project
