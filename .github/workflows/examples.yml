@@ -49,9 +49,21 @@ jobs:
       run: pip install -e .
       shell: micromamba-shell {0}
 
+    - name: Report CPU and environment
+      run: |
+        lscpu
+        micromamba list
+        micromamba list --explicit
+        python -u -c \
+          "import torch; \
+          print(torch.__version__); \
+          print(torch.backends.cpu.get_cpu_capability()); \
+          print(torch.__config__.show())"
+      shell: micromamba-shell {0}
+
     - name: Generate features
       run: >-
-        python examples/cpp/cpp_integration/prepare_inputs.py
+        python -u -X faulthandler examples/cpp/cpp_integration/prepare_inputs.py
         --output-dir features
       shell: micromamba-shell {0}
 
