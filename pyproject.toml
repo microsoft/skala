@@ -102,16 +102,6 @@ filterwarnings = [
     'ignore:`torch\.jit\.script` is deprecated\. Please switch to `torch\.compile` or `torch\.export`\.:DeprecationWarning',
     'ignore:`torch\.jit\.save` is deprecated\. Please switch to `torch\.export`\.:DeprecationWarning',
     'ignore:`torch\.jit\.save` is not supported in Python 3\.14+ and may break\. Please switch to `torch\.export`\.:DeprecationWarning',
-    # PySCF's `SCF.__init__` (pyscf/scf/hf.py, currently line 1733) creates
-    # `self._chkfile = tempfile.NamedTemporaryFile(...)` as its checkpoint file
-    # and relies on finalization to close it, which emits ResourceWarning during
-    # GC. The warning is emitted by CPython's I/O layer (not from the pyscf
-    # module), so we match on the message. Traced via PYTHONTRACEMALLOC.
-    "ignore:unclosed file <_io\\.FileIO name='/tmp/tmp.*' mode='rb\\+' closefd=True>:ResourceWarning",
-    # On recent pytest versions the same leaked tempfile surfaces during GC at
-    # session teardown via the unraisable-exception hook, which re-emits it as
-    # `pytest.PytestUnraisableExceptionWarning`. Filter that wrapper too.
-    "ignore:Exception ignored in. <_io\\.FileIO name='/tmp/tmp.*' mode='rb\\+' closefd=True>:pytest.PytestUnraisableExceptionWarning",
     # From gpu4pyscf if cutensor is not available
     'ignore:using cupy as the tensor contraction engine\.:UserWarning',
     # Deprecation warning in huggingface_hub package

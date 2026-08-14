@@ -1,0 +1,15 @@
+name: CPU diagnostics
+description: "Print operating-system, processor, and CPU-feature information."
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        uname -a
+        if [[ -r /proc/cpuinfo ]]; then cat /proc/cpuinfo; fi
+        if command -v lscpu >/dev/null 2>&1; then lscpu; fi
+        if [[ "$(uname -s)" == "Darwin" ]]; then
+          system_profiler SPHardwareDataType
+          sysctl -a | grep -E '^(machdep\.cpu\.(brand_string|features|leaf7_features)|hw\.(machine|model|ncpu|physicalcpu|logicalcpu)):' || true
+        fi
