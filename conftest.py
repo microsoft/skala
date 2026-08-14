@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Shared test fixtures."""
+"""Repository-wide pytest configuration."""
 
 import functools
 from collections.abc import Callable, Iterator
@@ -25,8 +25,9 @@ def mute_pyscf_temporary_checkpoints() -> Iterator[None]:
 
     Preventing the unused files through PySCF's ``MUTE_CHKFILE`` switch avoids
     the resource lifetime problem instead of filtering platform-specific warning
-    messages. The previous setting is restored after the session, and production
-    behavior is unchanged.
+    messages. This repository-level fixture covers package doctests as well as
+    tests under ``tests/``. The previous setting is restored after the session,
+    and production behavior is unchanged.
     """
     previous = hf.MUTE_CHKFILE
     hf.MUTE_CHKFILE = True
