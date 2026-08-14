@@ -18,8 +18,8 @@ LOG = getLogger(__name__)
 class SkalaGrids(gen_grid.Grids):  # type: ignore
     """
     GPU4PySCF grids with atom-major ordering and Skala layout caching.
-    
-    Skala 1.1 requires its input grids to be sorted by atom. 
+
+    Skala 1.1 requires its input grids to be sorted by atom.
     For efficient computation of the ao features that go into the skala model, however, it's best if the grid points are spatially localized.
     This grid allows switching between the two modes by caching the permutation between these two orderings.
     """
