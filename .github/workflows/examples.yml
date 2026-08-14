@@ -105,6 +105,7 @@ jobs:
         -DGAUXC_ENABLE_ONEDFT=ON
         -DGAUXC_ENABLE_C=${{ matrix.example == 'c' || matrix.example == 'fortran' }}
         -DGAUXC_ENABLE_FORTRAN=${{ matrix.example == 'fortran' }}
+        -DGAUXC_ENABLE_TESTS=OFF
         -DBUILD_SHARED_LIBS=ON
         -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX
       shell: micromamba-shell {0}

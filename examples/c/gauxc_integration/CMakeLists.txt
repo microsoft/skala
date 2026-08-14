@@ -21,6 +21,9 @@ add_executable(
   "${PROJECT_NAME}"
   "app/main.c"
 )
+# GauXC links to C++ libraries such as LibTorch, so use the C++ driver to add
+# their runtime and search paths even though this frontend is written in C.
+set_property(TARGET "${PROJECT_NAME}" PROPERTY LINKER_LANGUAGE CXX)
 
 # Keep the C frontend feature macros aligned with the features validated in
 # skala-gauxc.cmake. Some GauXC releases may not emit these values correctly

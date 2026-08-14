@@ -23,6 +23,12 @@ target_link_libraries(
   FTorch::ftorch
   ${TORCH_LIBRARIES}
 )
+# Resolve FTorch and LibTorch from the sibling install library directory while
+# keeping the installed executable relocatable.
+set_property(
+  TARGET ${PROJECT_NAME}
+  PROPERTY INSTALL_RPATH "$ORIGIN/../${CMAKE_INSTALL_LIBDIR}"
+)
 
 install(
   TARGETS

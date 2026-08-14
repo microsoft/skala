@@ -15,6 +15,14 @@ if(NOT FLAP_FOUND)
     DOWNLOAD_EXTRACT_TIMESTAMP ON
   )
   FetchContent_MakeAvailable(flap)
+
+  # FLAP exports these generated module paths before its build creates them.
+  file(MAKE_DIRECTORY
+    "${flap_BINARY_DIR}/modules"
+    "${flap_BINARY_DIR}/src/third_party/FACE/modules"
+    "${flap_BINARY_DIR}/src/third_party/PENF/modules"
+    "${flap_BINARY_DIR}/src/third_party/fortran_tester/modules"
+  )
 endif()
 
 if(NOT TARGET FLAP::FLAP)
