@@ -13,6 +13,13 @@ jobs:
   skala-checkpoint:
     runs-on: ubuntu-latest
     steps:
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      with:
+        persist-credentials: false
+
+    - name: Print CPU diagnostics
+      uses: ./.github/actions/cpu-diagnostics
+
     - name: Setup Python
       uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
       with:
@@ -35,6 +42,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+    - name: Print CPU diagnostics
+      uses: ./.github/actions/cpu-diagnostics
 
     - name: Setup micromamba
       uses: mamba-org/setup-micromamba@f457c30a868e4760d3a6fcea5f25dc655b8edf39 # v3
@@ -76,6 +86,9 @@ jobs:
     - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       with:
         path: skala
+
+    - name: Print CPU diagnostics
+      uses: ./skala/.github/actions/cpu-diagnostics
 
     - name: Setup micromamba
       uses: mamba-org/setup-micromamba@f457c30a868e4760d3a6fcea5f25dc655b8edf39 # v3
@@ -167,6 +180,9 @@ jobs:
 
     steps:
     - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+    - name: Print CPU diagnostics
+      uses: ./.github/actions/cpu-diagnostics
 
     - name: Setup micromamba
       uses: mamba-org/setup-micromamba@f457c30a868e4760d3a6fcea5f25dc655b8edf39 # v3

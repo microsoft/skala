@@ -21,12 +21,16 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: Print CPU diagnostics
+        uses: ./.github/actions/cpu-diagnostics
+
       - name: Setup micromamba
         uses: mamba-org/setup-micromamba@f457c30a868e4760d3a6fcea5f25dc655b8edf39 # v3
         with:
           environment-file: environment-cpu.yml
           environment-name: skala
-          cache-environment: true
+          # Recreate native environments per runner to avoid restoring CPU-specific binaries.
+          cache-environment: false
           cache-downloads: true
           create-args: >-
             python=3.12
@@ -65,6 +69,13 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
 
     steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Print CPU diagnostics
+        uses: ./.github/actions/cpu-diagnostics
+
       - name: Deploy to GitHub Pages
         id: deploy
         uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

@@ -15,11 +15,15 @@ jobs:
     steps:
     - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
+    - name: Print CPU diagnostics
+      uses: ./.github/actions/cpu-diagnostics
+
     - name: Setup micromamba
       uses: mamba-org/setup-micromamba@f457c30a868e4760d3a6fcea5f25dc655b8edf39 # v3
       with:
         environment-file: environment-cpu.yml
         environment-name: skala
+        # Recreate native environments per runner to avoid restoring CPU-specific binaries.
         cache-environment: false
         cache-downloads: true
 
@@ -37,6 +41,8 @@ jobs:
     runs-on: ${{ matrix.runner }}
     needs:
       - lint
+    env:
+      OMP_NUM_THREADS: 4
     strategy:
       fail-fast: false
       matrix:
@@ -55,11 +61,15 @@ jobs:
     steps:
     - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
+    - name: Print CPU diagnostics
+      uses: ./.github/actions/cpu-diagnostics
+
     - name: Setup micromamba
       uses: mamba-org/setup-micromamba@f457c30a868e4760d3a6fcea5f25dc655b8edf39 # v3
       with:
         environment-file: environment-cpu.yml
         environment-name: skala
+        # Recreate native environments per runner to avoid restoring CPU-specific binaries.
         cache-environment: false
         cache-downloads: true
         create-args: >-
@@ -94,6 +104,9 @@ jobs:
       OMP_NUM_THREADS: 4
     steps:
     - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+    - name: Print CPU diagnostics
+      uses: ./.github/actions/cpu-diagnostics
 
     - name: Setup micromamba
       uses: mamba-org/setup-micromamba@4b9113af4fba0e9e1124b252dd6497a419e7396d # v1
@@ -139,12 +152,16 @@ jobs:
     steps:
     - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
+    - name: Print CPU diagnostics
+      uses: ./.github/actions/cpu-diagnostics
+
     - name: Setup micromamba
       uses: mamba-org/setup-micromamba@4b9113af4fba0e9e1124b252dd6497a419e7396d # v1
       with:
         environment-file: environment-cpu.yml
         environment-name: skala
-        cache-environment: true
+        # Recreate native environments per runner to avoid restoring CPU-specific binaries.
+        cache-environment: false
         cache-downloads: true
         create-args: >-
           python=3.12
@@ -157,4 +174,45 @@ jobs:
 
     - name: Run profiling tests
       run: pytest -v -m profiling tests/test_ao_screening_benchmark.py
+      shell: micromamba-shell {0}
+
+  arm-test:
+    name: "ARM tests (${{ matrix.runner }})"
+    runs-on: ${{ matrix.runner }}
+    env:
+      OMP_NUM_THREADS: 4
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04-arm, macos-14]
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+    - name: Print CPU diagnostics
+      uses: ./.github/actions/cpu-diagnostics
+
+    - name: Setup micromamba
+      uses: mamba-org/setup-micromamba@f457c30a868e4760d3a6fcea5f25dc655b8edf39 # v3
+      with:
+        environment-file: environment-cpu.yml
+        environment-name: skala
+        cache-environment: false
+        cache-downloads: true
+        create-args: >-
+          python=3.12
+          pyscf=2.11
+
+    - name: Install package in development mode
+      run: pip install -e . --no-deps
+      shell: micromamba-shell {0}
+
+    - name: Run tests with coverage
+      run: >-
+        pytest
+        -v
+        --doctest-modules
+        --cov=skala --cov-report=xml --cov-report=term-missing --cov-report=html
+        --durations=50 --durations-min=1.0
+        --pyargs skala
+        tests/
       shell: micromamba-shell {0}
