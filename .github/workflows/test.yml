@@ -34,19 +34,28 @@ jobs:
       shell: micromamba-shell {0}
 
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     needs:
       - lint
     strategy:
       fail-fast: false
       matrix:
+        runner: [ubuntu-latest]
         python-version: ["3.10", "3.11", "3.12", "3.13"]
         pyscf-version: ["2.9", "2.11"]
         exclude: # Skip PySCF 2.11 on Python 3.12 because of multithreading crash when calling getints2c
-          - python-version: "3.12"
+          - runner: ubuntu-latest
+            python-version: "3.12"
+            pyscf-version: "2.11"
+        include:
+          - runner: ubuntu-24.04-arm
+            python-version: "3.12"
+            pyscf-version: "2.11"
+          - runner: macos-14
+            python-version: "3.12"
             pyscf-version: "2.11"
 
-    name: "Python=${{ matrix.python-version }} & PySCF=${{ matrix.pyscf-version }}"
+    name: "Python=${{ matrix.python-version }} & PySCF=${{ matrix.pyscf-version }} @ {{ matrix.runner }}"
     steps:
     - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
@@ -110,46 +119,4 @@ jobs:
         src/skala/gpu4pyscf/
         tests/test_gpu4pyscf_classes.py
         tests/test_gpu4pyscf_gradients.py
-      shell: micromamba-shell {0}
-
-  arm-test:
-    name: "ARM tests (${{ matrix.runner }})"
-    runs-on: ${{ matrix.runner }}
-    env:
-      OMP_NUM_THREADS: 4
-    strategy:
-      fail-fast: false
-      matrix:
-        runner: [ubuntu-24.04-arm, macos-14]
-    steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-
-    - name: Print CPU diagnostics
-      uses: ./.github/actions/cpu-diagnostics
-
-    - name: Setup micromamba
-      uses: mamba-org/setup-micromamba@f457c30a868e4760d3a6fcea5f25dc655b8edf39 # v3
-      with:
-        environment-file: environment-cpu.yml
-        environment-name: skala
-        # Recreate native environments per runner to avoid restoring CPU-specific binaries.
-        cache-environment: false
-        cache-downloads: true
-        create-args: >-
-          python=3.12
-          pyscf=2.11
-
-    - name: Install package in development mode
-      run: pip install -e . --no-deps
-      shell: micromamba-shell {0}
-
-    - name: Run tests with coverage
-      run: >-
-        pytest
-        -v
-        --doctest-modules
-        --cov=skala --cov-report=xml --cov-report=term-missing --cov-report=html
-        --durations=50 --durations-min=1.0
-        --pyargs skala
-        tests/
       shell: micromamba-shell {0}
