@@ -1,11 +1,13 @@
 # SPDX-License-Identifier: MIT
 
-"""Repository-wide pytest configuration."""
+"""Repository-wide pytest fixtures and collection hooks."""
 
 import functools
 from collections.abc import Callable, Iterator
+from pathlib import Path
 
 import pytest
+import torch
 from pyscf.scf import hf
 
 from skala.functional import ExcFunctionalBase, load_functional
@@ -15,19 +17,11 @@ from skala.functional import ExcFunctionalBase, load_functional
 def mute_pyscf_temporary_checkpoints() -> Iterator[None]:
     """Disable implicit PySCF checkpoint files for the test session.
 
-    PySCF opens a ``NamedTemporaryFile`` whenever it constructs an SCF object,
-    even when a test never requests checkpointing. Some transformed SCF objects
-    participate in reference cycles, so their temporary files can remain open
-    until cyclic garbage collection. Python then emits ``ResourceWarning``, and
-    pytest 9 re-emits it as ``PytestUnraisableExceptionWarning``. Because this
-    project treats warnings as errors, whichever test triggers collection can
-    fail even if a different test created the file.
-
-    Preventing the unused files through PySCF's ``MUTE_CHKFILE`` switch avoids
-    the resource lifetime problem instead of filtering platform-specific warning
-    messages. This repository-level fixture covers package doctests as well as
-    tests under ``tests/``. The previous setting is restored after the session,
-    and production behavior is unchanged.
+    PySCF opens temporary checkpoint files for SCF objects even when tests do
+    not use checkpointing. Reference cycles can delay their cleanup until a
+    later test, where pytest reports the resulting ``ResourceWarning`` as a
+    failure. Prevent the unused files and restore the previous global setting
+    after the session.
     """
     previous = hf.MUTE_CHKFILE
     hf.MUTE_CHKFILE = True
@@ -41,3 +35,18 @@ def mute_pyscf_temporary_checkpoints() -> Iterator[None]:
 def load_functional_cached() -> Callable[..., ExcFunctionalBase | str]:
     """Load each functional from the Hub at most once per test session."""
     return functools.lru_cache(maxsize=None)(load_functional)
+
+
+def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool | None:
+    """Skip CUDA-only source doctests when CUDA is unavailable."""
+    if torch.cuda.is_available():
+        return None
+
+    try:
+        relative_path = collection_path.resolve().relative_to(config.rootpath.resolve())
+    except ValueError:
+        return None
+
+    return relative_path == Path(
+        "src/skala/utils/torch_allocator.py"
+    ) or relative_path.is_relative_to("src/skala/gpu4pyscf")
