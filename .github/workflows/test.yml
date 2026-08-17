@@ -78,7 +78,7 @@ jobs:
         --doctest-modules
         --cov=skala --cov-report=xml --cov-report=term-missing --cov-report=html
         --durations=50 --durations-min=1.0
-        --pyargs skala
+        src/skala/
         tests/
       shell: micromamba-shell {0}
 
