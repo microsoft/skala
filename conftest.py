@@ -36,6 +36,7 @@ def load_functional_cached() -> Callable[..., ExcFunctionalBase | str]:
     """Load each functional from the Hub at most once per test session."""
     return functools.lru_cache(maxsize=None)(load_functional)
 
+
 CUDA_AVAILABLE = torch.cuda.is_available()
 
 
