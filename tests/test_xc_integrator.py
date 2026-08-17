@@ -1,12 +1,12 @@
 import pytest
 import torch
 from pyscf import dft, gto
-from tests.utils import QuadraticFunctional, force_ao_screening
 
 from skala.features import Feature, FeatureMap
 from skala.pyscf import xc_integrator as xc_integrator_module
 from skala.pyscf.grids import SkalaGrids
 from skala.pyscf.xc_integrator import XCIntegrator, XCResult
+from tests.utils import QuadraticFunctional, force_ao_screening
 
 
 def test_screened_xc_derivatives_match_finite_differences() -> None:

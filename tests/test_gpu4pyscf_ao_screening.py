@@ -23,8 +23,6 @@ except ModuleNotFoundError:
         allow_module_level=True,
     )
 
-from tests.utils import QuadraticFunctional, force_ao_screening  # noqa: E402
-
 from skala.features import Feature  # noqa: E402
 from skala.functional.base import ExcFunctionalBase  # noqa: E402
 from skala.gpu4pyscf import SkalaKS  # noqa: E402
@@ -40,6 +38,7 @@ from skala.pyscf.grids import SkalaGrids as PySCFSkalaGrids  # noqa: E402
 from skala.pyscf.numint import SkalaNumInt  # noqa: E402
 from skala.pyscf.spatial_grid_layout import prepare_spatial_grid_layout  # noqa: E402
 from skala.pyscf.xc_integrator import XCIntegrator  # noqa: E402
+from tests.utils import QuadraticFunctional, force_ao_screening  # noqa: E402
 
 CARBON_CHAIN = """
 C 0.0 0.0 0.0

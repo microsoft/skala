@@ -1,0 +1,1 @@
+"""Skala test package."""

@@ -21,12 +21,12 @@ import torch
 from pyscf import dft, gto, lib
 from pytest_benchmark.fixture import BenchmarkFixture
 from torch.utils.dlpack import from_dlpack
-from tests.utils import force_ao_screening
 
 from skala.functional import load_functional
 from skala.functional.base import ExcFunctionalBase
 from skala.pyscf.grids import SkalaGrids
 from skala.pyscf.numint import SkalaNumInt
+from tests.utils import force_ao_screening
 
 THREAD_COUNT = 4
 MAX_MEMORY_MB = 2000

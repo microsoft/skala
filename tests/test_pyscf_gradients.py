@@ -2,7 +2,6 @@ from collections.abc import Callable
 
 import pytest
 import torch
-from tests.ridders import num_grad_ridders
 from pyscf import dft, gto, scf
 
 from skala.features import Feature, FeatureMap
@@ -14,6 +13,7 @@ from skala.pyscf.gradients import (
     SkalaUKSGradient,
     veff_and_expl_nuc_grad,
 )
+from tests.ridders import num_grad_ridders
 
 
 @pytest.fixture(params=["HF", "H2O", "H2O+"])

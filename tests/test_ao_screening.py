@@ -6,7 +6,6 @@ import numpy as np
 import pytest
 import torch
 from pyscf import dft, gto
-from tests.utils import QuadraticFunctional, force_ao_screening
 
 from skala.features import Feature, FeatureMap
 from skala.functional.base import ExcFunctionalBase
@@ -34,6 +33,7 @@ from skala.pyscf.spatial_grid_layout import (
     prepare_spatial_grid_layout,
 )
 from skala.pyscf.xc_integrator import XCIntegrator
+from tests.utils import QuadraticFunctional, force_ao_screening
 
 _MGGA_FEATURES = (Feature.DENSITY, Feature.GRAD, Feature.KIN, Feature.LAPL)
 _MGGA_FEATURE_COMBINATIONS = [

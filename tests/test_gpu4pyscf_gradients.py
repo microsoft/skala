@@ -19,11 +19,8 @@ except ModuleNotFoundError:
         allow_module_level=True,
     )
 
-from tests.ridders import num_grad_ridders  # noqa: E402
 from gpu4pyscf import dft, scf  # noqa: E402
 from pyscf import gto  # noqa: E402
-from tests.test_pyscf_gradients import FULL_GRAD_REF  # noqa: E402
-from tests.utils import force_ao_screening  # noqa: E402
 
 from skala.features import Feature, FeatureMap  # noqa: E402
 from skala.functional.base import ExcFunctionalBase  # noqa: E402
@@ -38,6 +35,9 @@ from skala.pyscf import SkalaKS as CpuSkalaKS  # noqa: E402
 from skala.pyscf.features import generate_features  # noqa: E402
 from skala.pyscf.gradients import SkalaRKSGradient as CpuSkalaRKSGradient  # noqa: E402
 from skala.utils import torch_allocator  # noqa: E402
+from tests.ridders import num_grad_ridders  # noqa: E402
+from tests.test_pyscf_gradients import FULL_GRAD_REF  # noqa: E402
+from tests.utils import force_ao_screening  # noqa: E402
 
 H2_SKALA_1_1_GRAD_REF = torch.tensor(
     [
