@@ -82,7 +82,20 @@ def from_numpy_or_cupy(
     transpose: bool = False,
 ) -> Tensor:
     if isinstance(x, np.ndarray):
-        x_torch = torch.from_numpy(x)
+        if x.flags.writeable:
+            x_torch = torch.from_numpy(x)
+        else:
+            try:
+                x.setflags(write=True)
+            except ValueError:
+                x_torch = torch.from_numpy(x.copy())
+            else:
+                try:
+                    # Torch does not preserve NumPy's writeability flag. The restored
+                    # flag guards NumPy access while this tensor keeps sharing storage.
+                    x_torch = torch.from_numpy(x)
+                finally:
+                    x.setflags(write=False)
     else:
         x_torch = torch.from_dlpack(x)  # type: ignore[attr-defined]
     x_torch = x_torch.to(device=device, dtype=dtype)
