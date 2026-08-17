@@ -17,7 +17,7 @@ from skala.pyscf.backend import Grid, check_gpu_imports_were_successful
 from skala.pyscf.evaluation import EvaluationPolicy, FeatureSpec
 from skala.pyscf.features import generate_features
 from skala.pyscf.grids import SkalaGrids as PySCFSkalaGrids
-from skala.pyscf.model_chunking import prepare_model_feature_chunks
+from skala.pyscf.model_chunking import ModelFeatureChunker
 from skala.pyscf.spatial_grid_layout import SpatialGridLayout
 
 if TYPE_CHECKING:
@@ -171,7 +171,7 @@ class XCIntegrator:
         atom_major_raw_features = sorted_raw_features.index_select(
             -1, spatial_grid_layout.inverse_permutation
         )
-        model_chunks = prepare_model_feature_chunks(
+        model_chunks = ModelFeatureChunker(
             mol,
             dm,
             grids,
@@ -267,7 +267,7 @@ class XCIntegrator:
         atom_major_raw_features = sorted_raw_features.index_select(
             -1, spatial_grid_layout.inverse_permutation
         )
-        model_chunks = prepare_model_feature_chunks(
+        model_chunks = ModelFeatureChunker(
             mol,
             dm0,
             grids,

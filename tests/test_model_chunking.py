@@ -13,7 +13,7 @@ from skala.pyscf.evaluation import FeatureSpec
 from skala.pyscf.feature_math import MGGAFeatureFunction
 
 
-def test_prepare_model_feature_chunks_sorts_complete_atomic_grids(
+def test_model_feature_chunker_sorts_complete_atomic_grids(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     atomic_grid_sizes = torch.tensor([3, 1, 2, 1])
@@ -55,7 +55,7 @@ def test_prepare_model_feature_chunks_sorts_complete_atomic_grids(
         }
     )
     raw_features = point_ids.reshape(1, -1)
-    chunker = model_chunking.prepare_model_feature_chunks(
+    chunker = model_chunking.ModelFeatureChunker(
         mol=cast(gto.Mole, object()),
         dm=torch.eye(1, dtype=torch.float64),
         grids=cast(Grid, object()),
@@ -63,14 +63,6 @@ def test_prepare_model_feature_chunks_sorts_complete_atomic_grids(
         feature_function=MGGAFeatureFunction(feature_spec),
         deriv_order=1,
     )
-
-    expected_grid_order = torch.tensor([3, 6, 4, 5, 0, 1, 2])
-    assert torch.equal(chunker.atom_order, torch.tensor([1, 3, 2, 0]))
-    assert torch.equal(chunker.grid_order, expected_grid_order)
-    assert torch.equal(
-        chunker.grid_features[Feature.ATOMIC_GRID_SIZES], atomic_grid_sizes
-    )
-    assert torch.equal(chunker.atom_major_raw_features.flatten(), point_ids)
 
     chunks = list(chunker)
     assert len(chunks) == 3

@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 import torch
 from pyscf import dft, gto
-from utils import QuadraticFunctional, patch_ao_screening
+from utils import QuadraticFunctional, force_ao_screening
 
 from skala.features import Feature, FeatureMap
 from skala.functional.base import ExcFunctionalBase
@@ -210,10 +210,10 @@ def test_patch_ao_screening_restores_previous_decision(carbon: gto.Mole) -> None
     """Restore the previous screening decision after nested route patches exit."""
     original_decision = xc_integrator_module._should_screen_aos
 
-    with patch_ao_screening(False):
+    with force_ao_screening(False):
         dense_decision = xc_integrator_module._should_screen_aos
         assert not dense_decision(carbon)
-        with patch_ao_screening(True):
+        with force_ao_screening(True):
             assert xc_integrator_module._should_screen_aos(carbon)
         assert xc_integrator_module._should_screen_aos is dense_decision
 
@@ -459,6 +459,18 @@ def test_grid_reuses_spatial_grid_layout_across_numints(
     assert other_grids._spatial_grid_layout is other_layout
     assert len(layouts) == 2
 
+    assert not grids.coords.flags.writeable
+    assert not grids.weights.flags.writeable
+    with pytest.raises(ValueError, match="read-only"):
+        grids.coords[0, 0] = -1
+    with pytest.raises(ValueError, match="read-only"):
+        grids.weights[0] = -1
+
+    replacement_coords = grids.coords.copy()
+    grids.coords = replacement_coords
+    assert grids._spatial_grid_layout is None
+    assert replacement_coords.flags.writeable
+
 
 class FakeKS:
     def __init__(self, mol: gto.Mole, grids: object | None = None) -> None:
@@ -553,7 +565,7 @@ def test_first_and_second_order_use_same_screening_decision(
         routes.append("screened")
         return dm.sum().reshape(1, 1)
 
-    def fake_prepare_model_feature_chunks(
+    def fake_model_feature_chunker(
         mol: gto.Mole,
         dm: torch.Tensor,
         grids: object,
@@ -582,12 +594,13 @@ def test_first_and_second_order_use_same_screening_decision(
     )
     monkeypatch.setattr(
         xc_integrator_module,
-        "prepare_model_feature_chunks",
-        fake_prepare_model_feature_chunks,
+        "ModelFeatureChunker",
+        fake_model_feature_chunker,
     )
     numint = SkalaNumInt(QuadraticFunctional())
     dm = torch.eye(carbon.nao_nr(), dtype=torch.float64)
     grids = SkalaGrids(carbon)
+    grids.coords = np.zeros((1, 3))
     grids.weights = np.ones(1)
 
     ks = FakeKS(carbon, grids)
@@ -596,7 +609,7 @@ def test_first_and_second_order_use_same_screening_decision(
         if response_safety_fraction is None
         else {"safety_fraction": response_safety_fraction}
     )
-    with patch_ao_screening(expected):
+    with force_ao_screening(expected):
         numint(carbon, grids, None, dm)
         response = numint.gen_response(
             np.eye(carbon.nao_nr()),
@@ -979,10 +992,10 @@ def test_cpu_rks_uks_dense_screened_equivalence(
     grids = _minimal_atom_grid(mol)
     dm = mean_field.get_init_guess()
 
-    with patch_ao_screening(False):
+    with force_ao_screening(False):
         dense = integration_method(numint, mol, grids, None, dm)
 
-    with patch_ao_screening(True):
+    with force_ao_screening(True):
         screened = integration_method(numint, mol, grids, None, dm)
 
     assert np.allclose(
@@ -997,10 +1010,10 @@ def test_cpu_quadratic_dense_screened_equivalence_heteronuclear() -> None:
     numint = SkalaNumInt(QuadraticFunctional())
     dm = dft.RKS(mol).get_init_guess()
 
-    with patch_ao_screening(False):
+    with force_ao_screening(False):
         dense = numint.nr_rks(mol, grids, None, dm)
 
-    with patch_ao_screening(True):
+    with force_ao_screening(True):
         screened = numint.nr_rks(mol, grids, None, dm)
 
     for dense_value, screened_value in zip(dense, screened, strict=True):
@@ -1040,9 +1053,9 @@ def test_screened_integration_adds_bookkeeping_features(
     integrator = XCIntegrator(BookkeepingFunctional())
     dm = torch.as_tensor(dft.RKS(mol).get_init_guess())
 
-    with patch_ao_screening(False):
+    with force_ao_screening(False):
         dense = integrator(mol, grids, dm.clone())
-    with patch_ao_screening(True):
+    with force_ao_screening(True):
         screened = integrator(mol, grids, dm.clone())
 
     torch.testing.assert_close(screened.electron_count, dense.electron_count)
@@ -1063,10 +1076,10 @@ def test_cpu_response_dense_screened_equivalence() -> None:
     )
     dm1 += dm1.T
 
-    with patch_ao_screening(False):
+    with force_ao_screening(False):
         dense_response = numint.gen_response(mo_coeff, mo_occ, ks=ks)
 
-    with patch_ao_screening(True):
+    with force_ao_screening(True):
         screened_response = numint.gen_response(mo_coeff, mo_occ, ks=ks)
 
     assert np.allclose(
@@ -1101,7 +1114,7 @@ def test_response_of_linear_functional_is_zero(screened: bool) -> None:
     integrator = XCIntegrator(LinearFunctional())
     dm = torch.as_tensor(dft.RKS(mol).get_init_guess())
 
-    with patch_ao_screening(screened):
+    with force_ao_screening(screened):
         response = integrator.gen_response(mol, grids, dm)
         hessian_action = response(torch.ones_like(dm))
 
@@ -1143,7 +1156,7 @@ def test_screened_ao_traversals_are_independent_of_model_chunking(
     functional = QuadraticFunctional()
     numint = SkalaNumInt(functional)
 
-    with patch_ao_screening(True):
+    with force_ao_screening(True):
         if func_deriv == 1:
             dm = dft.RKS(mol).get_init_guess()
             numint.nr_rks(mol, grids, None, dm)

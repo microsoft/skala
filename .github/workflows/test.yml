@@ -173,6 +173,6 @@ jobs:
       shell: micromamba-shell {0}
 
     - name: Run profiling tests
-      run: pytest -v -m profiling tests/test_ao_screening_benchmark.py
+      run: pytest -v -m profiling
       shell: micromamba-shell {0}
 

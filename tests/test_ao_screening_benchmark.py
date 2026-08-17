@@ -21,7 +21,7 @@ import torch
 from pyscf import dft, gto, lib
 from pytest_benchmark.fixture import BenchmarkFixture
 from torch.utils.dlpack import from_dlpack
-from utils import patch_ao_screening
+from utils import force_ao_screening
 
 from skala.functional import load_functional
 from skala.functional.base import ExcFunctionalBase
@@ -233,19 +233,19 @@ def device_benchmark_case(
         assert isinstance(functional, ExcFunctionalBase)
 
     case = _make_benchmark_case(benchmark_spec, functional, backend)
-    with patch_ao_screening(True):
+    with force_ao_screening(True):
         yield case
 
 
 @pytest.fixture
 def screened_case(benchmark_case: BenchmarkCase) -> Iterator[BenchmarkCase]:
-    with patch_ao_screening(True):
+    with force_ao_screening(True):
         yield benchmark_case
 
 
 @pytest.fixture
 def dense_case(benchmark_case: BenchmarkCase) -> Iterator[BenchmarkCase]:
-    with patch_ao_screening(False):
+    with force_ao_screening(False):
         yield benchmark_case
 
 
@@ -268,7 +268,7 @@ def _run_gpu_xc(spec: BenchmarkSpec, screened: bool) -> int:
     torch.cuda.empty_cache()
     baseline_bytes = torch.cuda.memory_allocated()
     torch.cuda.reset_peak_memory_stats()
-    with patch_ao_screening(screened):
+    with force_ao_screening(screened):
         case.run()
     torch.cuda.synchronize()
     return torch.cuda.max_memory_allocated() - baseline_bytes
@@ -294,7 +294,7 @@ def _memory_worker(
             with tempfile.TemporaryDirectory() as tmpdir:
                 profile_path = Path(tmpdir) / "allocations.bin"
                 with (
-                    patch_ao_screening(screened),
+                    force_ao_screening(screened),
                     memray.Tracker(profile_path),
                 ):
                     case.run()
@@ -353,7 +353,7 @@ def test_screened_and_dense_values_agree(
     case = device_benchmark_case
     screened = case.run()
 
-    with patch_ao_screening(False):
+    with force_ao_screening(False):
         if case.backend == "cpu":
             dense = case.run()
         else:
@@ -467,5 +467,5 @@ def test_profile_with_ao_screening(
 def test_profile_without_ao_screening_by_patching_decision(
     device_benchmark_case: BenchmarkCase,
 ) -> None:
-    with patch_ao_screening(False):
+    with force_ao_screening(False):
         device_benchmark_case.run()

@@ -23,7 +23,7 @@ except ModuleNotFoundError:
         allow_module_level=True,
     )
 
-from utils import QuadraticFunctional, patch_ao_screening  # noqa: E402
+from utils import QuadraticFunctional, force_ao_screening  # noqa: E402
 
 from skala.features import Feature  # noqa: E402
 from skala.functional.base import ExcFunctionalBase  # noqa: E402
@@ -142,10 +142,10 @@ def test_gpu_rks_uks_dense_screened_equivalence(
     dm = ks.get_init_guess()
     integrate = getattr(ks._numint, integration_method_name)
 
-    with patch_ao_screening(False):
+    with force_ao_screening(False):
         dense = integrate(mol, ks.grids, None, dm)
 
-    with patch_ao_screening(True):
+    with force_ao_screening(True):
         screened = integrate(mol, ks.grids, None, dm)
 
     cupy.testing.assert_allclose(dense[0], screened[0], rtol=1e-9)
@@ -177,10 +177,10 @@ def test_gpu_response_dense_screened_equivalence(
     dm1 += dm1.T
     dm1 = cupy.broadcast_to(dm1, matrix_shape).copy()
 
-    with patch_ao_screening(False):
+    with force_ao_screening(False):
         dense_response = ks._numint.gen_response(mo_coeff, mo_occ, ks=ks)
 
-    with patch_ao_screening(True):
+    with force_ao_screening(True):
         screened_response = ks._numint.gen_response(mo_coeff, mo_occ, ks=ks)
 
     cupy.testing.assert_allclose(
@@ -221,10 +221,10 @@ def test_gpu_multiblock_mgga_response_dense_screened_equivalence() -> None:
     mo_occ = cupy.ones(mol.nao_nr())
     dm1 = cupy.eye(mol.nao_nr())
 
-    with patch_ao_screening(False):
+    with force_ao_screening(False):
         dense_response = ks._numint.gen_response(mo_coeff, mo_occ, ks=ks)
 
-    with patch_ao_screening(True):
+    with force_ao_screening(True):
         screened_response = ks._numint.gen_response(mo_coeff, mo_occ, ks=ks)
 
     cupy.testing.assert_allclose(
@@ -287,12 +287,12 @@ def test_gpu_screened_skala_matches_cpu_on_carbon_chain(
     assert isinstance(cpu_functional, ExcFunctionalBase)
     assert isinstance(gpu_functional, ExcFunctionalBase)
 
-    with patch_ao_screening(False):
+    with force_ao_screening(False):
         cpu_result = SkalaNumInt(cpu_functional, device=torch.device("cpu")).nr_rks(
             mol, cpu_grids, None, dm
         )
 
-    with patch_ao_screening(True):
+    with force_ao_screening(True):
         gpu_result = SkalaNumInt(gpu_functional, device=torch.device("cuda:0")).nr_rks(
             mol, gpu_grids, None, cupy.asarray(dm)
         )

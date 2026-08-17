@@ -76,7 +76,12 @@ class PySCFNumInt(Protocol, Generic[Array]):
         ks: KS,
         **kwargs: Any,
     ) -> Callable[[Array], Array]:
-        """Generates the response function for the functional."""
+        """Generate a short-lived response function for the current KS state.
+
+        The returned closure retains the current KS/grid state and XC response
+        graph. Use it only for the immediate response calculation, then discard
+        it; do not store or reuse it across state changes.
+        """
         ...
 
     def reset(self) -> "PySCFNumInt[Array]":
@@ -89,6 +94,10 @@ class SkalaNumInt(PySCFNumInt[Array]):
 
     Evaluation of atomic orbitals and one-electron integrals on a grid
     is cached for speed.
+
+    Response functions returned by :meth:`gen_response` retain the current
+    KS/grid state and XC autograd graph. They are short-lived calculation
+    objects and must not be stored for later reuse.
 
     Example
     -------
@@ -239,7 +248,15 @@ class SkalaNumInt(PySCFNumInt[Array]):
         ks: KS,
         **kwargs: Any,
     ) -> Callable[[Array], Array]:
-        """Generates the response function for the functional."""
+        """Generate a short-lived response function for the current KS state.
+
+        The returned closure retains the current KS/grid state and XC autograd
+        graph. Use it only for the immediate response calculation, then discard
+        it; do not store or reuse it across state changes.
+
+        Returns:
+            A Hessian-vector product closure for immediate response evaluation.
+        """
         assert mo_coeff is not None
         assert mo_occ is not None
         if kwargs is not None:

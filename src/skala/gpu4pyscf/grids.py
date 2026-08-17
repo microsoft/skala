@@ -16,18 +16,22 @@ LOG = getLogger(__name__)
 
 
 class SkalaGrids(gen_grid.Grids):  # type: ignore
-    """
-    GPU4PySCF grids with atom-major ordering and Skala layout caching.
+    """GPU4PySCF grids with atom-major ordering and Skala layout caching.
 
-    Skala 1.1 requires its input grids to be sorted by atom.
-    For efficient computation of the ao features that go into the skala model, however, it's best if the grid points are spatially localized.
-    This grid allows switching between the two modes by caching the permutation between these two orderings.
+    Configure and build the grid before preparing its spatial layout. Assigning
+    ``coords``, ``weights``, or ``cutoff`` invalidates the cached layout, but
+    CuPy provides no equivalent to NumPy's writeability flag. Mutating arrays in
+    place or changing other grid internals between layout requests therefore
+    bypasses invalidation and can produce incoherent source-grid, permutation,
+    and screening state.
     """
 
     _spatial_grid_layout: "SpatialGridLayout | None"
     _initializing: bool
 
     def __init__(self, mol: gto.Mole | None = None) -> None:
+        # GPU4PySCF installs a non-unit alignment during its constructor. Permit
+        # that transient value, then establish the Skala cache and alignment invariants.
         super().__setattr__("_initializing", True)
         super().__init__(mol)
         super().__setattr__("_spatial_grid_layout", None)
@@ -35,12 +39,16 @@ class SkalaGrids(gen_grid.Grids):  # type: ignore
         super().__setattr__("_initializing", False)
 
     def __setattr__(self, key: str, value: Any) -> None:
+        # Alignment padding would break the exact atom-major grid layout expected
+        # by Skala, so only the base-class constructor may set a non-unit value.
         if (
             key == "alignment"
             and value != 1
             and not getattr(self, "_initializing", False)
         ):
             raise ValueError(f"SkalaGrids alignment must be 1, got {value}")
+        # The spatial permutations and screening data are derived from these
+        # attributes and must be rebuilt after any assignment.
         if key in {"coords", "weights", "cutoff"}:
             super().__setattr__("_spatial_grid_layout", None)
         super().__setattr__(key, value)

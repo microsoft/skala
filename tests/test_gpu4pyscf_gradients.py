@@ -23,7 +23,7 @@ from _ridders import num_grad_ridders  # noqa: E402
 from gpu4pyscf import dft, scf  # noqa: E402
 from pyscf import gto  # noqa: E402
 from test_pyscf_gradients import FULL_GRAD_REF  # noqa: E402
-from utils import patch_ao_screening  # noqa: E402
+from utils import force_ao_screening  # noqa: E402
 
 from skala.features import Feature, FeatureMap  # noqa: E402
 from skala.functional.base import ExcFunctionalBase  # noqa: E402
@@ -492,7 +492,7 @@ def test_nuclear_gradient_cpu_gpu_dense_screened_agree(
                 basis="sto-3g",
                 verbose=0,
             )
-            with patch_ao_screening(screened):
+            with force_ao_screening(screened):
                 if backend == "cpu":
                     mean_field = CpuSkalaKS(mol, xc=functional, with_dftd3=False)
                     gradient_type = CpuSkalaRKSGradient

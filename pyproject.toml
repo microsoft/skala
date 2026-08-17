@@ -56,16 +56,30 @@ urls.homepage = "https://aka.ms/dft"
 
 [tool.mypy]
 strict = true
-ignore_missing_imports = true
 no_namespace_packages = true
 python_version = "3.12"
 exclude = ["third_party/"]
 disable_error_code = ["no-any-return"]
 
-# torch.autograd.Function.apply() is untyped in PyTorch.
 [[tool.mypy.overrides]]
-module = ["skala.pyscf.ao_evaluation", "skala.pyscf.spatial_grid_layout"]
-disable_error_code = ["no-untyped-call"]
+module = [
+    "cupy",
+    "cupy.*",
+    "e3nn",
+    "e3nn.*",
+    "gpu4pyscf",
+    "gpu4pyscf.*",
+    "h5py",
+    "h5py.*",
+    "opt_einsum_fx",
+    "opt_einsum_fx.*",
+    "pyscf",
+    "pyscf.*",
+    "qcelemental",
+    "qcelemental.*",
+]
+ignore_missing_imports = true
+
 
 [tool.ruff]
 target-version = "py311"
@@ -83,11 +97,6 @@ extend-ignore = [
   "UP015", # redundant-open-modes
   "E741", # variable name l
 ]
-
-[tool.ruff.lint.per-file-ignores]
-# E402: imports must come after CUDA checks and CuPy allocator configuration
-"src/skala/gpu4pyscf/__init__.py" = ["E402"]
-"src/skala/gpu4pyscf/dft.py" = ["E402"]
 
 [tool.ruff.lint.isort]
 detect-same-package = true

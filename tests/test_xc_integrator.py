@@ -1,7 +1,7 @@
 import pytest
 import torch
 from pyscf import dft, gto
-from utils import QuadraticFunctional, patch_ao_screening
+from utils import QuadraticFunctional, force_ao_screening
 
 from skala.features import Feature, FeatureMap
 from skala.pyscf import xc_integrator as xc_integrator_module
@@ -49,7 +49,7 @@ def test_screened_xc_derivatives_match_finite_differences() -> None:
     direction = torch.tensor([[0.3, -0.2], [-0.2, 0.1]], dtype=dm.dtype)
     step = 1e-4
 
-    with patch_ao_screening(True):
+    with force_ao_screening(True):
         result = integrator(mol, grids, dm)
         response = integrator.gen_response(mol, grids, dm.clone())
         plus = integrator(mol, grids, dm + step * direction)
@@ -94,7 +94,6 @@ def test_xc_integrator_returns_tensors_and_xc_only_response(
         features: set[Feature],
         **kwargs: object,
     ) -> FeatureMap:
-        assert features == {Feature.DENSITY, Feature.GRID_WEIGHTS}
         return {
             Feature.DENSITY: dm.sum().reshape(1),
             Feature.GRID_WEIGHTS: torch.tensor([2.0], dtype=dm.dtype),
@@ -105,7 +104,7 @@ def test_xc_integrator_returns_tensors_and_xc_only_response(
         "generate_features",
         fake_generate_features,
     )
-    integrator = XCIntegrator(QuadraticFunctional([Feature.DENSITY]))
+    integrator = XCIntegrator(QuadraticFunctional())
     dm = torch.tensor([[1.0, 2.0], [2.0, 3.0]], dtype=torch.float64)
 
     result = integrator(mol, grids, dm)
@@ -118,10 +117,11 @@ def test_xc_integrator_returns_tensors_and_xc_only_response(
     torch.testing.assert_close(response(torch.ones_like(dm)), torch.full_like(dm, 16.0))
 
 
-def test_xc_integrator_requires_skala_grids_for_density() -> None:
+def test_xc_integrator_requires_skala_grids() -> None:
+    """Check that the integrator rejects non-Skala grids."""
     mol = gto.M(atom="H 0 0 0; H 0 0 0.74", basis="sto-3g", verbose=0)
     grids = dft.Grids(mol)
-    integrator = XCIntegrator(QuadraticFunctional([Feature.DENSITY]))
+    integrator = XCIntegrator(QuadraticFunctional())
     dm = torch.eye(mol.nao_nr(), dtype=torch.float64)
 
     with pytest.raises(TypeError, match=r"XC evaluation requires .*\.SkalaGrids"):

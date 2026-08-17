@@ -36,7 +36,8 @@ Skala is a neural network-based exchange-correlation (XC) functional for density
 ## Code style & linting
 
 - **Formatter/linter**: Ruff (`ruff format`, `ruff check --fix --select I`).
-- **Type checking**: mypy with `--ignore-missing-imports`.
+- **Type checking**: mypy in strict mode. Ignore missing type information only for explicitly
+  named untyped dependencies in `pyproject.toml`; do not use global `--ignore-missing-imports`.
 - Line length: 100 characters (Black-compatible).
 - Imports sorted via Ruff's isort rules.
 - Exclude `third_party/` and `tests/` from mypy; exclude `third_party/` from Ruff.

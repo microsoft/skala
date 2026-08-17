@@ -8,8 +8,7 @@ atom-local shapes and coordinates.
 """
 
 import logging
-from collections.abc import Iterator, Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import Iterator, Mapping
 from typing import NamedTuple
 
 import torch
@@ -119,39 +118,88 @@ class ModelFeatureChunk(NamedTuple):
     model_features: FeatureMap
 
 
-@dataclass(frozen=True)
 class ModelFeatureChunker:
-    """Reusable atom-aligned partition of raw and model features."""
+    """Prepared atom-aligned partition of raw and model features.
 
-    atom_major_raw_features: Tensor
-    grid_features: Mapping[Feature, Tensor]
-    feature_function: feature_math.MGGAFeatureFunction
-    chunk_layouts: Sequence[AtomGridChunk]
-    atom_order: Tensor
-    grid_order: Tensor
-    is_spin_polarized: bool
+    The chunker is a snapshot of the supplied density matrix, grid, and raw
+    features. It can be iterated repeatedly while those inputs represent the
+    same calculation, but must not be reused after their state changes.
+    """
+
+    def __init__(
+        self,
+        mol: gto.Mole,
+        dm: Tensor,
+        grids: Grid,
+        atom_major_raw_features: Tensor,
+        feature_function: feature_math.MGGAFeatureFunction,
+        deriv_order: int,
+        max_memory_in_mb: int | None = None,
+        safety_fraction: float = 0.8,
+    ) -> None:
+        feature_spec = feature_function.feature_spec
+        if not feature_spec.supports_spatial_decomposition:
+            raise ValueError(
+                f"Atom-aligned model chunking requires "
+                f"{Feature.ATOMIC_GRID_SIZES.value!r}."
+            )
+
+        grid_features = get_grid_features(mol, dm, grids, feature_spec)
+        atomic_grid_sizes = grid_features[Feature.ATOMIC_GRID_SIZES]
+        atom_grid_order = _make_atom_grid_order(atomic_grid_sizes)
+        sorted_atomic_grid_sizes = atomic_grid_sizes.index_select(
+            0, atom_grid_order.atom_indices
+        )
+
+        max_atoms_per_grid_size = estimate_max_model_atoms_per_chunk(
+            dm=dm,
+            atomic_grid_sizes=sorted_atomic_grid_sizes,
+            nfeatures=feature_function.nfeats,
+            max_memory_in_mb=max_memory_in_mb,
+            safety_fraction=safety_fraction,
+            func_deriv=deriv_order,
+        )
+        for grid_size, max_atoms in max_atoms_per_grid_size.items():
+            if max_atoms < 1:
+                LOG.warning(
+                    "Adjusted model chunk capacity for atomic grid size %d from %d "
+                    "to one atom. Hope for no OOM.",
+                    grid_size,
+                    max_atoms,
+                )
+                max_atoms_per_grid_size[grid_size] = 1
+
+        self._atom_major_raw_features = atom_major_raw_features
+        self._grid_features = grid_features
+        self._feature_function = feature_function
+        self._chunk_layouts = _make_atom_grid_chunks(
+            sorted_atomic_grid_sizes, max_atoms_per_grid_size
+        )
+        self._atom_order = atom_grid_order.atom_indices
+        self._grid_order = atom_grid_order.grid_indices
+        self._is_spin_polarized = dm.ndim == 3
 
     def __iter__(self) -> Iterator[ModelFeatureChunk]:
         """Yield detached raw features paired with atom-aligned model inputs."""
-        feature_spec = self.feature_function.feature_spec
-        for layout in self.chunk_layouts:
-            atom_indices = self.atom_order[layout.atom_slice]
-            grid_indices = self.grid_order[layout.grid_slice]
+        feature_spec = self._feature_function.feature_spec
+        for layout in self._chunk_layouts:
+            atom_indices = self._atom_order[layout.atom_slice]
+            grid_indices = self._grid_order[layout.grid_slice]
             raw_features = (
-                self.atom_major_raw_features.index_select(-1, grid_indices)
+                self._atom_major_raw_features.index_select(-1, grid_indices)
                 .detach()
                 .requires_grad_()
             )
             model_features: FeatureMap = {}
             for feature_name in _GRID_POINT_FEATURES:
                 if feature_spec.requests(feature_name):
-                    model_features[feature_name] = self.grid_features[
+                    model_features[feature_name] = self._grid_features[
                         feature_name
                     ].index_select(0, grid_indices)
 
             for feature_name in _ATOM_FEATURES:
                 if feature_spec.requests(feature_name):
-                    model_features[feature_name] = self.grid_features[
+                    model_features[feature_name] = self._grid_features[
                         feature_name
                     ].index_select(0, atom_indices)
 
@@ -164,69 +212,14 @@ class ModelFeatureChunker:
                     device=raw_features.device,
                 )
 
-            for feature_name, feature in self.feature_function.to_dict(
+            for feature_name, feature in self._feature_function.to_dict(
                 raw_features
             ).items():
                 model_features[feature_name] = feature_math.maybe_expand_and_divide(
-                    feature, not self.is_spin_polarized, 2
+                    feature, not self._is_spin_polarized, 2
                 )
             yield ModelFeatureChunk(
                 grid_indices=grid_indices,
                 raw_features=raw_features,
                 model_features=model_features,
             )
-
-
-def prepare_model_feature_chunks(
-    mol: gto.Mole,
-    dm: Tensor,
-    grids: Grid,
-    atom_major_raw_features: Tensor,
-    feature_function: feature_math.MGGAFeatureFunction,
-    deriv_order: int,
-    max_memory_in_mb: int | None = None,
-    safety_fraction: float = 0.8,
-) -> ModelFeatureChunker:
-    """Prepare memory-sized, atom-aligned chunks for functional model evaluation."""
-    feature_spec = feature_function.feature_spec
-    if not feature_spec.supports_spatial_decomposition:
-        raise ValueError(
-            f"Atom-aligned model chunking requires {Feature.ATOMIC_GRID_SIZES.value!r}."
-        )
-
-    grid_features = get_grid_features(mol, dm, grids, feature_spec)
-    atomic_grid_sizes = grid_features[Feature.ATOMIC_GRID_SIZES]
-    atom_grid_order = _make_atom_grid_order(atomic_grid_sizes)
-    sorted_atomic_grid_sizes = atomic_grid_sizes.index_select(
-        0, atom_grid_order.atom_indices
-    )
-
-    max_atoms_per_grid_size = estimate_max_model_atoms_per_chunk(
-        dm=dm,
-        atomic_grid_sizes=sorted_atomic_grid_sizes,
-        nfeatures=feature_function.nfeats,
-        max_memory_in_mb=max_memory_in_mb,
-        safety_fraction=safety_fraction,
-        func_deriv=deriv_order,
-    )
-    for grid_size, max_atoms in max_atoms_per_grid_size.items():
-        if max_atoms < 1:
-            LOG.warning(
-                "Adjusted model chunk capacity for atomic grid size %d from %d "
-                "to one atom. Hope for no OOM.",
-                grid_size,
-                max_atoms,
-            )
-            max_atoms_per_grid_size[grid_size] = 1
-
-    return ModelFeatureChunker(
-        atom_major_raw_features=atom_major_raw_features,
-        grid_features=grid_features,
-        feature_function=feature_function,
-        chunk_layouts=_make_atom_grid_chunks(
-            sorted_atomic_grid_sizes, max_atoms_per_grid_size
-        ),
-        atom_order=atom_grid_order.atom_indices,
-        grid_order=atom_grid_order.grid_indices,
-        is_spin_polarized=dm.ndim == 3,
-    )

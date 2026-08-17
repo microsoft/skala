@@ -1,6 +1,6 @@
 """Shared functional and route-control helpers for tests."""
 
-from collections.abc import Iterable, Iterator
+from collections.abc import Generator, Iterable
 from contextlib import contextmanager
 from types import ModuleType
 from unittest.mock import patch
@@ -76,10 +76,10 @@ class QuadraticFunctional(ExcFunctionalBase):
 
 
 @contextmanager
-def patch_ao_screening(
+def force_ao_screening(
     enabled: bool,
     module: ModuleType = xc_integrator_module,
-) -> Iterator[None]:
+) -> Generator[None]:
     """Temporarily force the AO-screening route decision.
 
     Args:
