@@ -11,9 +11,19 @@ LOG = getLogger(__name__)
 
 class UnsortableGrids(gen_grid.Grids):  # type: ignore
     def build(
-        self, mol: gto.Mole | None = None, with_non0tab: bool = False, **kwargs: Any
+        self,
+        mol: gto.Mole | None = None,
+        with_non0tab: bool = False,
+        sort_grids: bool = True,
+        sort_grids_of_each_atom: bool = False,
+        **kwargs: Any,
     ) -> "UnsortableGrids":
-        sort_grids = kwargs.pop("sort_grids", None)
-        if sort_grids:
+        if sort_grids or sort_grids_of_each_atom:
             LOG.debug("sorted grids not supported, forcing unsorted grids")
-        return super().build(mol, with_non0tab, sort_grids=False, **kwargs)
+        return super().build(
+            mol,
+            with_non0tab,
+            sort_grids=False,
+            sort_grids_of_each_atom=False,
+            **kwargs,
+        )

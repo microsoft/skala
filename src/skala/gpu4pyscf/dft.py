@@ -133,7 +133,7 @@ class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
         self,
         auxbasis: str | None = None,
         with_df: bool | None = None,
-        only_dfj: bool | None = True,
+        only_dfj: bool | None = False,
     ) -> "SkalaRKS":
         if pyscf_version_newer_than_2_10() and auxbasis is None:
             warnings.warn(
@@ -216,7 +216,7 @@ class SkalaUKS(dft.uks.UKS):  # type: ignore[misc]
         self,
         auxbasis: str | None = None,
         with_df: bool | None = None,
-        only_dfj: bool | None = True,
+        only_dfj: bool | None = False,
     ) -> "SkalaUKS":
         if pyscf_version_newer_than_2_10() and auxbasis is None:
             warnings.warn(

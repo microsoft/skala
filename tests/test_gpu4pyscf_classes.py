@@ -99,3 +99,26 @@ def test_skala_class(
     assert ks.with_dftd3 is not None if with_dftd3 else ks.with_dftd3 is None
     if ks._needs_unsorted:
         assert isinstance(ks.grids, UnsortableGrids)
+
+
+def test_unsortable_grids_disable_all_gpu4pyscf_sorting(
+    mol: gto.Mole, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    build_options: dict[str, bool] = {}
+
+    def build(
+        self: object,
+        mol: gto.Mole | None = None,
+        with_non0tab: bool = False,
+        **kwargs: bool,
+    ) -> object:
+        build_options.update(kwargs)
+        return self
+
+    monkeypatch.setattr("gpu4pyscf.dft.gen_grid.Grids.build", build)
+
+    grids = UnsortableGrids(mol)
+    grids.build(sort_grids=True, sort_grids_of_each_atom=True)
+
+    assert build_options["sort_grids"] is False
+    assert build_options["sort_grids_of_each_atom"] is False

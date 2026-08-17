@@ -24,8 +24,8 @@ Installation
 
 The recommended way to set up a GPU environment is the provided
 ``environment-gpu.yml``, which pins ``pytorch-gpu``, ``cuda-toolkit 12``,
-``cuda-version 12``, ``cutensor``, and installs ``gpu4pyscf-cuda12x 1.5`` from
-PyPI as part of the environment file:
+``cuda-version 12``, ``cutensor``, and installs
+``gpu4pyscf-cuda12x >=1.8,<1.9`` from PyPI as part of the environment file:
 
 .. code-block:: bash
 
