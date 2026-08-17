@@ -36,10 +36,12 @@ def load_functional_cached() -> Callable[..., ExcFunctionalBase | str]:
     """Load each functional from the Hub at most once per test session."""
     return functools.lru_cache(maxsize=None)(load_functional)
 
+CUDA_AVAILABLE = torch.cuda.is_available()
+
 
 def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool | None:
     """Skip CUDA-only source doctests when CUDA is unavailable."""
-    if torch.cuda.is_available():
+    if CUDA_AVAILABLE:
         return None
 
     try:
