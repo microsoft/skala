@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 import torch
 from pyscf import dft, gto
-from utils import QuadraticFunctional, force_ao_screening
+from tests.utils import QuadraticFunctional, force_ao_screening
 
 from skala.features import Feature, FeatureMap
 from skala.functional.base import ExcFunctionalBase

@@ -23,7 +23,7 @@ except ModuleNotFoundError:
         allow_module_level=True,
     )
 
-from utils import QuadraticFunctional, force_ao_screening  # noqa: E402
+from tests.utils import QuadraticFunctional, force_ao_screening  # noqa: E402
 
 from skala.features import Feature  # noqa: E402
 from skala.functional.base import ExcFunctionalBase  # noqa: E402

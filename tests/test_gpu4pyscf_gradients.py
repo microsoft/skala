@@ -19,11 +19,11 @@ except ModuleNotFoundError:
         allow_module_level=True,
     )
 
-from _ridders import num_grad_ridders  # noqa: E402
+from tests.ridders import num_grad_ridders  # noqa: E402
 from gpu4pyscf import dft, scf  # noqa: E402
 from pyscf import gto  # noqa: E402
-from test_pyscf_gradients import FULL_GRAD_REF  # noqa: E402
-from utils import force_ao_screening  # noqa: E402
+from tests.test_pyscf_gradients import FULL_GRAD_REF  # noqa: E402
+from tests.utils import force_ao_screening  # noqa: E402
 
 from skala.features import Feature, FeatureMap  # noqa: E402
 from skala.functional.base import ExcFunctionalBase  # noqa: E402

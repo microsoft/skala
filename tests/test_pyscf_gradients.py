@@ -2,7 +2,7 @@ from collections.abc import Callable
 
 import pytest
 import torch
-from _ridders import num_grad_ridders
+from tests.ridders import num_grad_ridders
 from pyscf import dft, gto, scf
 
 from skala.features import Feature, FeatureMap
