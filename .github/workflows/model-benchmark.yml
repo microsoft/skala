@@ -1,0 +1,87 @@
+name: Model benchmarks
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cpu:
+    name: CPU model benchmark
+    runs-on: microsoft-skala-cpu-pool
+    env:
+      OMP_NUM_THREADS: 4
+      MKL_NUM_THREADS: 4
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+    - name: Print CPU diagnostics
+      uses: ./.github/actions/cpu-diagnostics
+
+    - name: Setup micromamba
+      uses: mamba-org/setup-micromamba@f457c30a868e4760d3a6fcea5f25dc655b8edf39 # v3
+      with:
+        environment-file: environment-cpu.yml
+        environment-name: skala
+        cache-environment: false
+        cache-downloads: true
+        create-args: >-
+          python=3.12
+
+    - name: Install package in development mode
+      run: pip install -e . --no-deps
+      shell: micromamba-shell {0}
+
+    - name: Run CPU model benchmarks
+      run: >-
+        pytest
+        -v
+        -m model_benchmark
+        -k cpu
+        tests/test_traced_model_comparison.py
+      shell: micromamba-shell {0}
+
+  gpu:
+    name: GPU model benchmark
+    runs-on: microsoft-skala-gpu-pool
+    env:
+      OMP_NUM_THREADS: 4
+      MKL_NUM_THREADS: 4
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+    - name: Print CPU diagnostics
+      uses: ./.github/actions/cpu-diagnostics
+
+    - name: Setup micromamba
+      uses: mamba-org/setup-micromamba@4b9113af4fba0e9e1124b252dd6497a419e7396d # v1
+      with:
+        environment-file: environment-gpu.yml
+        environment-name: skala-gpu
+        cache-environment: false
+        cache-downloads: true
+
+    - name: Install package in development mode
+      run: pip install -e . --no-deps
+      shell: micromamba-shell {0}
+
+    - name: Verify CUDA is available
+      run: >-
+        python -c
+        "import cupy, torch; assert torch.cuda.is_available();
+        cupy.linalg.norm(cupy.arange(3.0)).get()"
+      shell: micromamba-shell {0}
+
+    - name: Run GPU model benchmarks
+      run: >-
+        pytest
+        -v
+        -m model_benchmark
+        -k cuda
+        tests/test_traced_model_comparison.py
+      shell: micromamba-shell {0}

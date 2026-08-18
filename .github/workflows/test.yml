@@ -130,7 +130,7 @@ jobs:
       run: >-
         pytest
         -v
-        -m "gpu and not profiling"
+        -m "gpu and not profiling and not model_benchmark"
         tests/
       shell: micromamba-shell {0}
 

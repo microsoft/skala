@@ -3,6 +3,10 @@
 import torch
 
 
+def _is_tracing() -> bool:
+    return bool(torch.jit.is_tracing())  # type: ignore[attr-defined,no-untyped-call]
+
+
 def pad_ragged(
     data: torch.Tensor, sizes: torch.Tensor, size_bound: int
 ) -> torch.Tensor:
@@ -27,18 +31,19 @@ def pad_ragged(
         tensor([[1, 2, 0, 0],
                 [3, 4, 5, 0]])
     """
-    if (sizes < 0).any():
-        raise ValueError("sizes must contain only non-negative values")
-    if data.shape[0] != sizes.sum():
-        raise ValueError(
-            f"data length {data.shape[0]} must equal sum of sizes {sizes.sum().item():.0f}"
-        )
+    if not _is_tracing():
+        if (sizes < 0).any():
+            raise ValueError("sizes must contain only non-negative values")
+        if data.shape[0] != sizes.sum():
+            raise ValueError(
+                f"data length {data.shape[0]} must equal sum of sizes {sizes.sum().item():.0f}"
+            )
 
     batch_size = sizes.shape[0]
     rest_shape = data.shape[1:]
 
     # Fast path: single sequence - just pad directly
-    if batch_size == 1:
+    if not _is_tracing() and batch_size == 1:
         seq_len = data.shape[0]
         pad_len = size_bound - seq_len
         if pad_len > 0:
@@ -97,18 +102,18 @@ def unpad_ragged(
         >>> unpad_ragged(padded, sizes, total_size=5)
         tensor([1, 2, 3, 4, 5])
     """
-    if (sizes < 0).any():
+    if not _is_tracing() and (sizes < 0).any():
         raise ValueError("sizes must contain only non-negative values")
 
     batch_size = padded.shape[0]
     size_bound = padded.shape[1]
     rest_shape = padded.shape[2:]
 
-    if total_size == 0:
+    if not _is_tracing() and total_size == 0:
         return torch.zeros(0, *rest_shape, dtype=padded.dtype, device=padded.device)
 
     # Fast path: single sequence - just slice
-    if batch_size == 1:
+    if not _is_tracing() and batch_size == 1:
         return padded[0, :total_size]
 
     # For each output position, find which batch it belongs to via binary search,
