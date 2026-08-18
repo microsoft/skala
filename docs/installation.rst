@@ -74,9 +74,10 @@ If you prefer to install Skala from the source code, you can clone the repositor
 
 where ``environment-cpu.yml`` can be replaced with ``environment-gpu.yml`` for
 GPU support via `GPU4PySCF <https://github.com/pyscf/gpu4pyscf>`__. The GPU
-environment pins ``cuda-toolkit 12``, ``cuda-version 12``, ``cutensor``, and
-installs ``gpu4pyscf-cuda12x >=1.8,<1.9`` from PyPI as part of the environment
-file — no separate install step is required:
+environment pins ``pytorch-gpu``, ``cuda-version 12``, ``cuda-nvrtc`` for CuPy
+kernel compilation, and ``cutensor``. It installs
+``gpu4pyscf-cuda12x >=1.8,<1.9`` from PyPI as part of the environment file — no
+separate install step is required:
 
 .. code-block:: bash
 
@@ -92,7 +93,7 @@ solver proceeds without a device:
 
    CONDA_OVERRIDE_CUDA=12.0 mamba env create -n skala -f environment-gpu.yml
 
-For CUDA 11 or 13, adjust ``cuda-toolkit``, ``cuda-version``, and the
+For CUDA 11 or 13, adjust ``cuda-version``, ``cuda-nvrtc``, and the
 ``gpu4pyscf-cuda{11,13}x`` pin in ``environment-gpu.yml`` accordingly. Check
 your driver's maximum supported CUDA version with ``nvidia-smi``.
 
