@@ -11,9 +11,13 @@ See the `interactive report <benchmarks/index.html>`__ with our results on A100 
 Compare a local implementation or machine
 -----------------------------------------
 
-You can run the same benchmarks we ran on your own infrastructure to validate your implementation.
-To do this, install the benchmark dependencies, run the benchmark, collect the result,
-and combine them with the baselines from our report that we store in ``benchmarks/reference``.
+Use the same benchmark protocol on your own hardware or software stack, then compare your timings
+against our fixed reference measurements in ``benchmarks/reference``. This is the expected workflow for
+users who want to validate an implementation, check a new machine, or confirm that a local build matches
+our published performance envelope.
+
+To do this, install the benchmark dependencies, run the benchmark, collect the result, and combine your
+local measurements with the public baseline data stored in ``benchmarks/reference``.
 
 .. code-block:: bash
 

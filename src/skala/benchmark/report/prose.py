@@ -73,8 +73,12 @@ DEFAULT_PROSE: dict[str, Any] = {
         ),
     },
     "closing": (
-        "No study-specific conclusions were supplied. Interpret the measured points "
-        "and fitted lines in the context of the recorded environments."
+        "Compare a local run against the fixed reference measurements in "
+        "``benchmarks/reference`` by generating a report that combines both sets of "
+        "data: ``python -m skala.benchmark report local-report "
+        "benchmarks/reference benchmark-output/collected``. Open the generated "
+        "report locally and compare the same plots, axes, and fitted scaling lines "
+        "against the published baseline."
     ),
 }
 
