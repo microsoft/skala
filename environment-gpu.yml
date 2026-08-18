@@ -8,7 +8,7 @@ dependencies:
   - dftd3-python
   - e3nn
   - h5py
-  - hdf5 >=2.1,<2.2
+  - hdf5 >=1.14,<2
   - numpy
   - opt_einsum_fx
   - pyscf >=2.8,<2.14
