@@ -458,7 +458,9 @@ class SkalaUKSGradient(UHFGradient):  # type: ignore[misc]
         nuc_g += disp_g
         return nuc_g
 
-    def extra_force(self, atom_id: int, envs: dict[str, Any]) -> int:
+    def extra_force(
+        self, atom_id: int | None = None, envs: dict[str, Any] | None = None
+    ) -> int:
         return 0
 
     def reset(self, mol: gto.Mole | None = None) -> "SkalaUKSGradient":
