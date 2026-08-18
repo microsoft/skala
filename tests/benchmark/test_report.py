@@ -58,6 +58,8 @@ def test_reference_report_is_reproducible(tmp_path: Path) -> None:
     assert fits_match is not None
     fits = json.loads(fits_match.group(1))
     assert data["points"]
+    assert data["meta"]["initial_selection"]["environment"].startswith("a100-")
+    assert data["meta"]["environments"][0]["env_id"].startswith("a100-")
     assert fits
     assert "Skala performance and scaling benchmark" in index
     assert "On the A100 it is about 6.8 s" in index

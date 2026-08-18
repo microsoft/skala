@@ -84,13 +84,14 @@ def generate(
     if points.empty:
         raise ValueError("no converged successful measurements are available to plot")
 
+    prose = load_prose(prose_path)
     env_ids = list(dict.fromkeys(points["env_id"].astype(str).tolist()))
+    env_ids = _ordered_environment_ids(env_ids, prose.get("environment_order"))
     environments = environment_rows(environments_frame, env_ids)
     _validate_measurement_rows(measurement_rows)
     fits = normalize_fits(fits_frame)
     _warn_for_missing_fits(points, fits)
 
-    prose = load_prose(prose_path)
     title = str(prose.get("title") or "Skala benchmark scaling report")
     author = str(prose.get("author") or "")
     report_date = str(prose.get("date") or date.today().isoformat())
@@ -102,7 +103,6 @@ def generate(
         series: composition_records(measurements, series)
         for series in COMPOSITION_BUCKETS
     }
-    first_point = points.iloc[0]
     data = {
         "meta": {
             "environments": environments,
@@ -113,8 +113,8 @@ def generate(
             "composition_buckets": COMPOSITION_BUCKETS,
             "fits_available": bool(fits),
             "initial_selection": {
-                "environment": str(first_point["env_id"]),
-                "basis": str(first_point["basis"]),
+                "environment": env_ids[0],
+                "basis": bases[0],
             },
         },
         "points": point_records(points),
@@ -406,6 +406,23 @@ def _coerce_int(value: Any) -> int | None:
 
 def _mapping(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _ordered_environment_ids(
+    measured_ids: list[str], configured_order: Any
+) -> list[str]:
+    if configured_order is None:
+        return measured_ids
+    if not isinstance(configured_order, list):
+        raise ValueError("environment_order must be a list")
+
+    requested = [str(env_id) for env_id in configured_order]
+    unknown = sorted(set(requested) - set(measured_ids))
+    if unknown:
+        raise ValueError(
+            "environment_order contains unmeasured env_id values: " + ", ".join(unknown)
+        )
+    return list(dict.fromkeys([*requested, *measured_ids]))
 
 
 def _json_dump(value: Any) -> str:

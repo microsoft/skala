@@ -1,6 +1,10 @@
 title: Skala performance and scaling benchmark
 author: Microsoft Research, AI for Science
 date: 2026-08-18
+environment_order:
+  - a100-ppe-s07-v181-cutensor-warmfree-preload-20260817
+  - d32v3-t16
+  - d2v3-t2
 abstract: |
   This report provides a reproducible performance reference for validating another Skala implementation and for understanding the runtime users should expect from the official implementation as molecular and basis size grow.
 intro: |
