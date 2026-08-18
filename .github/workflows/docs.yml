@@ -53,7 +53,7 @@ jobs:
 
       - name: Check external links
         run: |
-          sphinx-build -b linkcheck docs docs/_build/linkcheck
+          sphinx-build -D nb_execution_mode=off -b linkcheck docs docs/_build/linkcheck
         shell: micromamba-shell {0}
 
       - name: Upload Pages artifact

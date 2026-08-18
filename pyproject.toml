@@ -38,13 +38,25 @@ optional-dependencies.dev = [
 ]
 optional-dependencies.doc = [
     "ipywidgets",
+    "jinja2",
+    "markdown-it-py",
     "myst-nb",
+    "pandas",
+    "pyyaml",
     "sphinx",
     "sphinx-book-theme",
     "sphinx-design",
     "sphinxcontrib-bibtex",
     "sphinxcontrib-moderncmakedomain",
     "sphinx-fortran",
+]
+optional-dependencies.benchmark = [
+    "jinja2",
+    "markdown-it-py",
+    "pandas",
+    "pyarrow",
+    "pytorch-pfn-extras>=0.9,<0.10",
+    "pyyaml",
 ]
 
 urls.repository = "https://github.com/microsoft/skala"

@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ title }}</title>
+<link rel="stylesheet" href="report-base.css">
+<link rel="stylesheet" href="report.css">
+</head>
+<body>
+<header class="report-header">
+  <span class="report-header__brand">Skala benchmark report</span>
+  <div class="report-header__actions">
+    <a class="icon-btn" title="Download report data" href="data.json" download
+      aria-label="Download report data">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+        <polyline points="7 10 12 15 17 10"></polyline>
+        <line x1="12" y1="15" x2="12" y2="3"></line>
+      </svg>
+    </a>
+  </div>
+</header>
+
+<main class="report">
+  <p class="eyebrow">Benchmark · Cost scaling</p>
+  <h1>{{ title }}</h1>
+  <div class="title-rule"></div>
+  {% if author and date %}<p class="byline">{{ author }} · {{ date }}</p>
+  {% elif author %}<p class="byline">{{ author }}</p>
+  {% elif date %}<p class="byline">{{ date }}</p>{% endif %}
+
+  <div class="abstract">{{ abstract }}</div>
+  <div class="intro">{{ intro }}</div>
+
+  <section aria-labelledby="comparison-title">
+    <h2 id="comparison-title">Environments</h2>
+    <div>{{ comparison_intro }}</div>
+    <div class="cards env-cards">
+      {% for environment in environments %}
+      <div class="card">
+        <div class="card__head">{{ environment.label }}</div>
+        <div class="card__body">
+          {% for name, value in environment.facts %}
+          <div class="card__row"><span>{{ name }}</span><b>{{ value }}</b></div>
+          {% endfor %}
+          {% if environment.annotation %}
+          <div class="card__note">{{ environment.annotation }}</div>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% for note in comparison_notes %}
+    <div class="callout note"><span class="callout__icon">ⓘ</span><div>{{ note }}</div></div>
+    {% endfor %}
+  </section>
+
+  <div class="control-bar__sentinel" aria-hidden="true"></div>
+  <div class="control-bar" role="group" aria-label="Plot controls">
+    <div class="control-bar__inner">
+      <div class="control-bar__controls">
+        <div class="control">
+          <div class="control__label" id="environment-label">Compute</div>
+          <div class="segmented" id="environment-control" role="radiogroup"
+            aria-labelledby="environment-label"></div>
+          <p class="control__key"><kbd>E</kbd> to switch</p>
+        </div>
+        <div class="control">
+          <div class="control__label" id="basis-label">Basis set</div>
+          <div class="segmented" id="basis-control" role="radiogroup"
+            aria-labelledby="basis-label"></div>
+          <p class="control__key"><kbd>B</kbd> to switch</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section aria-labelledby="plots-title">
+    <h2 id="plots-title">Scaling plots</h2>
+    <p>
+      Points are converged calculations. Dashed lines are precomputed piecewise
+      log–log fits with at most one kink, selected by cross-validation.
+      Axes remain fixed while selections change, enabling direct visual comparison.
+    </p>
+
+    <article class="plot-block">
+      <h3>{{ xc_eval_label }}</h3>
+      <p class="chart-subtitle">
+        The functional itself: energy and derivative, timed in place inside the SCF
+      </p>
+      <p class="plot-intro">
+        For a classical functional this is libxc's combined energy-and-derivative
+        call; for Skala it is the network's forward pass plus the autograd
+        backward that differentiates it. On GPU it is timed with CUDA events,
+        because the backward is queued immediately behind the forward with no
+        synchronization between them, and a host clock would measure
+        kernel-launch overhead instead of work.
+      </p>
+      <figure class="fig-wide">
+        <div class="chart" id="chart-xc_eval" data-metric="xc_eval"></div>
+      </figure>
+      <p class="x-axis-caption">
+        <span class="x-axis-control" role="radiogroup" aria-label="XC eval x-axis"></span>
+        <kbd class="x-axis-caption__key" title="Press X to switch axis">X</kbd>
+      </p>
+      <div class="plot-commentary">{{ xc_eval_commentary }}</div>
+    </article>
+
+    <article class="plot-block">
+      <h3>{{ numint_label }}</h3>
+      <p class="chart-subtitle">
+        XC quadrature per iteration: grid and AO evaluation, density construction,
+        functional evaluation, and potential assembly
+      </p>
+      <p class="plot-intro">
+        Numerical integration evaluates the density and exchange-correlation model
+        on the quadrature grid, then contracts the resulting potential back into the
+        AO basis. Its cost can therefore grow with both the number of grid points and
+        the size of the AO basis.
+      </p>
+      <div class="tex tex--display"
+        data-tex="v_{\mathrm{xc}}(\mathbf{r}) = \frac{\delta E_{\mathrm{xc}}[n]}{\delta n(\mathbf{r})}">
+        v_xc(r) = δE_xc[n] / δn(r)
+      </div>
+      <p class="plot-intro">
+        Toggle the horizontal axis to distinguish grid-driven growth from
+        basis-driven growth. Differences between the two views help identify
+        whether quadrature size or AO contractions dominate a measured trend.
+      </p>
+      <figure class="fig-wide">
+        <div class="chart" id="chart-numint" data-metric="numint"></div>
+      </figure>
+      <p class="x-axis-caption">
+        <span class="x-axis-control" role="radiogroup" aria-label="Numint x-axis"></span>
+        <kbd class="x-axis-caption__key" title="Press X to switch axis">X</kbd>
+      </p>
+      <div class="plot-commentary">{{ numint_commentary }}</div>
+    </article>
+
+    <article class="plot-block">
+      <h3>{{ jk_label }}</h3>
+      <p class="chart-subtitle">
+        Coulomb and exchange matrices, the other half of the Fock build
+      </p>
+      <p class="plot-intro">
+        The effective potential is the J/K build plus the exchange-correlation
+        quadrature, so subtracting numerical integration from it leaves J/K on
+        its own. It is a difference of two measured quantities, and it is the
+        part of an iteration that does not depend on the functional.
+      </p>
+      <figure class="fig-wide">
+        <div class="chart" id="chart-jk" data-metric="jk"></div>
+      </figure>
+      <div class="plot-commentary">{{ jk_commentary }}</div>
+    </article>
+
+    <article class="plot-block">
+      <h3>{{ cycle_label }}</h3>
+      <p class="chart-subtitle">
+        One whole SCF iteration, median over the steady-state cycles
+      </p>
+      <p class="plot-intro">
+        The outermost of the three nested layers. Numerical integration sits
+        inside it, and the neural forward pass inside that, so the vertical gaps
+        between these three panels are themselves measured quantities rather
+        than estimates.
+      </p>
+      <figure class="fig-wide">
+        <div class="chart" id="chart-cycle" data-metric="cycle"></div>
+      </figure>
+      <p class="x-axis-caption">
+        <span class="x-axis-control" role="radiogroup" aria-label="Cycle x-axis"></span>
+        <kbd class="x-axis-caption__key" title="Press X to switch axis">X</kbd>
+      </p>
+      <div class="plot-commentary">{{ cycle_commentary }}</div>
+    </article>
+
+    <article class="plot-block">
+      <p class="plot-intro">
+        End-to-end SCF time depends on the work performed in each iteration and on
+        the number of cycles, <span class="tex" data-tex="N_{\mathrm{SCF}}">N_SCF</span>,
+        required to reach convergence. Reading the panels together separates
+        algorithmic scaling within an iteration from changes in convergence behavior.
+      </p>
+      <div class="plot-pair">
+        <figure class="plot-pair__item">
+          <figcaption class="chart-subtitle">{{ total_label }} · measured kernel wall time</figcaption>
+          <div class="chart" id="chart-total" data-metric="total"></div>
+          <div class="plot-commentary">{{ total_commentary }}</div>
+        </figure>
+        <figure class="plot-pair__item">
+          <figcaption class="chart-subtitle">{{ iterations_label }} · converged iterations</figcaption>
+          <div class="chart" id="chart-iterations" data-metric="iterations"></div>
+          <div class="plot-commentary">{{ iterations_commentary }}</div>
+        </figure>
+      </div>
+      <p class="figure-note">
+        All panels use global fixed log domains. The forward, numerical-integration,
+        and iteration panels have independent x-axis toggles; iteration count and
+        total cost use the number of atomic orbitals.
+      </p>
+    </article>
+
+    <article class="plot-block">
+      <h3>{{ setup_label }}</h3>
+      <p class="plot-intro">
+        Work done once before the SCF loop, and therefore invisible in a
+        per-iteration average: grid construction, one-electron integrals, the
+        initial guess, and the density-fitting integral build.
+      </p>
+      <div class="chart" id="chart-setup" data-metric="setup"></div>
+      <div class="plot-commentary">{{ setup_commentary }}</div>
+    </article>
+  </section>
+
+  <section aria-labelledby="composition-title">
+    <h2 id="composition-title">Where the time goes</h2>
+
+    <h3>One SCF iteration</h3>
+    <p>
+      The stacked bands partition a steady-state SCF iteration into four
+      directly measured, nested layers: the exchange-correlation functional
+      itself, the rest of the quadrature around it, the J/K build, and
+      everything else in the iteration. Because the layers nest, each band is a
+      difference of two measurements rather than an attributed share.
+    </p>
+    <div id="composition-charts"></div>
+    <p class="figure-note">
+      Fractions use the selected compute environment and basis set and are averaged
+      over molecules sharing an atomic-orbital count. Every stack totals 100%.
+    </p>
+    <div class="plot-commentary">{{ composition_commentary }}</div>
+
+    <h3>One complete SCF</h3>
+    <p>
+      The same calculation seen end to end. Setup runs once before the loop --
+      grid construction, one-electron integrals, the initial guess, and the
+      density-fitting integral build -- and is amortized over however many
+      iterations convergence takes, so its share shrinks as systems grow and
+      grows when convergence is easy.
+    </p>
+    <div id="run-composition-charts"></div>
+    <p class="figure-note">
+      The measured kernel only. What a process pays before it, described under
+      Process start-up caveats, is excluded, as is the post-loop convergence
+      check.
+    </p>
+    <div class="plot-commentary">{{ run_composition_commentary }}</div>
+  </section>
+
+  <section aria-labelledby="startup-title">
+    <h2 id="startup-title">Process start-up caveats</h2>
+    {{ startup_commentary }}
+  </section>
+
+  {% if closing %}
+  <section><h2>Closing notes</h2>{{ closing }}</section>
+  {% endif %}
+
+  <footer>
+    <h2>Generate a local comparison</h2>
+    <p>
+      Run and collect the same benchmark sweep on each machine, then pass every
+      collected directory to the report generator. Each directory must contain
+      <code>measurements.json</code>, <code>environments.json</code>, and
+      <code>fits.json</code>. The resulting bundle is self-contained and can be
+      opened directly from local storage without a network connection.
+    </p>
+    <pre><code>python -m skala.benchmark report report-out \
+    machine-a/collected \
+    machine-b/collected</code></pre>
+  </footer>
+</main>
+
+<div class="chart-tooltip" id="chart-tooltip" role="status" aria-live="polite" hidden></div>
+<script id="report-data" type="application/json">{{ data_json }}</script>
+<script id="report-fits" type="application/json">{{ fits_json }}</script>
+<script src="d3.min.js"></script>
+<script src="katex.min.js"></script>
+<script src="report.js"></script>
+</body>
+</html>

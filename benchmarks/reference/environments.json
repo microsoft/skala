@@ -1,0 +1,103 @@
+[
+  {
+    "blas_impl": "blas 3.9.0",
+    "cores_logical": 32,
+    "cores_physical": 16,
+    "cpu_model": "Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz",
+    "cuda_version": "12.9",
+    "env_id": "d32v3-t16",
+    "env_vars": {
+      "OMP_NUM_THREADS": "16"
+    },
+    "gpu4pyscf_version": null,
+    "gpu_count": 0,
+    "gpu_models": [],
+    "hostname": "7e51b6768bee47088aa554f376b0605500001V",
+    "interconnect": null,
+    "label": "D32_v3 - 16 threads",
+    "mem_total_gb": 125.8,
+    "num_sockets": 1,
+    "numa_nodes": 1,
+    "numa_topology": "NUMA node(s):                            1\nNUMA node0 CPU(s):                       0-31",
+    "numpy_version": "2.3.5",
+    "pyscf_version": "2.10.0",
+    "python_version": "3.11.15",
+    "skala_version": "2026.8",
+    "timestamp": "2026-08-13T20:39:19.738400+00:00",
+    "torch_version": "2.9.1",
+    "versions": {
+      "ase": "3.29.0",
+      "dftd3": "1.2.1",
+      "pyarrow": "25.0.0",
+      "skala": "2026.8"
+    }
+  },
+  {
+    "blas_impl": "blas 3.9.0",
+    "cores_logical": 2,
+    "cores_physical": 1,
+    "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+    "cuda_version": "12.9",
+    "env_id": "d2v3-t2",
+    "env_vars": {
+      "OMP_NUM_THREADS": "2"
+    },
+    "gpu4pyscf_version": null,
+    "gpu_count": 0,
+    "gpu_models": [],
+    "hostname": "351091b5a72845bdb5d9cc3cfc7e0fdb0000C5",
+    "interconnect": null,
+    "label": "D2_v3 - 2 threads",
+    "mem_total_gb": 7.8,
+    "num_sockets": 1,
+    "numa_nodes": 1,
+    "numa_topology": "NUMA node(s):                            1\nNUMA node0 CPU(s):                       0,1",
+    "numpy_version": "2.3.5",
+    "pyscf_version": "2.10.0",
+    "python_version": "3.11.15",
+    "skala_version": "2026.8",
+    "timestamp": "2026-08-16T17:45:03.430074+00:00",
+    "torch_version": "2.9.1",
+    "versions": {
+      "ase": "3.29.0",
+      "dftd3": "1.2.1",
+      "pyarrow": "25.0.0",
+      "skala": "2026.8"
+    }
+  },
+  {
+    "blas_impl": "scipy-openblas 0.3.29",
+    "cores_logical": 24,
+    "cores_physical": 24,
+    "cpu_model": "AMD EPYC 7V13 64-Core Processor",
+    "cuda_version": "12.8",
+    "env_id": "a100-ppe-s07-v181-cutensor-warmfree-preload-20260817",
+    "env_vars": {
+      "OMP_NUM_THREADS": "24"
+    },
+    "gpu4pyscf_version": null,
+    "gpu_count": 1,
+    "gpu_models": [
+      "NVIDIA A100 80GB PCIe"
+    ],
+    "hostname": "ab9c0b145292439180ac9e72068318d200000B",
+    "interconnect": null,
+    "label": "A100 GPU - GPU4PySCF 1.8.1 + cuTENSOR",
+    "mem_total_gb": 216.3,
+    "num_sockets": 1,
+    "numa_nodes": 1,
+    "numa_topology": "NUMA node(s):                            1\nNUMA node0 CPU(s):                       0-23",
+    "numpy_version": "2.2.6",
+    "pyscf_version": "2.10.0",
+    "python_version": "3.11.15",
+    "skala_version": "2026.8",
+    "timestamp": "2026-08-17T07:23:56.834931+00:00",
+    "torch_version": "2.9.1+cu128",
+    "versions": {
+      "ase": "3.29.0",
+      "dftd3": "1.2.1",
+      "pyarrow": "25.0.0",
+      "skala": "2026.8"
+    }
+  }
+]
