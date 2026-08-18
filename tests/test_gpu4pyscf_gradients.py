@@ -64,8 +64,16 @@ def test_torch_allocator_uses_shared_non_default_stream() -> None:
     with torch.cuda.stream(torch_stream), cupy_stream:
         torch_allocator.use_torch_mempool_in_cupy()
         array = cupy.empty(1)
+        device_id = array.device.id
+        # Release the block and drop it from PyTorch's cache while the stream is
+        # still alive. Cached blocks that outlive their stream make later
+        # allocations record events on a destroyed stream, which corrupts the
+        # CUDA context of subsequent tests.
+        del array
+        torch.cuda.synchronize()
+        torch.cuda.empty_cache()
 
-    assert array.device.id == torch_stream.device.index
+    assert device_id == torch_stream.device.index
 
 
 def test_torch_allocator_rejects_mismatched_streams() -> None:
