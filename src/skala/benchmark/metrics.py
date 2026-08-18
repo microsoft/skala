@@ -185,26 +185,12 @@ X_AXES = tuple(AXIS_DEFINITIONS)
 X_AXIS_LABELS = {
     axis: definition.label for axis, definition in AXIS_DEFINITIONS.items()
 }
-X_AXIS_COLUMNS = {
-    axis: definition.source_column for axis, definition in AXIS_DEFINITIONS.items()
-}
 METRIC_IDS = tuple(METRIC_DEFINITIONS)
 METRIC_LABELS = {
     metric: definition.label for metric, definition in METRIC_DEFINITIONS.items()
 }
 METRIC_UNITS = {
     metric: definition.unit for metric, definition in METRIC_DEFINITIONS.items()
-}
-METRIC_AXES = {
-    metric: definition.axes for metric, definition in METRIC_DEFINITIONS.items()
-}
-METRIC_CYCLE_REQUIREMENTS = {
-    metric: definition.requires_cycles
-    for metric, definition in METRIC_DEFINITIONS.items()
-}
-METRIC_SOURCE_COLUMNS = {
-    metric: definition.source_columns
-    for metric, definition in METRIC_DEFINITIONS.items()
 }
 FIT_COMBINATIONS = tuple(
     (metric, definition.axes) for metric, definition in METRIC_DEFINITIONS.items()
@@ -376,14 +362,6 @@ def metric_value(row: Row, metric: str) -> float | None:
     return value if value is not None and value > 0.0 else None
 
 
-def metric_requires_cycles(metric: str) -> bool:
-    """Return whether a registered metric depends on per-cycle records."""
-    try:
-        return METRIC_DEFINITIONS[metric].requires_cycles
-    except KeyError:
-        raise ValueError(f"unknown metric: {metric!r}") from None
-
-
 def metric_has_grid_size_axis(metric: str) -> bool:
     """Return whether a registered metric is plotted against grid size."""
     try:
@@ -398,11 +376,6 @@ def metric_axes(metric: str) -> tuple[str, ...]:
         return METRIC_DEFINITIONS[metric].axes
     except KeyError:
         raise ValueError(f"unknown metric: {metric!r}") from None
-
-
-def is_fit_combination(metric: str, x_axis: str) -> bool:
-    """Return whether a metric/axis pair is registered for fitting."""
-    return metric in METRIC_DEFINITIONS and x_axis in METRIC_DEFINITIONS[metric].axes
 
 
 def composition_times(row: Row) -> dict[str, float] | None:

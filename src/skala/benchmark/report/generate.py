@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-import yaml
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from markupsafe import Markup
 
@@ -136,10 +135,6 @@ def generate(
     data_json = _json_dump(data)
     fits_json = _json_dump(fits)
     (output / "data.json").write_text(data_json, encoding="utf-8")
-    (output / "fits.json").write_text(fits_json, encoding="utf-8")
-    (output / "metadata.yaml").write_text(
-        _metadata_yaml(title, author, report_date, abstract), encoding="utf-8"
-    )
 
     comparison = _mapping(prose.get("comparison"))
     annotations = _mapping(comparison.get("environments"))
@@ -407,13 +402,6 @@ def _coerce_int(value: Any) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
-
-
-def _metadata_yaml(title: str, author: str, report_date: str, abstract: str) -> str:
-    metadata = {"title": title, "author": author, "date": report_date}
-    if abstract:
-        metadata["abstract"] = abstract[:500]
-    return yaml.safe_dump(metadata, sort_keys=False, allow_unicode=True)
 
 
 def _mapping(value: Any) -> dict[str, Any]:

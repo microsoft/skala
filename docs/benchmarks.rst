@@ -1,5 +1,5 @@
 Expected speed: Skala timing benchmark
-=====================================
+======================================
 
 We have run single-point DFT calculations with Skala using (GPU4)PySCF on a dataset of realistic
 molecules of increasing size. We compare them with two hybrid functionals and a meta-GGA to assess

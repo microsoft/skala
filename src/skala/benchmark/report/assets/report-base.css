@@ -1,55 +1,34 @@
-/* Base typography, layout, and components for offline benchmark reports. */
+/* Shared layout and typography for the standalone benchmark report. */
 
 :root {
-  /* Typography */
   --font-sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: "SF Mono", ui-monospace, "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
-
-  /* Ink & surface (crisp, cool neutrals) */
+  --font-mono: "SF Mono", ui-monospace, "JetBrains Mono", "Cascadia Code", Consolas, monospace;
   --ink: #111;
   --muted: #737373;
   --rule: #e5e5e5;
   --bg: #fff;
-
-  /* Brand accent (teal) */
-  --teal: #1f6f74;          /* links, accents, primary ink-on-light */
-  --teal-bright: #49c5b1;   /* title rule, highlights */
-  --teal-btn: #1a6168;      /* solid button background */
-
-  /* Semantic (callouts, status) */
-  --green: #1a6b3a;
-  --amber: #9a7400;
-  --red: #c0392b;
-  --yellow: #ffb900;
-
-  /* Categorical data series (colourblind-safe AI4S palette) */
-  --series-1: #49c5b1;  /* teal */
-  --series-2: #8661c5;  /* purple */
-  --series-3: #ffb900;  /* yellow */
-  --series-4: #0078d4;  /* blue */
-  --series-5: #ffa38b;  /* orange */
-  --series-6: #b1b3b3;  /* grey */
-
-  /* Code card + syntax palette (P3) */
-  --code-bg: #f7faf9;
-  --code-border: #dcebe7;
-  --code-text: #24292e;
-  --code-keyword: #0067c0;
-  --code-string: #07641d;
-  --code-number: #b8690a;
-  --code-function: #1f6f74;
-  --code-comment: #8c8279;
-
-  /* Layout */
-  --measure: 720px;   /* reading column */
-  --band: 1080px;     /* wide-figure cap */
+  --teal: #1f6f74;
+  --teal-bright: #49c5b1;
+  --teal-btn: #1a6168;
+  --series-1: #49c5b1;
+  --series-2: #8661c5;
+  --series-3: #ffb900;
+  --series-4: #0078d4;
+  --series-5: #ffa38b;
+  --series-6: #b1b3b3;
+  --measure: 720px;
+  --band: 1080px;
 }
 
-/* ---------------------------------------------------------------- base ---- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
 
-*, *::before, *::after { box-sizing: border-box; }
-
-html { -webkit-text-size-adjust: 100%; }
+html {
+  -webkit-text-size-adjust: 100%;
+}
 
 body {
   margin: 0;
@@ -58,33 +37,44 @@ body {
   font-family: var(--font-sans);
   font-size: 16px;
   line-height: 1.6;
-  overflow-x: hidden;            /* allows full-bleed figures without scrollbars */
+  overflow-x: hidden;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
 }
 
-/* The reading column. Prose lives here; figures may break out (see .fig-*). */
 .report {
   max-width: var(--measure);
   margin: 0 auto;
   padding: 30px 24px 120px;
 }
 
-.report p { margin: 0 0 13px; }
-.report ul, .report ol { margin: 0 0 13px; padding-left: 1.4em; }
-.report li { margin: 3px 0; }
-.report img { max-width: 100%; height: auto; }
-hr { border: none; border-top: 1px solid var(--rule); margin: 32px 0; }
+.report p {
+  margin: 0 0 13px;
+}
 
-/* ------------------------------------------------------- headings / title -- */
+.report ul,
+.report ol {
+  margin: 0 0 13px;
+  padding-left: 1.4em;
+}
+
+.report li {
+  margin: 3px 0;
+}
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--rule);
+  margin: 32px 0;
+}
 
 .eyebrow {
+  color: var(--teal);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 1.5px;
-  text-transform: uppercase;
-  color: var(--teal);
   margin: 0 0 7px;
+  text-transform: uppercase;
 }
 
 .report h1 {
@@ -96,16 +86,16 @@ hr { border: none; border-top: 1px solid var(--rule); margin: 32px 0; }
 }
 
 .title-rule {
-  height: 3px;
-  width: 44px;
   background: var(--teal-bright);
   border-radius: 2px;
+  height: 3px;
   margin: 10px 0 14px;
+  width: 44px;
 }
 
 .byline {
-  font-size: 13px;
   color: var(--muted);
+  font-size: 13px;
   margin: 0 0 20px;
 }
 
@@ -117,335 +107,179 @@ hr { border: none; border-top: 1px solid var(--rule); margin: 32px 0; }
 }
 
 .report h3 {
+  color: var(--ink);
   font-size: 16px;
   font-weight: 600;
-  color: var(--ink);
   margin: 22px 0 7px;
 }
-
-/* ----------------------------------------------------------------- links -- */
 
 .report a {
   color: var(--teal);
   text-decoration: underline;
-  text-underline-offset: 2px;
   text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
 }
-.report a:hover { text-decoration-thickness: 2px; }
 
-/* --------------------------------------------------------------- buttons -- */
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  padding: 7px 14px;
-  border-radius: 7px;
-  border: 1px solid transparent;
-  background: var(--teal-btn);
-  color: #fff !important;            /* beats .report a colour */
-  text-decoration: none !important;
-  cursor: pointer;
+.report a:hover {
+  text-decoration-thickness: 2px;
 }
-.btn:hover { background: #185b5f; }
-.btn.ghost {
-  background: #fff;
-  color: var(--teal) !important;
-  border-color: #d7d7d7;
-}
-.btn.ghost:hover { background: #f4f4f4; }
-.btn svg { width: 15px; height: 15px; }
-
-/* ---------------------------------------------------------- header bar ---- */
 
 .report-header {
-  display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 24px;
   border-bottom: 1px solid var(--rule);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 12px 24px;
 }
-.report-header__left { display: flex; align-items: center; gap: 14px; min-width: 0; }
+
 .report-header__brand {
+  color: var(--muted);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 1.5px;
   text-transform: uppercase;
-  color: var(--muted);
 }
-.report-header__actions { display: flex; gap: 4px; flex: 0 0 auto; }
 
-.backlink {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 13.5px;
-  font-weight: 500;
-  color: var(--teal) !important;
-  text-decoration: none !important;
+.report-header__actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
 }
-.backlink:hover { text-decoration: underline !important; }
-.backlink svg { width: 14px; height: 14px; }
 
 .icon-btn {
-  width: 34px;
-  height: 34px;
-  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  border-radius: 7px;
-  color: var(--teal) !important;
-  border: 1px solid #e2e2e2;
   background: #fff;
-  cursor: pointer;
+  border: 1px solid #e2e2e2;
+  border-radius: 7px;
+  color: var(--teal);
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
 }
-.icon-btn:hover { background: #f4f4f4; }
-.icon-btn svg { width: 16px; height: 16px; }
 
-/* ------------------------------------------------------------- callouts -- */
-/* Soft tint + colour-matched icon and title. No border. */
+.icon-btn:hover {
+  background: #f4f4f4;
+}
+
+.icon-btn svg {
+  height: 16px;
+  width: 16px;
+}
 
 .callout {
-  display: flex;
-  gap: 10px;
+  background: #eef7f6;
   border-radius: 8px;
-  padding: 13px 15px;
-  margin: 16px 0;
+  display: flex;
   font-size: 14.5px;
+  gap: 10px;
   line-height: 1.55;
+  margin: 16px 0;
+  padding: 13px 15px;
 }
-.callout .callout__icon { flex: 0 0 auto; font-size: 16px; line-height: 1.5; }
-.callout b { font-weight: 600; }
 
-.callout.note   { background: #eef7f6; }
-.callout.note   .callout__icon, .callout.note b   { color: var(--teal); }
-.callout.result { background: #eaf5ee; }
-.callout.result .callout__icon, .callout.result b { color: var(--green); }
-.callout.caution{ background: #fff7e0; }
-.callout.caution .callout__icon, .callout.caution b{ color: var(--amber); }
-.callout.pitfall{ background: #fdecea; }
-.callout.pitfall .callout__icon, .callout.pitfall b{ color: var(--red); }
-
-/* ----------------------------------------------------------- KPI cards ---- */
-/* Borderless, left teal rule, left-aligned. */
-
-.kpis {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 10px 26px;
-  margin: 18px 0;
+.callout__icon {
+  color: var(--teal);
+  flex: 0 0 auto;
+  font-size: 16px;
+  line-height: 1.5;
 }
-.kpi { padding: 4px 0 4px 14px; border-left: 3px solid var(--teal-bright); }
-.kpi__value { font-size: 1.8rem; font-weight: 700; line-height: 1.05; }
-.kpi__value small { font-size: 0.9rem; font-weight: 600; color: var(--muted); }
-.kpi__label { font-size: 12px; color: var(--muted); margin-top: 3px; }
-.kpi__delta { font-size: 11.5px; font-weight: 600; margin-top: 3px; color: var(--green); }
-.kpi__delta.down { color: var(--red); }
-
-/* --------------------------------------------------- comparison cards ----- */
 
 .cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   margin: 18px 0;
 }
-.card { border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; }
+
+.card {
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
 .card__head {
+  background: #fafafa;
+  border-bottom: 1px solid var(--rule);
+  color: var(--muted);
   font-size: 13px;
   font-weight: 600;
   padding: 9px 14px;
-  border-bottom: 1px solid var(--rule);
-  background: #fafafa;
-  color: var(--muted);
 }
-.card__body { padding: 12px 14px; font-size: 14px; }
+
+.card__body {
+  font-size: 14px;
+  padding: 12px 14px;
+}
+
 .card__row {
+  border-bottom: 1px solid #f1f1f1;
   display: flex;
   justify-content: space-between;
   padding: 3px 0;
-  border-bottom: 1px solid #f1f1f1;
 }
-.card__row:last-child { border-bottom: none; }
-.card__row b { font-variant-numeric: tabular-nums; }
 
-/* ---------------------------------------------------------------- tables -- */
-/* Minimal ruled, booktabs-style: heavier rules above the header and below the
-   last row, a lighter rule under the header, hairlines between rows. */
+.card__row:last-child {
+  border-bottom: 0;
+}
 
-.report table {
-  border-collapse: collapse;
-  width: 100%;
-  font-size: 13.5px;
+.card__row b {
   font-variant-numeric: tabular-nums;
-  margin: 18px 0;
-  border-top: 1.5px solid var(--ink);      /* booktabs \toprule */
-  border-bottom: 1.5px solid var(--ink);   /* booktabs \bottomrule */
 }
-.report th {
-  border-bottom: 1px solid var(--ink);     /* booktabs \midrule (thinner) */
-  padding: 7px 14px 7px 0;
-  text-align: left;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--ink);
-  font-weight: 600;
-}
-.report thead th { padding-top: 8px; }
-.report td { border-bottom: 1px solid var(--rule); padding: 7px 14px 7px 0; }
-.report tr:last-child td { border-bottom: none; }
-.report td.num, .report th.num { text-align: right; padding-right: 0; }
-.report tr.best td { font-weight: 700; }
-
-/* ------------------------------------------------------------- equations -- */
-/* Plain by default (display math centres itself). Optional teal callout. */
-
-.eq { margin: 6px 0 4px; }
-.eq-callout {
-  margin: 18px 0;
-  background: var(--teal);
-  color: #fff;
-  border-radius: 10px;
-  padding: 14px 20px 18px;
-}
-.eq-callout__label {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 1.2px;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.8);
-  margin-bottom: 4px;
-}
-.eq-callout .katex { color: #fff; }
-
-/* ----------------------------------------------------------------- code --- */
-/* Light brand card. Token colours = palette P3. Works with either a
-   class-emitting highlighter (highlight.js scopes below) or Shiki using the
-   matching theme in the style guide. */
 
 .report pre {
-  background: var(--code-bg);
-  border: 1px solid var(--code-border);
+  background: #f7faf9;
+  border: 1px solid #dcebe7;
   border-radius: 8px;
-  padding: 14px 16px;
-  overflow: auto;
   margin: 16px 0;
+  overflow: auto;
+  padding: 14px 16px;
 }
-.report pre code,
+
 .report code {
   font-family: var(--font-mono);
   font-size: 13px;
   line-height: 1.62;
 }
+
 .report :not(pre) > code {
   background: #f1f1f2;
   border-radius: 4px;
-  padding: 1px 5px;
   font-size: 0.88em;
+  padding: 1px 5px;
 }
-.report pre code { background: none; padding: 0; color: var(--code-text); }
 
-.codecap { font-size: 12px; color: var(--muted); margin-top: 6px; }
+.report pre code {
+  background: none;
+  padding: 0;
+}
 
-/* highlight.js token scopes mapped to palette P3 */
-.hljs-keyword, .hljs-built_in { color: var(--code-keyword); font-weight: 600; }
-.hljs-string { color: var(--code-string); }
-.hljs-number { color: var(--code-number); }
-.hljs-title, .hljs-title.function_ { color: var(--code-function); }
-.hljs-comment { color: var(--code-comment); font-style: italic; }
+figure {
+  margin: 22px 0 36px;
+}
 
-/* --------------------------------------------------------------- figures -- */
-/* Three breakout modes within the reading column. */
-
-figure { margin: 22px 0 36px; }
-figure.fig-inline { margin: 22px auto 40px; }   /* stays at reading width */
-
-figure.fig-wide {                                /* breaks to the ~1080px band */
+figure.fig-wide {
+  left: 50%;
+  position: relative;
+  transform: translateX(-50%);
   width: min(var(--band), calc(100vw - 48px));
-  position: relative;
-  left: 50%;
-  transform: translateX(-50%);
 }
 
-figure.fig-bleed {                               /* edge-to-edge of viewport */
-  width: 100vw;
-  position: relative;
-  left: 50%;
-  transform: translateX(-50%);
-}
-.fig-bleed .bleedband {
-  background: #fafafa;
-  border-top: 1px solid var(--rule);
-  border-bottom: 1px solid var(--rule);
-  padding: 16px 0;
-}
-.fig-bleed .bleedinner { max-width: 1032px; margin: 0 auto; padding: 0 24px; }
-.fig-bleed figcaption {
-  max-width: var(--measure);
-  margin: 8px auto 0;
-  padding: 0 24px;
+figcaption {
+  color: var(--muted);
+  font-size: 12.5px;
+  margin-top: 8px;
 }
 
-figcaption { font-size: 12.5px; color: var(--muted); margin-top: 8px; }
-figcaption b { color: var(--ink); }
-
-/* small-multiple grid inside a wide figure */
-.twoup { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
-@media (max-width: 680px) { .twoup { grid-template-columns: 1fr; } }
-.chart { width: 100%; }
-
-/* ------------------------------------------------------------ flowcharts -- */
-/* Numbered step chips on a connector rail. */
-
-.flow {
-  display: flex;
-  position: relative;
-  justify-content: space-between;
-  align-items: flex-start;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin: 22px 0;
+.chart {
+  width: 100%;
 }
-.flow::before {
-  content: "";
-  position: absolute;
-  top: 22px;
-  left: 6%;
-  right: 6%;
-  height: 2px;
-  background: var(--rule);
-  z-index: 0;
-}
-.flow__step { position: relative; z-index: 1; text-align: center; min-width: 130px; flex: 1; }
-.flow__chip {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: #fff;
-  border: 2px solid var(--teal-bright);
-  color: var(--teal);
-  font-weight: 700;
-  font-size: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto 8px;
-}
-.flow__step.end .flow__chip { background: var(--teal); color: #fff; border-color: var(--teal); }
-.flow__label { font-size: 13px; font-weight: 600; }
-.flow__cap { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
-
-/* ----------------------------------------------------------------- footer -- */
 
 .report footer {
-  margin-top: 48px;
-  padding-top: 16px;
   border-top: 1px solid var(--rule);
   color: var(--muted);
   font-size: 12.5px;
+  margin-top: 48px;
+  padding-top: 16px;
 }

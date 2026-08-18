@@ -12,11 +12,9 @@ from typing import Any
 from skala.benchmark import metrics
 from skala.benchmark.fitting import fit_piecewise_loglog
 from skala.benchmark.schema.environment import Environment
-from skala.benchmark.schema.fits import fit_to_rows
 from skala.benchmark.schema.measurements import read_dataset
 
 MIN_FIT_POINTS = 4
-MAX_FIT_KNOTS = 1
 
 
 def collect_results(
@@ -75,17 +73,25 @@ def _collect_fit_rows(rows: list[dict[str, Any]]) -> list[dict[str, object]]:
                 fit = fit_piecewise_loglog(
                     x_values,
                     y_values,
-                    max_knots=MAX_FIT_KNOTS,
                 )
                 fit_rows.extend(
-                    fit_to_rows(
-                        fit,
-                        env_id=env_id,
-                        basis=basis,
-                        functional=functional,
-                        metric=metric,
-                        x_axis=x_axis,
-                    )
+                    {
+                        "env_id": env_id,
+                        "basis": basis,
+                        "functional": functional,
+                        "metric": metric,
+                        "x_axis": x_axis,
+                        "segment_index": segment_index,
+                        "x_start": segment.x_start,
+                        "x_end": segment.x_end,
+                        "slope": segment.slope,
+                        "intercept": segment.intercept,
+                        "continuous": fit.continuous,
+                        "cv_score": fit.cv_score,
+                        "n_points": fit.n_points,
+                        "breakpoints": list(fit.breakpoints),
+                    }
+                    for segment_index, segment in enumerate(fit.segments)
                 )
     return fit_rows
 

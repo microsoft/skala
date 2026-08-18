@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -14,10 +15,8 @@ _REFERENCE_DIR = Path(__file__).parents[2] / "benchmarks" / "reference"
 _EXPECTED_FILES = {
     "data.json",
     "d3.min.js",
-    "fits.json",
     "index.html",
     "katex.min.js",
-    "metadata.yaml",
     "report-base.css",
     "report.css",
     "report.js",
@@ -51,8 +50,13 @@ def test_reference_report_is_reproducible(tmp_path: Path) -> None:
         ).read_bytes()
 
     data = json.loads((outputs[0] / "data.json").read_text())
-    fits = json.loads((outputs[0] / "fits.json").read_text())
     index = (outputs[0] / "index.html").read_text()
+    fits_match = re.search(
+        r'<script id="report-fits" type="application/json">(.*?)</script>',
+        index,
+    )
+    assert fits_match is not None
+    fits = json.loads(fits_match.group(1))
     assert data["points"]
     assert fits
     assert "Skala performance and scaling benchmark" in index
