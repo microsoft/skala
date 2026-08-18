@@ -76,6 +76,11 @@ def main(argv: Sequence[str] | None = None) -> None:
             "environments.json, measurements.json, and fits.json."
         ),
     )
+    report_parser.add_argument(
+        "--prose",
+        default=None,
+        help="Optional prose YAML for an interpreted report.",
+    )
 
     args = parser.parse_args(argv)
     if args.command == "run":
@@ -115,7 +120,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     else:
         from skala.benchmark.report.generate import generate
 
-        generate(args.output_dir, args.collected_dirs)
+        generate(args.output_dir, args.collected_dirs, prose_path=args.prose)
 
 
 def _validate_shard_args(

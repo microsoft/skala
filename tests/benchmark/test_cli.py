@@ -56,7 +56,7 @@ def test_collect_routes_to_the_default_output(
     assert calls == [(str(tmp_path), str(tmp_path / "collected"))]
 
 
-def test_report_routes_reference_and_local_inputs(
+def test_report_routes_dry_and_interpreted_reports(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     calls: list[tuple[str, list[str], str | None]] = []
@@ -71,11 +71,25 @@ def test_report_routes_reference_and_local_inputs(
     local = str(tmp_path / "benchmark-output" / "collected")
 
     main(["report", str(tmp_path / "local-report"), reference, local])
+    main(
+        [
+            "report",
+            str(tmp_path / "official-report"),
+            reference,
+            "--prose",
+            "benchmarks/reference/prose.yaml",
+        ]
+    )
 
     assert calls == [
         (
             str(tmp_path / "local-report"),
             [reference, local],
             None,
-        )
+        ),
+        (
+            str(tmp_path / "official-report"),
+            [reference],
+            "benchmarks/reference/prose.yaml",
+        ),
     ]
