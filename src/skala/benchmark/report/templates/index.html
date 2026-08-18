@@ -260,15 +260,17 @@
   {% endif %}
 
   <footer>
-    <h2>Generate a local comparison</h2>
+    <h2>Compare against the reference</h2>
     <p>
-      Run and collect the same benchmark sweep on each machine, then pass every
-      collected directory to the report generator. Each directory must contain
-      <code>measurements.json</code>, <code>environments.json</code>, and
-      <code>fits.json</code>. The resulting bundle is self-contained and can be
-      opened directly from local storage without a network connection.
+      Run and collect the same benchmark sweep on your machine, then combine your
+      output with the fixed reference timings in <code>benchmarks/reference</code>.
+      Each directory must contain <code>measurements.json</code>,
+      <code>environments.json</code>, and <code>fits.json</code>. The resulting
+      bundle is self-contained and can be opened directly from local storage
+      without a network connection.
     </p>
-    <pre><code>python -m skala.benchmark report report-out \
+    <pre><code>python -m skala.benchmark report local-report \
+    benchmarks/reference \
     machine-a/collected \
     machine-b/collected</code></pre>
   </footer>
