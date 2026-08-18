@@ -14,6 +14,7 @@ dependencies:
   - pytorch-gpu  # CUDA-enabled PyTorch for Skala model inference
   - cuda-version >=12,<13  # Constrains conda CUDA packages to CUDA 12
   - cuda-nvrtc >=12,<13  # Runtime compiler used by CuPy for GPU kernels
+  - cuda-cudart-dev >=12,<13  # Matching CUDA headers for CuPy kernel compilation
   - cutensor >=2  # Tensor-contraction backend used by GPU4PySCF
   # Testing and development dependencies
   - pre-commit
