@@ -213,13 +213,12 @@ def test_generate_offline_report_with_fixed_domains_and_comparison(
 
     index = (output / "index.html").read_text()
     assert "http://" not in index
-    assert "https://" not in index
+    assert 'href="https://microsoft.github.io/skala/benchmarks.html"' in index
     assert 'src="d3.min.js"' in index
     assert 'src="katex.min.js"' in index
     assert 'src="report.js"' in index
     assert 'href="report-base.css"' in index
-    assert "Compare against the reference" in index
-    assert "benchmarks/reference" in index
+    assert "Compare your own timings with these results" in index
     assert "LivDFT" not in index
     assert 'href="/reports"' not in index
     assert "lorem ipsum" not in index.lower()
@@ -340,9 +339,8 @@ def test_generate_defaults_are_neutral_for_local_comparisons(tmp_path: Path) -> 
     assert "Add your interpretation with <code>--prose</code>" in index
     assert "On the A100 it is about 6.8 s" not in index
     assert "Toggle the horizontal axis" in index
-    assert "Compare against the reference" in index
-    assert "benchmarks/reference" in index
-    assert "python -m skala.benchmark report local-report" in index
+    assert "Compare your own timings with these results" in index
+    assert "https://microsoft.github.io/skala/benchmarks.html" in index
     assert "python -m skala.benchmark.report" not in index
 
 

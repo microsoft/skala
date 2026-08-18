@@ -260,19 +260,13 @@
   {% endif %}
 
   <footer>
-    <h2>Compare against the reference</h2>
+    <h2>Compare your own timings with these results</h2>
     <p>
-      Run and collect the same benchmark sweep on your machine, then combine your
-      output with the fixed reference timings in <code>benchmarks/reference</code>.
-      Each directory must contain <code>measurements.json</code>,
-      <code>environments.json</code>, and <code>fits.json</code>. The resulting
-      bundle is self-contained and can be opened directly from local storage
-      without a network connection.
+      Follow the
+      <a href="https://microsoft.github.io/skala/benchmarks.html">benchmark documentation</a>
+      to run the same benchmark sweep on your machine and combine your timings
+      with these reference results.
     </p>
-    <pre><code>python -m skala.benchmark report local-report \
-    benchmarks/reference \
-    machine-a/collected \
-    machine-b/collected</code></pre>
   </footer>
 </main>
 
