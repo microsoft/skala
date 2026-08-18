@@ -30,46 +30,20 @@ DEFAULT_PROSE: dict[str, Any] = {
             "benchmark run."
         ),
         "environments": {},
-        "notes": ["Add study-specific context with `--prose prose.yaml`."],
+        "notes": [],
     },
     "plots": {
-        "xc_eval": (
-            "Measured exchange-correlation functional evaluation time. Add your "
-            "interpretation with `--prose`."
-        ),
-        "numint": (
-            "Measured numerical-integration time. Add your interpretation with "
-            "`--prose`."
-        ),
-        "jk": (
-            "Measured Coulomb and exchange build time. Add your interpretation with "
-            "`--prose`."
-        ),
-        "cycle": (
-            "Measured steady-state SCF iteration time. Add your interpretation with "
-            "`--prose`."
-        ),
-        "iterations": (
-            "Recorded SCF iteration counts. Add your interpretation with `--prose`."
-        ),
-        "total": (
-            "Measured total SCF kernel time. Add your interpretation with `--prose`."
-        ),
-        "setup": (
-            "Measured setup time before the SCF loop. Add your interpretation with "
-            "`--prose`."
-        ),
-        "composition": (
-            "Measured composition of one steady-state SCF iteration. Add your "
-            "interpretation with `--prose`."
-        ),
-        "run_composition": (
-            "Measured composition of the complete SCF kernel. Add your interpretation "
-            "with `--prose`."
-        ),
+        "xc_eval": "Measured exchange-correlation functional evaluation time.",
+        "numint": "Measured numerical-integration time.",
+        "jk": "Measured Coulomb and exchange build time.",
+        "cycle": "Measured steady-state SCF iteration time.",
+        "iterations": "Recorded SCF iteration counts.",
+        "total": "Measured total SCF kernel time.",
+        "setup": "Measured setup time before the SCF loop.",
+        "composition": "Measured composition of one steady-state SCF iteration.",
+        "run_composition": "Measured composition of the complete SCF kernel.",
         "startup": (
-            "Start-up and first-use costs are outside the plotted SCF timings. Add "
-            "study-specific context with `--prose`."
+            "Start-up and first-use costs are outside the plotted SCF timings."
         ),
     },
     "closing": (

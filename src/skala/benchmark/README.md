@@ -285,25 +285,8 @@ Environment ids must be unique across the inputs. Plot controls switch between
 environments and basis sets while keeping global axes fixed.
 
 The hosted documentation publishes the same official report and makes its
-`environments.json`, `measurements.json`, `fits.json`, and `prose.yaml` inputs
-available for download.
-
-### Add study-specific prose
-
-Copy `report/examples/prose.example.yaml`, edit the narrative fields, and pass it
-to the report command:
-
-```bash
-python -m skala.benchmark report report-out \
-  cpu-output/collected \
-  gpu-output/collected \
-  --prose prose.yaml
-```
-
-Without `--prose`, the report uses short, neutral prompts and draws no conclusions
-from the measurements. The hosted official report explicitly passes
-`benchmarks/reference/prose.yaml`, which contains the maintained interpretation
-of the reference data.
+`environments.json`, `measurements.json`, and `fits.json` inputs available for
+download.
 
 ## Time composition
 

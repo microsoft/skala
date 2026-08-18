@@ -16,7 +16,6 @@ _SOURCE_FILES = (
     "environments.json",
     "measurements.json",
     "fits.json",
-    "prose.yaml",
 )
 
 

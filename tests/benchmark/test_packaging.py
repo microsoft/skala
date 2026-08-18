@@ -12,7 +12,6 @@ def test_report_resources_are_packaged() -> None:
         report / "assets" / "report.js",
         report / "assets" / "vendor" / "d3.min.js",
         report / "assets" / "vendor" / "katex.min.js",
-        report / "examples" / "prose.example.yaml",
     )
 
     assert all(resource.is_file() for resource in expected)

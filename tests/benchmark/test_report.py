@@ -336,7 +336,7 @@ def test_generate_defaults_are_neutral_for_local_comparisons(tmp_path: Path) -> 
     index = (output / "index.html").read_text()
     assert "Skala benchmark comparison" in index
     assert "No study-specific conclusions were supplied" in index
-    assert "Add your interpretation with <code>--prose</code>" in index
+    assert "--prose" not in index
     assert "On the A100 it is about 6.8 s" not in index
     assert "Toggle the horizontal axis" in index
     assert "Compare your own timings with these results" in index
