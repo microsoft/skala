@@ -53,6 +53,7 @@ jobs:
 
       - name: Check external links
         run: |
+          # The HTML build above executes notebooks; linkcheck only needs their links.
           sphinx-build -D nb_execution_mode=off -b linkcheck docs docs/_build/linkcheck
         shell: micromamba-shell {0}
 
