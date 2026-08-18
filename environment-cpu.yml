@@ -3,8 +3,6 @@ channels:
   - conda-forge
 dependencies:
   - ase
-  - azure-core
-  - azure-identity
   - dftd3-python
   - e3nn
   - h5py
@@ -14,7 +12,6 @@ dependencies:
   - pyscf >=2.8,<2.14
   - python
   - pytorch * cpu_*
-  - qcelemental
 # Testing and development
   - memray
   - pre-commit

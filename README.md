@@ -25,16 +25,11 @@ This repository contains two main components:
    - [Skala in C with GauXC](https://microsoft.github.io/skala/gauxc/c-library)
    - [Skala in Fortran with GauXC](https://microsoft.github.io/skala/gauxc/fortran-library)
 
-
-### Skala in Azure AI Foundry
-
-The Skala model is also served on [Azure AI Foundry](https://ai.azure.com/catalog/models/Skala).
-
 ### GauXC development version for PyTorch-based functionals like Skala
 
 [GauXC](https://github.com/wavefunction91/GauXC) is a CPU/GPU C++ library for XC functionals.
 A development version with an add-on supporting PyTorch-based functionals like Skala is available in the [`skala` branch of the GauXC repository](https://github.com/wavefunction91/GauXC/tree/skala).
-GauXC is part of the stack that serves Skala in [Azure AI Foundry](https://ai.azure.com/catalog/models/Skala) and can be used to integrate Skala into other third-party DFT codes.
+GauXC can be used to integrate Skala into other third-party DFT codes.
 For detailed documentation on using GauXC visit the [Skala integration guide](https://microsoft.github.io/skala/gauxc).
 
 ## Getting started: PySCF (CPU)
@@ -165,7 +160,7 @@ opt.run(fmax=0.01)
 
 ## Documentation and examples
 
-See [microsoft.github.io/skala](https://microsoft.github.io/skala) for a more detailed installation guide and further examples of how to use the Skala functional with PySCF, GPU4PySCF, and ASE, as well as in [Azure AI Foundry](https://ai.azure.com/catalog/models/Skala).
+See [microsoft.github.io/skala](https://microsoft.github.io/skala) for a more detailed installation guide and further examples of how to use the Skala functional with PySCF, GPU4PySCF and ASE.
 
 ## Security: loading `.fun` files
 

@@ -25,7 +25,6 @@ The model is trained on a large dataset of highly accurate total atomization ene
    pyscf/scf_settings
    ase
    ftorch
-   foundry
    gauxc/index
 
 .. toctree::

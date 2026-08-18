@@ -17,15 +17,12 @@ classifiers = [
 requires-python = ">=3.10"
 dependencies = [
     "ase",
-    "azure-core",
-    "azure-identity",
     "dftd3",
     "e3nn",
     "huggingface_hub",
     "numpy",
     "opt_einsum_fx",
     "pyscf>=2.8,<2.14",
-    "qcelemental",
     "torch"
 ]
 
@@ -75,8 +72,6 @@ module = [
     "opt_einsum_fx.*",
     "pyscf",
     "pyscf.*",
-    "qcelemental",
-    "qcelemental.*",
 ]
 ignore_missing_imports = true
 

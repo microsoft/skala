@@ -3,8 +3,6 @@ channels:
   - conda-forge
 dependencies:
   - ase
-  - azure-core
-  - azure-identity
   - dftd3-python
   - e3nn
   - h5py
@@ -14,7 +12,7 @@ dependencies:
   - pyscf >=2.8,<2.14
   - python
   - pytorch-gpu
-  - qcelemental
+  - cuda-toolkit >=12,<13
   - cuda-version >=12,<13
   - cuda-nvcc >=12,<13
   - cutensor >=2
