@@ -25,7 +25,7 @@ The model is trained on a large dataset of highly accurate total atomization ene
    SCF settings <pyscf/scf_settings>
    ASE <ase>
    FTorch <ftorch>
-   GAUXC <gauxc/index>
+   GauXC <gauxc/index>
 
 .. toctree::
    :maxdepth: 1
