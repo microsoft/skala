@@ -39,6 +39,8 @@ _REQUIRED_FILES = (
     "environments.json",
     "fits.json",
 )
+_BASIS_ORDER = ("def2-svp", "def2-tzvp", "def2-qzvp")
+_DEFAULT_BASIS = "def2-tzvp"
 _TEMPLATES = Environment(
     loader=FileSystemLoader(_PACKAGE_DIR / "templates"),
     autoescape=select_autoescape(("html",)),
@@ -96,7 +98,7 @@ def generate(
     author = str(prose.get("author") or "")
     report_date = str(prose.get("date") or date.today().isoformat())
     abstract = str(prose.get("abstract") or "")
-    bases = list(dict.fromkeys(points["basis"].astype(str).tolist()))
+    bases = _ordered_basis_names(points["basis"].astype(str).tolist())
     functionals = list(dict.fromkeys(points["functional"].astype(str).tolist()))
 
     composition = {
@@ -114,7 +116,7 @@ def generate(
             "fits_available": bool(fits),
             "initial_selection": {
                 "environment": env_ids[0],
-                "basis": bases[0],
+                "basis": _DEFAULT_BASIS if _DEFAULT_BASIS in bases else bases[0],
             },
         },
         "points": point_records(points),
@@ -423,6 +425,12 @@ def _ordered_environment_ids(
             "environment_order contains unmeasured env_id values: " + ", ".join(unknown)
         )
     return list(dict.fromkeys([*requested, *measured_ids]))
+
+
+def _ordered_basis_names(measured_names: Sequence[str]) -> list[str]:
+    available = list(dict.fromkeys(measured_names))
+    preferred = [basis for basis in _BASIS_ORDER if basis in available]
+    return [*preferred, *(basis for basis in available if basis not in preferred)]
 
 
 def _json_dump(value: Any) -> str:
