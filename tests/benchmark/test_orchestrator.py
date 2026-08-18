@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from skala.benchmark import node_info
 from skala.benchmark.dataset import BenchmarkMolecule
 from skala.benchmark.models import Molecule
 from skala.benchmark.orchestrator import (
@@ -121,3 +122,36 @@ def test_resume_rejects_a_changed_sweep(tmp_path: Path) -> None:
             request,
             fingerprint,
         )
+
+
+def test_macos_hardware_probes_degrade_gracefully(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    responses = {
+        "machdep.cpu.brand_string": "Apple M3 Max\n",
+        "hw.packages": "1\n",
+        "hw.physicalcpu": "12\n",
+        "hw.logicalcpu": "16\n",
+        "hw.memsize": f"{32 * 1024**3}\n",
+    }
+    monkeypatch.setattr(
+        node_info,
+        "_run",
+        lambda command: responses.get(command[-1], ""),
+    )
+
+    assert node_info._macos_cpu_info() == {
+        "Model name": "Apple M3 Max",
+        "Socket(s)": "1",
+        "Core(s) per socket": "12",
+        "CPU(s)": "16",
+        "NUMA node(s)": "1",
+    }
+    assert node_info._macos_mem_total_gb() == 32.0
+
+    responses.clear()
+    assert node_info._macos_cpu_info() == {
+        "Socket(s)": "1",
+        "NUMA node(s)": "1",
+    }
+    assert node_info._macos_mem_total_gb() == 0.0

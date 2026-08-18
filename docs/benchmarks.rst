@@ -70,7 +70,8 @@ Filters are part of the sweep identity, so do not use a restricted run to resume
    ``0`` through ``N - 1`` and passing the same ``--num-shards N``, environment ID, and shared
    output directory to every job. The shards contain disjoint calculations; wait for all of them
    to finish before collecting the shared output. Rerunning a shard skips completed calculations,
-   while incompatible sweep settings are rejected.
+   while incompatible sweep settings are rejected. Skala does not submit these jobs; use your
+   cluster's existing scheduler to launch the shard commands.
 
 .. code-block:: bash
 

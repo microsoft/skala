@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import itertools
 import time
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -94,20 +95,23 @@ class ScfTiming:
         return tail or self.cycles
 
 
-class Timeline:
+class Timeline(ABC):
     """Records marks and measures the intervals between them.
 
     Durations are only valid after :meth:`resolve`, which blocks until any
     pending device work referenced by a mark has finished.
     """
 
+    @abstractmethod
     def mark(self) -> Mark:
         """Return a mark for the current point in the timeline."""
         raise NotImplementedError
 
     def resolve(self) -> None:
         """Block until every recorded mark has a readable timestamp."""
+        return None
 
+    @abstractmethod
     def elapsed_ms(self, start: Mark, end: Mark) -> float:
         """Return the milliseconds between two resolved marks."""
         raise NotImplementedError
@@ -133,7 +137,7 @@ class CudaTimeline(Timeline):
 
     def mark(self) -> Mark:
         event = self._torch.cuda.Event(enable_timing=True)  # type: ignore[no-untyped-call]
-        event.record()  # type: ignore[no-untyped-call]
+        event.record()
         return event
 
     def resolve(self) -> None:

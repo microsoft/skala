@@ -12,6 +12,8 @@ import yaml
 from markdown_it import MarkdownIt
 from markdown_it.rules_inline import StateInline
 
+from ._normalize import as_mapping
+
 DEFAULT_PROSE: dict[str, Any] = {
     "title": "Skala benchmark comparison",
     "author": "",
@@ -99,13 +101,13 @@ def load_prose(path: str | Path | None) -> dict[str, Any]:
         loaded = parsed
 
     result = _deep_merge(DEFAULT_PROSE, loaded)
-    result["comparison"] = _mapping(result.get("comparison"))
-    result["comparison"]["environments"] = _mapping(
+    result["comparison"] = as_mapping(result.get("comparison"))
+    result["comparison"]["environments"] = as_mapping(
         result["comparison"].get("environments")
     )
     notes = result["comparison"].get("notes")
     result["comparison"]["notes"] = list(notes) if isinstance(notes, list) else []
-    result["plots"] = _mapping(result.get("plots"))
+    result["plots"] = as_mapping(result.get("plots"))
     return result
 
 
@@ -122,17 +124,13 @@ def markdown_to_html(markdown: Any) -> str:
     return _MARKDOWN.render(text) if text else ""
 
 
-def _mapping(value: Any) -> dict[str, Any]:
-    return dict(value) if isinstance(value, Mapping) else {}
-
-
 def _deep_merge(
     defaults: Mapping[str, Any], overrides: Mapping[str, Any]
 ) -> dict[str, Any]:
     result = dict(defaults)
     for key, value in overrides.items():
         if isinstance(value, Mapping) and isinstance(result.get(key), Mapping):
-            result[key] = _deep_merge(_mapping(result[key]), value)
+            result[key] = _deep_merge(as_mapping(result[key]), value)
         else:
             result[key] = value
     return result

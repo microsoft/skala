@@ -4,6 +4,8 @@ from pathlib import Path
 
 import skala
 
+# Make the repository-local Sphinx extensions importable without packaging them
+# as part of the Skala runtime module.
 sys.path.insert(0, str(Path(__file__).parent / "_ext"))
 
 # Ensure CONDA_PREFIX is set so CuPy can locate the CUDA toolkit

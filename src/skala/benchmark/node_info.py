@@ -55,6 +55,18 @@ def _lscpu() -> dict[str, str]:
     return fields
 
 
+def _macos_cpu_info() -> dict[str, str]:
+    """Read macOS CPU metadata through best-effort ``sysctl`` probes."""
+    fields = {
+        "Model name": _run(["sysctl", "-n", "machdep.cpu.brand_string"]).strip(),
+        "Socket(s)": _run(["sysctl", "-n", "hw.packages"]).strip() or "1",
+        "Core(s) per socket": _run(["sysctl", "-n", "hw.physicalcpu"]).strip(),
+        "CPU(s)": _run(["sysctl", "-n", "hw.logicalcpu"]).strip(),
+        "NUMA node(s)": "1",
+    }
+    return {key: value for key, value in fields.items() if value}
+
+
 def _int(value: str | None, default: int = 0) -> int:
     try:
         return int(float(value)) if value is not None else default
@@ -70,7 +82,15 @@ def _mem_total_gb() -> float:
                     return round(int(line.split()[1]) / (1024 * 1024), 1)
     except OSError:
         pass
+    if platform.system() == "Darwin":
+        return _macos_mem_total_gb()
     return 0.0
+
+
+def _macos_mem_total_gb() -> float:
+    """Read total macOS memory through a best-effort ``sysctl`` probe."""
+    bytes_total = _int(_run(["sysctl", "-n", "hw.memsize"]).strip())
+    return round(bytes_total / (1024**3), 1) if bytes_total > 0 else 0.0
 
 
 def _gpu_models() -> list[str]:
@@ -131,6 +151,8 @@ def _cuda_version() -> str | None:
 def collect_environment(env_id: str, label: str) -> Environment:
     """Probe the local node and return a populated :class:`Environment`."""
     cpu = _lscpu()
+    if not cpu and platform.system() == "Darwin":
+        cpu = _macos_cpu_info()
     sockets = _int(cpu.get("Socket(s)"), 1)
     cores_per_socket = _int(cpu.get("Core(s) per socket"), 0)
     numa_topology = _run(["numactl", "--hardware"]) or "\n".join(

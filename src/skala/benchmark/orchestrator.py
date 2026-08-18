@@ -1,6 +1,10 @@
 # SPDX-License-Identifier: MIT
 
-"""Run one deterministic shard of the benchmark task grid."""
+"""Run one deterministic local shard of the benchmark task grid.
+
+This module does not submit cluster jobs. An external scheduler can invoke one
+command per shard, while this runner handles the work inside each job.
+"""
 
 from __future__ import annotations
 

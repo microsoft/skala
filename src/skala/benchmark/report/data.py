@@ -5,21 +5,117 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, TypeAlias, TypedDict
 
 import numpy as np
 import pandas as pd
 
 from skala.benchmark import fitting, metrics
 
-METRICS: dict[str, dict[str, str]] = {
+from ._normalize import coerce_int, string_list
+
+JsonValue: TypeAlias = (
+    str | int | float | bool | None | list["JsonValue"] | dict[str, "JsonValue"]
+)
+
+
+class MetricRecord(TypedDict):
+    """Metadata for one report metric."""
+
+    label: str
+    unit: str
+
+
+class XModeRecord(TypedDict):
+    """Metadata for one report x-axis mode."""
+
+    field: str
+    label: str
+
+
+class PointRecord(TypedDict):
+    """One plotted report point."""
+
+    env_id: str
+    basis: str
+    functional: str
+    metric: str
+    x_axis: str
+    x: float
+    y: float
+    molecule: JsonValue
+    ansatz: JsonValue
+    atoms: JsonValue
+    electrons: JsonValue
+    num_aos: JsonValue
+    grid_size: JsonValue
+    scf_iterations: JsonValue
+    energy: JsonValue
+    warmup_ratio: JsonValue
+
+
+class FitRecord(TypedDict):
+    """One fitted scaling segment."""
+
+    env_id: JsonValue
+    basis: JsonValue
+    functional: JsonValue
+    metric: JsonValue
+    x_axis: JsonValue
+    segment_index: JsonValue
+    x_start: JsonValue
+    x_end: JsonValue
+    slope: JsonValue
+    intercept: JsonValue
+    continuous: JsonValue
+    cv_score: JsonValue
+    n_points: JsonValue
+    breakpoints: JsonValue
+
+
+class CompositionBucketRecord(TypedDict):
+    """Display metadata for one timing-composition band."""
+
+    id: str
+    label: str
+    short: str
+
+
+class CompositionRecord(TypedDict):
+    """One measured timing-composition point."""
+
+    env_id: str
+    basis: str
+    functional: str
+    x: float
+    y: list[float]
+
+
+class SmoothedCompositionRecord(TypedDict):
+    """One smoothed timing-composition curve."""
+
+    env_id: str
+    basis: str
+    functional: str
+    x: list[float]
+    cumulative: list[list[float]]
+
+
+class AxisDomain(TypedDict):
+    """Fixed x and y domains for one chart."""
+
+    x: list[float]
+    y: list[float]
+
+
+METRICS: dict[str, MetricRecord] = {
     metric: {
         "label": metrics.METRIC_LABELS[metric],
         "unit": metrics.METRIC_UNITS[metric],
     }
     for metric in metrics.METRIC_IDS
 }
-X_MODES: dict[str, dict[str, str]] = {
+X_MODES: dict[str, XModeRecord] = {
     x_axis: {"field": x_axis, "label": metrics.X_AXIS_LABELS[x_axis]}
     for x_axis in metrics.X_AXES
 }
@@ -92,7 +188,7 @@ def prepare_points(measurements: pd.DataFrame) -> pd.DataFrame:
         "energy",
         "warmup_ratio",
     ]
-    points: list[dict[str, Any]] = []
+    points: list[PointRecord] = []
     for raw_row in measurements.to_dict(orient="records"):
         row = {str(key): _json_value(value) for key, value in raw_row.items()}
         if not metrics.is_row_plottable(row):
@@ -132,7 +228,7 @@ def prepare_points(measurements: pd.DataFrame) -> pd.DataFrame:
 
 def compute_domains(
     points: pd.DataFrame,
-) -> dict[str, dict[str, dict[str, list[float]]]]:
+) -> dict[str, dict[str, AxisDomain]]:
     """Compute fixed global log domains for every supported plot and x mode.
 
     Args:
@@ -141,7 +237,7 @@ def compute_domains(
     Returns:
         Nested ``metric -> x mode -> {x, y}`` domains.
     """
-    domains: dict[str, dict[str, dict[str, list[float]]]] = {}
+    domains: dict[str, dict[str, AxisDomain]] = {}
     for metric in metrics.METRIC_IDS:
         modes = (
             ("num_aos", "grid_size")
@@ -217,8 +313,8 @@ def _control_label(environment: Mapping[str, Any]) -> str:
     GPU environments are labelled by accelerator model; CPU environments by their
     thread count. Falls back to the full ``label`` when neither is available.
     """
-    gpu_models = _string_list(environment.get("gpu_models"))
-    gpu_count = _coerce_int(environment.get("gpu_count")) or 0
+    gpu_models = string_list(environment.get("gpu_models"))
+    gpu_count = coerce_int(environment.get("gpu_count")) or 0
     if gpu_count > 0 and gpu_models:
         short = _gpu_short_name(gpu_models[0])
         prefix = f"{gpu_count}× " if gpu_count > 1 else ""
@@ -254,22 +350,13 @@ def _thread_count(environment: Mapping[str, Any]) -> int | None:
         ]
     for key, value in pairs:
         if str(key) == "OMP_NUM_THREADS":
-            threads = _coerce_int(value)
+            threads = coerce_int(value)
             if threads is not None and threads > 0:
                 return threads
-    return _coerce_int(environment.get("cores_logical"))
+    return coerce_int(environment.get("cores_logical"))
 
 
-def _coerce_int(value: Any) -> int | None:
-    try:
-        if value is None:
-            return None
-        return int(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def normalize_fits(fits: pd.DataFrame) -> list[dict[str, Any]]:
+def normalize_fits(fits: pd.DataFrame) -> list[FitRecord]:
     """Validate and normalize precomputed fit segments.
 
     Args:
@@ -294,13 +381,31 @@ def normalize_fits(fits: pd.DataFrame) -> list[dict[str, Any]]:
     frame = frame.loc[valid].sort_values(
         ["env_id", "basis", "functional", "metric", "x_axis", "segment_index"]
     )
-    return [
-        {str(key): _json_value(value) for key, value in record.items()}
-        for record in frame.to_dict(orient="records")
-    ]
+    records: list[FitRecord] = []
+    for record in frame.to_dict(orient="records"):
+        normalized = {str(key): _json_value(value) for key, value in record.items()}
+        records.append(
+            {
+                "env_id": normalized["env_id"],
+                "basis": normalized["basis"],
+                "functional": normalized["functional"],
+                "metric": normalized["metric"],
+                "x_axis": normalized["x_axis"],
+                "segment_index": normalized["segment_index"],
+                "x_start": normalized["x_start"],
+                "x_end": normalized["x_end"],
+                "slope": normalized["slope"],
+                "intercept": normalized["intercept"],
+                "continuous": normalized["continuous"],
+                "cv_score": normalized["cv_score"],
+                "n_points": normalized["n_points"],
+                "breakpoints": normalized["breakpoints"],
+            }
+        )
+    return records
 
 
-def point_records(points: pd.DataFrame) -> list[dict[str, Any]]:
+def point_records(points: pd.DataFrame) -> list[PointRecord]:
     """Convert prepared points to compact JSON-safe records.
 
     Args:
@@ -309,13 +414,32 @@ def point_records(points: pd.DataFrame) -> list[dict[str, Any]]:
     Returns:
         List of point dictionaries.
     """
-    return [
-        {str(key): _json_value(value) for key, value in record.items()}
-        for record in points.to_dict(orient="records")
-    ]
+    records: list[PointRecord] = []
+    for record in points.to_dict(orient="records"):
+        records.append(
+            {
+                "env_id": str(record["env_id"]),
+                "basis": str(record["basis"]),
+                "functional": str(record["functional"]),
+                "metric": str(record["metric"]),
+                "x_axis": str(record["x_axis"]),
+                "x": float(record["x"]),
+                "y": float(record["y"]),
+                "molecule": _json_value(record["molecule"]),
+                "ansatz": _json_value(record["ansatz"]),
+                "atoms": _json_value(record["atoms"]),
+                "electrons": _json_value(record["electrons"]),
+                "num_aos": _json_value(record["num_aos"]),
+                "grid_size": _json_value(record["grid_size"]),
+                "scf_iterations": _json_value(record["scf_iterations"]),
+                "energy": _json_value(record["energy"]),
+                "warmup_ratio": _json_value(record["warmup_ratio"]),
+            }
+        )
+    return records
 
 
-COMPOSITION_BUCKETS = {
+COMPOSITION_BUCKETS: dict[str, list[CompositionBucketRecord]] = {
     series: [
         {
             "id": band,
@@ -330,7 +454,7 @@ COMPOSITION_BUCKETS = {
 
 def composition_records(
     measurements: pd.DataFrame, series: str = "cycle"
-) -> list[dict[str, Any]]:
+) -> list[CompositionRecord]:
     """Build per-(env, basis, functional, #AOs) time-composition fractions.
 
     Rows sharing the same atomic-orbital count are averaged so each environment,
@@ -385,8 +509,8 @@ def composition_records(
 
 
 def composition_smooth(
-    records: Sequence[Mapping[str, Any]],
-) -> list[dict[str, Any]]:
+    records: Sequence[CompositionRecord],
+) -> list[SmoothedCompositionRecord]:
     """Smooth each composition series into a dense stacked-fraction curve.
 
     Groups the per-point fractions from :func:`composition_records` by
@@ -403,12 +527,12 @@ def composition_smooth(
         One record per (env, basis, functional) with ``x`` (dense grid) and
         ``cumulative`` (band boundaries, each column summing to one).
     """
-    grouped: dict[tuple[str, str, str], list[Mapping[str, Any]]] = {}
+    grouped: dict[tuple[str, str, str], list[CompositionRecord]] = {}
     for record in records:
         key = (record["env_id"], record["basis"], record["functional"])
         grouped.setdefault(key, []).append(record)
 
-    smoothed: list[dict[str, Any]] = []
+    smoothed: list[SmoothedCompositionRecord] = []
     for (env_id, basis, functional), group in grouped.items():
         ordered = sorted(group, key=lambda item: item["x"])
         xs = [float(item["x"]) for item in ordered]
@@ -426,7 +550,7 @@ def composition_smooth(
     return smoothed
 
 
-def composition_domain(records: Sequence[Mapping[str, Any]]) -> dict[str, list[float]]:
+def composition_domain(records: Sequence[CompositionRecord]) -> AxisDomain:
     """Return the fixed log x domain and [0, 1] y domain for composition charts.
 
     Args:
@@ -459,18 +583,6 @@ def _require_columns(frame: pd.DataFrame, required: set[str], label: str) -> Non
     missing = sorted(required - set(frame.columns))
     if missing:
         raise ValueError(f"{label} is missing required columns: {', '.join(missing)}")
-
-
-def _string_list(value: Any) -> list[str]:
-    if value is None or (isinstance(value, float) and np.isnan(value)):
-        return []
-    if isinstance(value, str):
-        return [value] if value else []
-    if isinstance(value, np.ndarray):
-        return [str(item) for item in value.tolist()]
-    if isinstance(value, Sequence):
-        return [str(item) for item in value]
-    return [str(value)]
 
 
 def _json_value(value: Any) -> Any:

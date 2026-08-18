@@ -16,11 +16,12 @@ import pandas as pd
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from markupsafe import Markup
 
+from ._normalize import as_mapping, coerce_int, string_list
 from .data import (
     COMPOSITION_BUCKETS,
     METRICS,
     X_MODES,
-    _string_list,
+    FitRecord,
     composition_domain,
     composition_records,
     composition_smooth,
@@ -138,8 +139,8 @@ def generate(
     fits_json = _json_dump(fits)
     (output / "data.json").write_text(data_json, encoding="utf-8")
 
-    comparison = _mapping(prose.get("comparison"))
-    annotations = _mapping(comparison.get("environments"))
+    comparison = as_mapping(prose.get("comparison"))
+    annotations = as_mapping(comparison.get("environments"))
     environment_cards = [
         {
             **environment,
@@ -157,7 +158,7 @@ def generate(
         "abstract": Markup(markdown_to_html(abstract)),
         "intro": Markup(markdown_to_html(prose.get("intro"))),
         "comparison_intro": Markup(
-            markdown_to_html(_mapping(prose.get("comparison")).get("intro"))
+            markdown_to_html(as_mapping(prose.get("comparison")).get("intro"))
         ),
         "environments": environment_cards,
         "comparison_notes": [
@@ -171,34 +172,34 @@ def generate(
         "total_label": METRICS["total"]["label"],
         "setup_label": METRICS["setup"]["label"],
         "numint_commentary": Markup(
-            markdown_to_html(_mapping(prose.get("plots")).get("numint"))
+            markdown_to_html(as_mapping(prose.get("plots")).get("numint"))
         ),
         "xc_eval_commentary": Markup(
-            markdown_to_html(_mapping(prose.get("plots")).get("xc_eval"))
+            markdown_to_html(as_mapping(prose.get("plots")).get("xc_eval"))
         ),
         "cycle_commentary": Markup(
-            markdown_to_html(_mapping(prose.get("plots")).get("cycle"))
+            markdown_to_html(as_mapping(prose.get("plots")).get("cycle"))
         ),
         "jk_commentary": Markup(
-            markdown_to_html(_mapping(prose.get("plots")).get("jk"))
+            markdown_to_html(as_mapping(prose.get("plots")).get("jk"))
         ),
         "iterations_commentary": Markup(
-            markdown_to_html(_mapping(prose.get("plots")).get("iterations"))
+            markdown_to_html(as_mapping(prose.get("plots")).get("iterations"))
         ),
         "total_commentary": Markup(
-            markdown_to_html(_mapping(prose.get("plots")).get("total"))
+            markdown_to_html(as_mapping(prose.get("plots")).get("total"))
         ),
         "setup_commentary": Markup(
-            markdown_to_html(_mapping(prose.get("plots")).get("setup"))
+            markdown_to_html(as_mapping(prose.get("plots")).get("setup"))
         ),
         "composition_commentary": Markup(
-            markdown_to_html(_mapping(prose.get("plots")).get("composition"))
+            markdown_to_html(as_mapping(prose.get("plots")).get("composition"))
         ),
         "run_composition_commentary": Markup(
-            markdown_to_html(_mapping(prose.get("plots")).get("run_composition"))
+            markdown_to_html(as_mapping(prose.get("plots")).get("run_composition"))
         ),
         "startup_commentary": Markup(
-            markdown_to_html(_mapping(prose.get("plots")).get("startup"))
+            markdown_to_html(as_mapping(prose.get("plots")).get("startup"))
         ),
         "closing": Markup(markdown_to_html(prose.get("closing"))),
         "data_json": Markup(_script_json(data_json)),
@@ -278,9 +279,7 @@ def _validate_collected_dirs(
     return result
 
 
-def _warn_for_missing_fits(
-    points: pd.DataFrame, fits: Sequence[Mapping[str, Any]]
-) -> None:
+def _warn_for_missing_fits(points: pd.DataFrame, fits: Sequence[FitRecord]) -> None:
     if not fits:
         warnings.warn(
             "No precomputed fits were found; fitted lines will be omitted.",
@@ -330,8 +329,8 @@ def _environment_facts(environment: Mapping[str, Any]) -> list[tuple[str, str]]:
     cpu_model = environment.get("cpu_model")
     if cpu_model:
         facts.append(("Processor", str(cpu_model)))
-    cores = _coerce_int(environment.get("cores_physical"))
-    logical = _coerce_int(environment.get("cores_logical"))
+    cores = coerce_int(environment.get("cores_physical"))
+    logical = coerce_int(environment.get("cores_logical"))
     if cores is not None:
         cores_text = f"{cores} physical"
         if logical is not None and logical != cores:
@@ -340,8 +339,8 @@ def _environment_facts(environment: Mapping[str, Any]) -> list[tuple[str, str]]:
     memory = environment.get("mem_total_gb")
     if isinstance(memory, (int, float)):
         facts.append(("Memory", f"{memory:g} GB"))
-    gpu_models = _string_list(environment.get("gpu_models"))
-    gpu_count = _coerce_int(environment.get("gpu_count")) or 0
+    gpu_models = string_list(environment.get("gpu_models"))
+    gpu_count = coerce_int(environment.get("gpu_count")) or 0
     if gpu_models:
         prefix = f"{gpu_count}× " if gpu_count > 1 else ""
         facts.append(("GPU", f"{prefix}{gpu_models[0]}"))
@@ -395,19 +394,6 @@ def _skala_version(environment: Mapping[str, Any]) -> str:
             ):
                 return str(item[1])
     return ""
-
-
-def _coerce_int(value: Any) -> int | None:
-    try:
-        if value is None:
-            return None
-        return int(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _mapping(value: Any) -> dict[str, Any]:
-    return dict(value) if isinstance(value, Mapping) else {}
 
 
 def _ordered_environment_ids(

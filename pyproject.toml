@@ -55,7 +55,6 @@ optional-dependencies.benchmark = [
     "markdown-it-py",
     "pandas",
     "pyarrow",
-    "pytorch-pfn-extras>=0.9,<0.10",
     "pyyaml",
 ]
 

@@ -502,33 +502,18 @@ def _make_ks(
         # PySCF-native functional (e.g. a baseline like "pbe").
         if device is Device.GPU:
             from gpu4pyscf import dft
-
-            _use_torch_memory_pool_in_cupy()
         else:
             from pyscf import dft
         return dft.UKS(mol, xc=func) if unrestricted else dft.RKS(mol, xc=func)
     if device is Device.GPU:
         from skala.gpu4pyscf.dft import SkalaRKS, SkalaUKS
-
-        _use_torch_memory_pool_in_cupy()
     else:
         from skala.pyscf.dft import SkalaRKS, SkalaUKS
     return SkalaUKS(mol, xc=func) if unrestricted else SkalaRKS(mol, xc=func)
 
 
-def _use_torch_memory_pool_in_cupy() -> None:
-    """Route benchmark CuPy allocations through PyTorch's CUDA memory pool.
-
-    GPU4PySCF configures CuPy during import, so this must be called after the
-    backend import and before constructing the mean-field object.
-    """
-    from pytorch_pfn_extras import cuda
-
-    cuda.use_torch_mempool_in_cupy()  # type: ignore[attr-defined]
-
-
 def _release_gpu4pyscf_global_cache(device: Device) -> None:
-    """Destroy cached CuPy arrays before PyTorch's shared allocator shuts down."""
+    """Destroy cached CuPy arrays before the worker process shuts down."""
     if device is not Device.GPU:
         return
     mole_module = sys.modules.get("gpu4pyscf.gto.mole")
@@ -560,11 +545,9 @@ def validate_device(device: Device) -> None:
     try:
         import cupy  # noqa: F401
         import gpu4pyscf  # noqa: F401
-        import pytorch_pfn_extras  # noqa: F401
     except ImportError as exc:
         raise RuntimeError(
-            "GPU benchmark requested, but cupy, gpu4pyscf, or "
-            "pytorch-pfn-extras is unavailable"
+            "GPU benchmark requested, but cupy or gpu4pyscf is unavailable"
         ) from exc
 
 

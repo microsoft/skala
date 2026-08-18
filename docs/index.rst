@@ -26,7 +26,7 @@ The model is trained on a large dataset of highly accurate total atomization ene
    ASE <ase>
    Fortran (FTorch) <ftorch>
    GauXC <gauxc/index>
-   Expected speed <benchmarks>
+   Performance & scaling <benchmarks>
 
 .. toctree::
    :maxdepth: 1
