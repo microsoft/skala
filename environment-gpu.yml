@@ -3,8 +3,6 @@ channels:
   - conda-forge
 dependencies:
   - ase
-  - azure-core
-  - azure-identity
   - dftd3-python
   - e3nn
   - h5py
@@ -13,11 +11,11 @@ dependencies:
   - opt_einsum_fx
   - pyscf >=2.8,<2.14
   - python
-  - pytorch-gpu
-  - qcelemental
-  - cuda-version >=12,<13
-  - cuda-nvcc >=12,<13
-  - cutensor >=2
+  - pytorch-gpu  # CUDA-enabled PyTorch for Skala model inference
+  - cuda-version >=12,<13  # Constrains conda CUDA packages to CUDA 12
+  - cuda-nvrtc >=12,<13  # Runtime compiler used by CuPy for GPU kernels
+  - cuda-cudart-dev >=12,<13  # Matching CUDA headers for CuPy kernel compilation
+  - cutensor >=2  # Tensor-contraction backend used by GPU4PySCF
   # Testing and development dependencies
   - pre-commit
   - pytest
@@ -29,4 +27,4 @@ dependencies:
   - mypy >=2
   - pip:
     - huggingface_hub
-    - gpu4pyscf-cuda12x >=1.8,<1.9
+    - gpu4pyscf-cuda12x >=1.8,<1.9  # GPU-accelerated PySCF backend used by Skala

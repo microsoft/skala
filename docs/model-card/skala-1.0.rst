@@ -64,7 +64,6 @@ Recommendations
 
 #. In our PySCF-based SCF implementation, the largest system tested contained 180 atoms using the def2-TZVP basis set (:math:`\sim`\ 5000 orbitals) on `Eadsv5 series <https://learn.microsoft.com/en-us/azure/virtual-machines/sizes/memory-optimized/eadsv5-series?tabs=sizebasic>`__ virtual machines. Larger systems may run out of memory.
 #. For implementations optimized for memory, speed, or GPU support, we recommend integrating the functional with other open-source SCF packages, for instance through GauXC. A compatible fork of GauXC is included in this repository.
-#. Skala-1.0 will also be available through `Azure AI Foundry <https://labs.ai.azure.com/projects/skala/>`__, where it is coupled with Microsoft's GPU-accelerated `Accelerated DFT <https://arxiv.org/abs/2406.11185>`__ application.
 
 
 Training details

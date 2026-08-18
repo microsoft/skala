@@ -25,16 +25,11 @@ This repository contains two main components:
    - [Skala in C with GauXC](https://microsoft.github.io/skala/gauxc/c-library)
    - [Skala in Fortran with GauXC](https://microsoft.github.io/skala/gauxc/fortran-library)
 
-
-### Skala in Azure AI Foundry
-
-The Skala model is also served on [Azure AI Foundry](https://ai.azure.com/catalog/models/Skala).
-
 ### GauXC development version for PyTorch-based functionals like Skala
 
 [GauXC](https://github.com/wavefunction91/GauXC) is a CPU/GPU C++ library for XC functionals.
 A development version with an add-on supporting PyTorch-based functionals like Skala is available in the [`skala` branch of the GauXC repository](https://github.com/wavefunction91/GauXC/tree/skala).
-GauXC is part of the stack that serves Skala in [Azure AI Foundry](https://ai.azure.com/catalog/models/Skala) and can be used to integrate Skala into other third-party DFT codes.
+GauXC can be used to integrate Skala into other third-party DFT codes.
 For detailed documentation on using GauXC visit the [Skala integration guide](https://microsoft.github.io/skala/gauxc).
 
 ## Getting started: PySCF (CPU)
@@ -89,7 +84,9 @@ pip install skala-cuda12x
 The `skala-cuda11x` and `skala-cuda13x` packages are also available for CUDA 11 and 13, respectively.
 
 The recommended path is the provided [`environment-gpu.yml`](environment-gpu.yml),
-which pins `pytorch-gpu`, `cuda-toolkit` 12, `cutensor`, and installs `gpu4pyscf-cuda12x` from PyPI:
+which pins `pytorch-gpu`, CUDA 12, `cuda-nvrtc` and matching `cuda-cudart-dev`
+headers for CuPy kernel compilation, and `cutensor`, and installs
+`gpu4pyscf-cuda12x` from PyPI:
 
 ```bash
 mamba env create -n skala -f environment-gpu.yml
@@ -105,9 +102,9 @@ proceeds without a device:
 CONDA_OVERRIDE_CUDA=12.0 mamba env create -n skala -f environment-gpu.yml
 ```
 
-For CUDA 11 or 13, adjust `cuda-toolkit`, `cuda-version`, and the
-`gpu4pyscf-cuda{11,13}x` pin in `environment-gpu.yml` accordingly. Check your
-driver's maximum supported CUDA version with `nvidia-smi`.
+For CUDA 11 or 13, adjust `cuda-version`, `cuda-nvrtc`, `cuda-cudart-dev`, and
+the `gpu4pyscf-cuda{11,13}x` pin in `environment-gpu.yml` accordingly. Check
+your driver's maximum supported CUDA version with `nvidia-smi`.
 
 Run an SCF calculation with Skala for a hydrogen molecule on GPU:
 
@@ -165,7 +162,7 @@ opt.run(fmax=0.01)
 
 ## Documentation and examples
 
-See [microsoft.github.io/skala](https://microsoft.github.io/skala) for a more detailed installation guide and further examples of how to use the Skala functional with PySCF, GPU4PySCF, and ASE, as well as in [Azure AI Foundry](https://ai.azure.com/catalog/models/Skala).
+See [microsoft.github.io/skala](https://microsoft.github.io/skala) for a more detailed installation guide and further examples of how to use the Skala functional with PySCF, GPU4PySCF and ASE.
 
 ## Security: loading `.fun` files
 

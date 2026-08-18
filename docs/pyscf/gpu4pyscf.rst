@@ -23,9 +23,10 @@ Installation
 ------------
 
 The recommended way to set up a GPU environment is the provided
-``environment-gpu.yml``, which pins ``pytorch-gpu``, ``cuda-toolkit 12``,
-``cuda-version 12``, ``cutensor``, and installs
-``gpu4pyscf-cuda12x >=1.8,<1.9`` from PyPI as part of the environment file:
+``environment-gpu.yml``, which pins ``pytorch-gpu``, ``cuda-version 12``,
+``cuda-nvrtc`` and matching ``cuda-cudart-dev`` headers for CuPy kernel
+compilation, and ``cutensor``. It installs ``gpu4pyscf-cuda12x >=1.8,<1.9``
+from PyPI as part of the environment file:
 
 .. code-block:: bash
 
@@ -33,8 +34,9 @@ The recommended way to set up a GPU environment is the provided
    mamba activate skala
    pip install skala
 
-For CUDA 11 or 13, adjust ``cuda-toolkit``, ``cuda-version``, and the
-``gpu4pyscf-cuda{11,13}x`` pin in ``environment-gpu.yml`` accordingly.
+For CUDA 11 or 13, adjust ``cuda-version``, ``cuda-nvrtc``,
+``cuda-cudart-dev``, and the ``gpu4pyscf-cuda{11,13}x`` pin in
+``environment-gpu.yml`` accordingly.
 
 See the :doc:`installation guide </installation>` for more details, including
 how to install from conda-forge or inside a container without a GPU attached.

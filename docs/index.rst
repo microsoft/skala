@@ -19,14 +19,13 @@ The model is trained on a large dataset of highly accurate total atomization ene
    :caption: User guide
    :hidden:
 
-   installation
-   pyscf/singlepoint
-   pyscf/gpu4pyscf
-   pyscf/scf_settings
-   ase
-   ftorch
-   foundry
-   gauxc/index
+   Installation <installation>
+   PySCF Single-point calculations <pyscf/singlepoint>
+   GPU4PySCF <pyscf/gpu4pyscf>
+   SCF settings <pyscf/scf_settings>
+   ASE <ase>
+   Fortran (FTorch) <ftorch>
+   GauXC <gauxc/index>
 
 .. toctree::
    :maxdepth: 1
