@@ -24,7 +24,7 @@ The model is trained on a large dataset of highly accurate total atomization ene
    GPU4PySCF <pyscf/gpu4pyscf>
    SCF settings <pyscf/scf_settings>
    ASE <ase>
-   FTorch <ftorch>
+   Fortran (FTorch) <ftorch>
    GauXC <gauxc/index>
 
 .. toctree::
