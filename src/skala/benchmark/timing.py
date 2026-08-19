@@ -137,7 +137,7 @@ class CudaTimeline(Timeline):
 
     def mark(self) -> Mark:
         event = self._torch.cuda.Event(enable_timing=True)  # type: ignore[no-untyped-call]
-        event.record()
+        event.record()  # type: ignore[no-untyped-call]
         return event
 
     def resolve(self) -> None:

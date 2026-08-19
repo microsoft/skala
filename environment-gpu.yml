@@ -7,11 +7,17 @@ dependencies:
   - e3nn
   - h5py
   - hdf5 >=2.1,<2.2
+  - jinja2
+  - markdown-it-py
   - numpy
   - opt_einsum_fx
+  - pandas
+  - pyarrow
   - pyscf >=2.8,<2.14
+  - pyyaml
   - python
   - pytorch-gpu  # CUDA-enabled PyTorch for Skala model inference
+  - scipy
   - cuda-version >=12,<13  # Constrains conda CUDA packages to CUDA 12
   - cuda-nvrtc >=12,<13  # Runtime compiler used by CuPy for GPU kernels
   - cuda-cudart-dev >=12,<13  # Matching CUDA headers for CuPy kernel compilation
@@ -27,4 +33,7 @@ dependencies:
   - mypy >=2
   - pip:
     - huggingface_hub
+    - pandas-stubs
+    - scipy-stubs
+    - types-PyYAML
     - gpu4pyscf-cuda12x >=1.8,<1.9  # GPU-accelerated PySCF backend used by Skala

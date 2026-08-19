@@ -7,11 +7,17 @@ dependencies:
   - e3nn
   - h5py
   - hdf5 >=2.1,<2.2
+  - jinja2
+  - markdown-it-py
   - numpy <2.5
   - opt_einsum_fx
+  - pandas
+  - pyarrow
   - pyscf >=2.8,<2.14
+  - pyyaml
   - python
   - pytorch * cpu_*
+  - scipy
 # Testing and development
   - memray
   - pre-commit
@@ -24,3 +30,6 @@ dependencies:
   - mypy >=2
   - pip:
     - huggingface_hub
+    - pandas-stubs
+    - scipy-stubs
+    - types-PyYAML
