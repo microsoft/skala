@@ -25,11 +25,18 @@ from skala.features import Feature, FeatureMap
 from skala.functional import TracedFunctional, load_functional
 from skala.functional.model import SkalaFunctional
 
-NUM_ATOMS = 10
-GRID_POINTS_PER_ATOM = 500
-POINTS_PER_CHUNK = NUM_ATOMS * GRID_POINTS_PER_ATOM
-NUM_CHUNKS = 40
-TOTAL_GRID_POINTS = NUM_CHUNKS * POINTS_PER_CHUNK
+# Trace the first irregular layout and check the graph against every other
+# shape. The layouts range from small two-atom chunks to larger twelve-atom
+# chunks; ten repetitions preserve the 200,000-point measured workload.
+CHUNK_LAYOUT_PATTERN = (
+    (350, 400, 450, 500, 550, 600, 650, 700, 750, 800),
+    (250, 300, 350, 400, 450, 500, 550, 600),
+    (400, 450, 500, 550, 600, 650, 700, 750, 800, 850, 900, 950),
+    (300, 400, 500, 600, 700),
+    (100, 150),
+)
+CHUNK_LAYOUTS = CHUNK_LAYOUT_PATTERN * 10
+TOTAL_GRID_POINTS = sum(sum(layout) for layout in CHUNK_LAYOUTS)
 THREAD_COUNT = 4
 
 # Strict forward-value tolerances on both devices and backward tolerances on CPU.
@@ -175,6 +182,7 @@ def _make_features(
     case_index: int,
     device: torch.device,
     *,
+    atomic_grid_sizes: tuple[int, ...],
     gradient_features: tuple[Feature, ...] = (),
 ) -> FeatureMap:
     """Create one structured analytic tensor-only model workload."""
@@ -183,17 +191,18 @@ def _make_features(
     # exercise reproducible model regimes without letting random sampling decide which regimes
     # appear in a benchmark run. Coordinates are expressed on the model's Bohr scale.
     #
-    # The ten coarse centers follow a non-planar, helix-like path. The 1.7 and 1.4 Bohr transverse
+    # The coarse centers follow a non-planar, helix-like path. The 1.7 and 1.4 Bohr transverse
     # amplitudes and 0.32 Bohr axial spacing keep the centers in a compact but non-symmetric region;
     # the smaller sine term prevents a regular lattice. Each case advances a 0.37-radian phase.
-    # That phase and the different angular frequencies below do not repeat over the 42
-    # trace/check/measurement cases, so chunks differ smoothly without using an RNG.
+    # That phase and the different angular frequencies below make chunks differ smoothly without
+    # using an RNG.
     #
-    # Each center receives 500 atom-major points. Polar cosines are midpoint samples of [-1, 1],
-    # while 2.399963229728653 is the golden angle, pi * (3 - sqrt(5)); together they give a simple
-    # deterministic spherical covering without repeated azimuthal spokes or points at the poles.
-    # Radii span approximately 0.08 to 3.0 Bohr. The power 1.35 places more samples near a center,
-    # and the +/-10% atom/case modulation avoids giving every center an identical radial shell.
+    # Each center receives its requested number of atom-major points. Polar cosines are midpoint
+    # samples of [-1, 1], while 2.399963229728653 is the golden angle, pi * (3 - sqrt(5)); together
+    # they give a simple deterministic spherical covering without repeated azimuthal spokes or
+    # points at the poles. Radii span approximately 0.08 to 3.0 Bohr. The power 1.35 places more
+    # samples near a center, and the +/-10% atom/case modulation avoids giving every center an
+    # identical radial shell.
     #
     # Spin densities use exp(-2.5 r), providing order-one values near a center and tails near the
     # 1e-4 floor. The 1.6/1.2 amplitudes and small directional modulations exercise spin asymmetry
@@ -203,50 +212,64 @@ def _make_features(
     #
     # The kinetic density is positive by construction: 0.01 + 0.35 rho supplies a smooth baseline,
     # and |grad rho|^2 / (8 rho) is the spin-channel von Weizsaecker form. The clamp is only a
-    # defensive denominator bound below the explicit density floor. Atomic weights scale as 1/500,
-    # vary quadratically with radius, and receive +/-10% center modulation. Grid weights apply an
-    # additional +/-20% directional partition factor. Both remain strictly positive and cover
-    # nonuniform quadrature behavior. None of these constants is a golden expected output: every
-    # assertion still compares the current local trace directly with the published trace.
-    atom_index = torch.arange(NUM_ATOMS, dtype=torch.float64)
-    point_index = torch.arange(GRID_POINTS_PER_ATOM, dtype=torch.float64)
+    # defensive denominator bound below the explicit density floor. Atomic weights scale inversely
+    # with the center's grid size, vary quadratically with radius, and receive +/-10% center
+    # modulation. Grid weights apply an additional +/-20% directional partition factor. Both
+    # remain strictly positive and cover nonuniform quadrature behavior. None of these constants is
+    # a golden expected output: every assertion still compares the current local trace directly
+    # with the published trace.
+    if not atomic_grid_sizes or any(size <= 0 for size in atomic_grid_sizes):
+        raise ValueError("Atomic grid sizes must be positive")
+
+    sizes = torch.tensor(atomic_grid_sizes, dtype=torch.int64)
+    num_atoms = len(atomic_grid_sizes)
+    total_grid_points = sum(atomic_grid_sizes)
+    atom_index = torch.arange(num_atoms, dtype=torch.float64)
+    grid_atom_index = torch.repeat_interleave(
+        torch.arange(num_atoms), sizes, output_size=total_grid_points
+    )
+    starts = sizes.cumsum(0) - sizes
+    point_index = torch.arange(total_grid_points) - torch.repeat_interleave(
+        starts, sizes, output_size=total_grid_points
+    )
+    grid_atom = grid_atom_index.to(torch.float64)
+    point_index_float = point_index.to(torch.float64)
+    grid_sizes = sizes.index_select(0, grid_atom_index).to(torch.float64)
     phase = case_index * 0.37
 
     coarse_coords = torch.stack(
         (
             1.7 * torch.cos(0.71 * atom_index + 0.13 * phase),
             1.4 * torch.sin(0.93 * atom_index - 0.11 * phase),
-            0.32 * (atom_index - (NUM_ATOMS - 1) / 2)
+            0.32 * (atom_index - (num_atoms - 1) / 2)
             + 0.25 * torch.sin(0.47 * atom_index + phase),
         ),
         dim=-1,
     )
 
-    unit_interval = (point_index + 0.5) / GRID_POINTS_PER_ATOM
+    unit_interval = (point_index_float + 0.5) / grid_sizes
     cos_polar = 1 - 2 * unit_interval
     sin_polar = torch.sqrt(1 - cos_polar.square())
-    azimuth = (
-        2.399963229728653 * point_index[None, :] + 0.41 * atom_index[:, None] + phase
-    )
+    azimuth = 2.399963229728653 * point_index_float + 0.41 * grid_atom + phase
     directions = torch.stack(
         (
-            sin_polar[None, :] * torch.cos(azimuth),
-            sin_polar[None, :] * torch.sin(azimuth),
-            cos_polar.expand(NUM_ATOMS, -1),
+            sin_polar * torch.cos(azimuth),
+            sin_polar * torch.sin(azimuth),
+            cos_polar,
         ),
         dim=-1,
     )
-    radii = (0.08 + 2.92 * unit_interval.pow(1.35))[None, :] * (
-        0.9 + 0.1 * torch.sin(0.53 * atom_index[:, None] + phase)
+    radii = (0.08 + 2.92 * unit_interval.pow(1.35)) * (
+        0.9 + 0.1 * torch.sin(0.53 * grid_atom + phase)
     )
-    grid_coords = (coarse_coords[:, None, :] + radii[..., None] * directions).reshape(
-        -1, 3
+    grid_coords = (
+        coarse_coords.index_select(0, grid_atom_index) + radii[:, None] * directions
     )
 
     radial_profile = torch.exp(-2.5 * radii)
     density_up = 1e-4 + 1.6 * radial_profile * (1 + 0.12 * directions[..., 0])
     density_down = 1e-4 + 1.2 * radial_profile * (1 - 0.10 * directions[..., 1])
-    density = torch.stack((density_up.reshape(-1), density_down.reshape(-1)))
+    density = torch.stack((density_up, density_down))
 
     tangential = torch.stack(
         (directions[..., 1], -directions[..., 0], torch.zeros_like(radii)), dim=-1
@@ -261,8 +284,8 @@ def _make_features(
     )
     gradient = torch.stack(
         (
-            gradient_up.reshape(-1, 3).T,
-            gradient_down.reshape(-1, 3).T,
+            gradient_up.T,
+            gradient_down.T,
         )
     )
     kinetic = (
@@ -272,9 +295,9 @@ def _make_features(
     )
 
     atomic_grid_weights = (
-        (0.15 + 1.85 * unit_interval.square())[None, :]
-        * (0.9 + 0.1 * torch.cos(0.43 * atom_index[:, None] - phase))
-        / GRID_POINTS_PER_ATOM
+        (0.15 + 1.85 * unit_interval.square())
+        * (0.9 + 0.1 * torch.cos(0.43 * grid_atom - phase))
+        / grid_sizes
     )
     grid_weights = atomic_grid_weights * (1 + 0.2 * directions[..., 2])
 
@@ -283,14 +306,12 @@ def _make_features(
         Feature.GRAD: gradient,
         Feature.KIN: kinetic,
         Feature.GRID_COORDS: grid_coords,
-        Feature.GRID_WEIGHTS: grid_weights.reshape(-1),
-        Feature.ATOMIC_GRID_WEIGHTS: atomic_grid_weights.reshape(-1),
-        Feature.ATOMIC_GRID_SIZES: torch.full(
-            (NUM_ATOMS,), GRID_POINTS_PER_ATOM, dtype=torch.int64
-        ),
+        Feature.GRID_WEIGHTS: grid_weights,
+        Feature.ATOMIC_GRID_WEIGHTS: atomic_grid_weights,
+        Feature.ATOMIC_GRID_SIZES: sizes,
         Feature.COARSE_0_ATOMIC_COORDS: coarse_coords,
         Feature.ATOMIC_GRID_SIZE_BOUND_SHAPE: torch.zeros(
-            GRID_POINTS_PER_ATOM, 0, dtype=torch.int64
+            max(atomic_grid_sizes), 0, dtype=torch.int64
         ),
     }
     device_features = {feature: value.to(device) for feature, value in features.items()}
@@ -315,8 +336,17 @@ def _trace_current_model(
     model.to(device=device)
     model.eval()
 
-    example = _make_features(case_index=0, device=device)
-    check_example = _make_features(case_index=1, device=device)
+    example = _make_features(
+        case_index=0, device=device, atomic_grid_sizes=CHUNK_LAYOUT_PATTERN[0]
+    )
+    check_examples = [
+        _make_features(
+            case_index=case_index + 1,
+            device=device,
+            atomic_grid_sizes=layout,
+        )
+        for case_index, layout in enumerate(CHUNK_LAYOUT_PATTERN[1:])
+    ]
     with torch.no_grad():
         trace_module = cast(
             Callable[..., torch.jit.ScriptModule], torch.jit.trace_module
@@ -324,7 +354,10 @@ def _trace_current_model(
         traced = trace_module(
             model,
             {"get_exc_density": (example,)},
-            check_inputs=[{"get_exc_density": (check_example,)}],
+            check_inputs=[
+                {"get_exc_density": (check_example,)}
+                for check_example in check_examples
+            ],
             strict=True,
         )
 
@@ -346,11 +379,12 @@ def _build_traced_model_case(device: torch.device) -> TracedModelCase:
     local = _trace_current_model(published, device)
     chunks = tuple(
         _make_features(
-            case_index=chunk_index + 2,
+            case_index=chunk_index + len(CHUNK_LAYOUT_PATTERN),
             device=device,
+            atomic_grid_sizes=layout,
             gradient_features=VXC_FEATURES,
         )
-        for chunk_index in range(NUM_CHUNKS)
+        for chunk_index, layout in enumerate(CHUNK_LAYOUTS)
     )
 
     with torch.no_grad():
@@ -542,11 +576,12 @@ def _prepare_memory_workload(
     del published
     chunks = tuple(
         _make_features(
-            case_index=chunk_index + 2,
+            case_index=chunk_index + len(CHUNK_LAYOUT_PATTERN),
             device=device,
+            atomic_grid_sizes=layout,
             gradient_features=VXC_FEATURES if workload == "backward" else (),
         )
-        for chunk_index in range(NUM_CHUNKS)
+        for chunk_index, layout in enumerate(CHUNK_LAYOUTS)
     )
     gc.collect()
     if device.type == "cuda":
