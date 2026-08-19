@@ -358,9 +358,15 @@ def _trace_current_model(
         )
         traced = trace_module(
             model,
-            {"get_exc_density": (example,)},
+            {
+                "get_exc": (example,),
+                "get_exc_density": (example,),
+            },
             check_inputs=[
-                {"get_exc_density": (check_example,)}
+                {
+                    "get_exc": (check_example,),
+                    "get_exc_density": (check_example,),
+                }
                 for check_example in check_examples
             ],
             strict=True,
@@ -393,8 +399,8 @@ def _build_traced_model_case(
     )
 
     with torch.no_grad():
-        published._traced_model.get_exc_density(chunks[0])
-        local.get_exc_density(chunks[0])
+        published._traced_model.get_exc(chunks[0])
+        local.get_exc(chunks[0])
     warmup_features = _with_gradient_features(chunks[0], NUCLEAR_GRADIENT_FEATURES)
     _evaluate_with_gradients(
         published._traced_model,
@@ -470,14 +476,12 @@ def _evaluate_with_gradients(
     model: Any,
     features: FeatureMap,
     gradient_features: tuple[Feature, ...] = VXC_FEATURES,
-) -> tuple[torch.Tensor, torch.Tensor, tuple[torch.Tensor, ...]]:
-    density = model.get_exc_density(features)
-    energy = (density.double() * features[Feature.GRID_WEIGHTS]).sum()
+) -> tuple[torch.Tensor, tuple[torch.Tensor, ...]]:
+    energy = model.get_exc(features)
     gradients = torch.autograd.grad(
         energy, _gradient_inputs(features, gradient_features)
     )
     return (
-        density.detach(),
         energy.detach(),
         tuple(gradient.detach() for gradient in gradients),
     )
@@ -501,7 +505,7 @@ def _run_workload(
     if workload == "inference":
         with torch.no_grad():
             for features in chunks:
-                model.get_exc_density(features)
+                model.get_exc(features)
     elif workload == "backward":
         for features in chunks:
             _evaluate_with_gradients(model, features)
@@ -740,15 +744,14 @@ def _measure_forward_accuracy(case: TracedModelCase) -> ForwardAccuracyReport:
         with torch.no_grad():
             local_density = case.local.get_exc_density(features)
             published_density = case.published.get_exc_density(features)
+            local_energy += case.local.get_exc(features)
+            published_energy += case.published.get_exc(features)
         density_stats.update(
             local_density,
             published_density,
             rtol=DENSITY_RTOL,
             atol=DENSITY_ATOL,
         )
-        grid_weights = features[Feature.GRID_WEIGHTS]
-        local_energy += (local_density.double() * grid_weights).sum()
-        published_energy += (published_density.double() * grid_weights).sum()
 
     energy_stats = DifferenceStats()
     energy_stats.update(
@@ -768,10 +771,10 @@ def _measure_gradient_accuracy(case: TracedModelCase) -> GradientAccuracyReport:
 
     for base_features in case.chunks:
         features = _with_gradient_features(base_features, NUCLEAR_GRADIENT_FEATURES)
-        _, _, local_gradients = _evaluate_with_gradients(
+        _, local_gradients = _evaluate_with_gradients(
             case.local, features, NUCLEAR_GRADIENT_FEATURES
         )
-        _, _, published_gradients = _evaluate_with_gradients(
+        _, published_gradients = _evaluate_with_gradients(
             case.published, features, NUCLEAR_GRADIENT_FEATURES
         )
         for feature, local_gradient, published_gradient in zip(

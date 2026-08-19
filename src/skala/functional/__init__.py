@@ -57,13 +57,26 @@ _SKALA_VERSIONS = {
 
 @dataclass(frozen=True)
 class FunctionalArtifact:
-    """Resolved serialized functional with its integrity metadata."""
+    """Resolved serialized functional with its integrity metadata.
+
+    Args:
+        path: Local path to the serialized functional.
+        expected_hash: Expected SHA-256 digest, or ``None`` for an explicitly
+            configured local model.
+    """
 
     path: Path
     expected_hash: str | None
 
     def load(self, device: torch.device | None = None) -> TracedFunctional:
-        """Load and verify the resolved functional on one device."""
+        """Load and verify the resolved functional on one device.
+
+        Args:
+            device: Device to load the functional onto.
+
+        Returns:
+            Loaded traced functional.
+        """
         return TracedFunctional.load(
             self.path,
             device=device,

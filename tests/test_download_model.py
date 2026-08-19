@@ -14,6 +14,7 @@ script cannot drift out of sync again.
 import importlib.util
 from pathlib import Path
 from types import ModuleType
+from typing import cast
 
 import pytest
 import torch
@@ -53,12 +54,31 @@ def test_resolve_functional_artifact_uses_device_model(
     monkeypatch.setattr(functional_module, "hf_hub_download", fake_hf_hub_download)
 
     artifact = resolve_functional_artifact("skala-1.1", torch.device("cuda"))
+    loaded_functional = cast(TracedFunctional, object())
+    load_calls: list[tuple[Path, torch.device | None, str | None]] = []
+
+    def fake_load(
+        path: Path,
+        device: torch.device | None = None,
+        *,
+        expected_hash: str | None = None,
+    ) -> TracedFunctional:
+        load_calls.append((path, device, expected_hash))
+        return loaded_functional
+
+    monkeypatch.setattr(TracedFunctional, "load", fake_load)
 
     assert artifact == FunctionalArtifact(
         resolved_path,
         KNOWN_HASHES[("microsoft/skala-1.1", "skala-1.1-rev1-cuda.fun")],
     )
+    assert artifact.load(torch.device("cuda")) is loaded_functional
+    assert artifact.load(torch.device("cuda")) is loaded_functional
     assert calls == [("microsoft/skala-1.1", "skala-1.1-rev1-cuda.fun")]
+    assert load_calls == [
+        (resolved_path, torch.device("cuda"), artifact.expected_hash),
+        (resolved_path, torch.device("cuda"), artifact.expected_hash),
+    ]
 
 
 @pytest.fixture(scope="module")
