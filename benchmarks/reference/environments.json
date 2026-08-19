@@ -3,7 +3,7 @@
     "blas_impl": "blas 3.9.0",
     "cores_logical": 32,
     "cores_physical": 16,
-    "cpu_model": "Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz",
+    "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
     "cuda_version": "12.9",
     "env_id": "d32v3-t16",
     "env_vars": {
@@ -12,7 +12,7 @@
     "gpu4pyscf_version": null,
     "gpu_count": 0,
     "gpu_models": [],
-    "hostname": "7e51b6768bee47088aa554f376b0605500001V",
+    "hostname": "18c90ce1d9bd4615825d8f3c208d1756000021",
     "interconnect": null,
     "label": "D32_v3 - 16 threads",
     "mem_total_gb": 125.8,
@@ -23,7 +23,7 @@
     "pyscf_version": "2.10.0",
     "python_version": "3.11.15",
     "skala_version": "2026.8",
-    "timestamp": "2026-08-13T20:39:19.738400+00:00",
+    "timestamp": "2026-08-17T09:16:14.027002+00:00",
     "torch_version": "2.9.1",
     "versions": {
       "ase": "3.29.0",

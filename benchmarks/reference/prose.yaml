@@ -19,10 +19,10 @@ comparison:
     differences.
   environments:
     d32v3-t16: |
-      Sixteen-thread CPU reference. This is the latest available direct-timing
-      sweep and is limited to systems below 4,000 atomic orbitals.
+      Sixteen-thread CPU reference, reaching just under 5,000 atomic orbitals.
     d2v3-t2: |
-      Two-thread CPU reference, including larger systems where memory permits.
+      Two-thread CPU reference. Its 8 GB of memory limits it to roughly half
+      the system size the sixteen-thread machine reaches.
     a100-ppe-s07-v181-cutensor-warmfree-preload-20260817: |
       NVIDIA A100 reference using GPU4PySCF 1.8.1 with cuTENSOR.
   notes:
@@ -44,7 +44,7 @@ plots:
 
     The third is the **first-evaluation overhead**, paid the first time the exchange-correlation functional runs on a given system. Part of it is genuine TorchScript compilation, roughly fixed at one to two seconds. The rest grows with the system, reaching about twelve seconds at five thousand orbitals, and that part is neither compilation nor -- despite appearances -- memory allocation: a calculation that reserves 23 GB pays the same as one that reserves 48 GB. It tracks the cost of one exchange-correlation evaluation instead, at one to two times it, which is the signature of per-shape work done once on first use.
 
-    None of the three is plotted anywhere in this report, because all three land outside the measured region: the benchmark pays them in an unmeasured warmup before the SCF it reports. That is why the first iteration costs within a percent or two of the steady state on every system measured here. It also means the second and third are paid in full by every calculation here: the benchmark runs a fresh process per molecule for isolation, so nothing carries over. A longer-lived process computing many molecules would pay process start-up once, and the first-evaluation overhead only when a system needs more than any before it.
+    None of the three is plotted anywhere in this report, because all three land outside the measured region: the benchmark pays them in an unmeasured warmup before the SCF it reports. That is why the first iteration typically costs within a percent or two of the steady state, rather than the several-fold excess an unwarmed run would show. It also means the second and third are paid in full by every calculation here: the benchmark runs a fresh process per molecule for isolation, so nothing carries over. A longer-lived process computing many molecules would pay process start-up once, and the first-evaluation overhead only when a system needs more than any before it.
 closing: |
   Treat the measured points as the primary evidence. The fitted lines summarize
   local scaling, while the environment cards define the hardware and software
