@@ -23,7 +23,7 @@ traced model. So the model folder is not production code, but more an explanatio
 will try to keep in line with our traced models.
 
 PRs that modify the model code consequently do not affect our hugging face model checkpoints.
-Due to the extensive testing needed, which far exceeds the public github ressources,
+Due to the extensive testing needed, which far exceeds public GitHub resources,
 we will only integrate model changes, if they are very promising in performance, speed or
 memory consumption.
 
