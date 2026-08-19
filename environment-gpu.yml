@@ -3,7 +3,6 @@ channels:
   - conda-forge
 dependencies:
   - ase
-  - dftd3-python
   - e3nn
   - h5py
   - jinja2
@@ -36,6 +35,8 @@ dependencies:
     # Conda PySCF pulls XCFun with pybind11 ABI 4, conflicting with PyTorch >=2.9's ABI 11.
     # PyPI wheels bundle XCFun and avoid that solver conflict.
     - pyscf >=2.11,<2.15
+    # Use its bundled DFT-D3 library instead of installing a second, incompatible copy.
+    - pyscf-dispersion
     - scipy-stubs
     - types-PyYAML
     - gpu4pyscf-cuda12x >=1.8,<1.9  # GPU-accelerated PySCF backend used by Skala
