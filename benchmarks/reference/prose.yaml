@@ -6,7 +6,7 @@ environment_order:
   - d32v3-t16
   - d2v3-t2
 abstract: |
-  This report provides a reproducible computational cost reference for validating another Skala implementation and for understanding the runtime users should expect from the official implementation as molecular and basis size grow.
+  This living report provides a reproducible computational cost reference for validating another Skala implementation and for understanding the runtime users should expect from the official implementation as molecular and basis size grow.
   The report covers molecular sizes from H2 to ~400 non-hydrogen atoms, and hardware from a 2-thread CPU to a 16-thread CPU to an NVIDIA A100 GPU.
   All measurements are done using PySCF and GPU4PySCF and the official [`skala`](https://github.com/microsoft/skala) package.
   Comparisons are made to r2SCAN (meta-GGA non-hybrid), B3LYP (GGA hybrid), and M06-2X (meta-GGA hybrid), called via libxc.
@@ -27,24 +27,30 @@ comparison:
     a100-ppe-s07-v181-cutensor-warmfree-preload-20260817:
   notes:
 plots:
-  xc_eval: The functional's own evaluation, excluding the contraction of its derivative into the AO basis. For libxc that is the single `eval_xc_eff` call, which returns the energy and its derivative on the grid together and cannot be split further; pyscf contracts afterwards. For Skala it is the network's forward pass, because its backward differentiates all the way to the density matrix and so performs that contraction itself. Excluding it on both sides is what makes the two comparable; the contraction is counted in numerical integration instead.
-  numint: Numerical integration includes grid and AO evaluation, density construction, exchange-correlation evaluation, and potential assembly. Growth with grid size exposes quadrature work; growth with AO count also captures the increasing cost of basis-dependent operations.
-  jk: The Coulomb and exchange build, obtained as the effective potential minus its quadrature part. It is the part of an iteration that does not depend on the choice of functional, so it is the common baseline against which the exchange-correlation cost should be read.
-  cycle: One steady-state SCF iteration end to end. The gap between this and numerical integration is the cost of the J/K build, Fock diagonalization, and DIIS.
-  iterations: Iteration count measures convergence behavior rather than work per iteration. A nearly flat series indicates stable SCF convergence as systems grow, while increases amplify the total runtime.
-  total: Total kernel wall time combines the cost of each SCF iteration with the number of iterations required for convergence. Interpret it alongside the iteration panel to distinguish expensive iterations from difficult convergence.
-  setup: 'Setup is charged the initial-guess Fock build, which carries the one-time density-fitting integral build. Charging it here rather than to the first iteration is what keeps the iteration timings free of one-time cost: measured this way, the first iteration costs within about one percent of the steady state.'
-  composition: Read the bands against system size rather than as a single number. The quadrature bands scale with the grid, which grows roughly linearly in system size, while the J/K build and the diagonalization grow faster; a functional that dominates a small molecule need not dominate a large one.
-  run_composition: 'Setup is a fixed cost per calculation, so its share is largest where the loop is cheapest -- small systems, and functionals whose iterations are fast. Read it together with the iteration-count panel: two calculations with the same per-iteration cost can divide very differently here if one of them converges sooner.'
+  xc_eval: |
+    In all environments and for all functionals, the cost scales roughly linearly with an initial onset, and Skala's evaluation is ~1.5 orders of magnitude more expensive than the traditional functionals.
+    As shown below, this much higher cost doesn't translate into a higher total cost, because the XC grid evaluation is only a small part of the total SCF cycle.
+    The relative onset positions of Skala and the traditional functionals on CPU vs GPU differ, driving Skala's total SCF overhead on CPU for small molecules (see below).
+  numint: |
+    On a GPU, all functionals scale the same way, with the meta-GGAs being ~2x as expensive as the GGA.
+    on a CPU, the relative cost of Skala dominates for small molecules, introducing a ~10x overhead for the smallest molecules, which disappears by ~15–20 non-hydrogen atoms.
+    The slightly better asymptotic scaling of Skala is the result of a marginally more efficient contraction of the XC potential in the Skala implementation.
+  jk: |
+    Hybrid functionals use DF-JK with precomputed 3-center integrals, while non-hybrids use direct DF-J.
+    This results in a lower cost of DF-JK for the smallest molecules, while the asymptotic scaling of Coulomb onlyu is much better than of Coulomb and exchange.
+  cycle: |
+    Combing all above together, as a GGA hybrid B3LYP is 1.5–2x cheaper for small molecules, while as non-hybrids Skala and r2SCAN get cheaper for large molecules.
+    In addition, Skala features the same overhead on CPU for small molecules as seen in the XC quadrature.
+  iterations: |
+    For all functionals we observe a very slow growth of the iteration count with system size.
+    For all functionals, all basis sets, and all environments, we observe outliers for the largest systems, which took several times more iterations to converge.
+  total: |
+    The measurements here are noiser than the per-iteration costs, because they combine the per-iteration cost with the iteration count.
+  setup: |
+    Containing both one XC quadrature and the 3-center integral build, the setup cost shows similar characteristics as the SCF iteraction cost.
   startup: |-
-    Three costs are paid before a calculation can start, and none of them appears in the timings above. The first is the **machine cold start**. The first calculation on a freshly allocated machine compiles the CUDA kernels into the CuPy cache on disk and reads the two gigabytes of PyTorch shared libraries into the operating system's page cache; every later process finds both already there. On this sweep that cost about thirteen seconds. Neither half is specific to this code, or even to quantum chemistry: the libraries are PyTorch's own, and all 56 kernels an SCF compiles are CuPy's generic array templates specialized by data type, gpu4pyscf's integral kernels being compiled ahead of time and shipped in the wheel. The cache does not survive a change of GPU model, CUDA version or CuPy version.
+    Three costs are paid before a calculation can start, and none of them appears in the timings above. The first is the **machine cold start**. The first calculation on a fresh machine compiles the CUDA kernels into the CuPy cache on disk and reads the two gigabytes of PyTorch shared libraries into the operating system's page cache; every later process finds both already there. On this sweep that costs ~13 s. Neither is specific to quantum chemistry: the libraries are PyTorch's own, and all CuPy kernels an SCF compiles are CuPy's generic array ops.
 
-    The second is **process start-up**: creating the CUDA context and its library handles, executing the Python imports, and moving the functional onto the device. None of it can be cached, because all of it is state that lives inside the process and dies with it. On the A100 it is about 6.8 s for the classical functionals and 8.2 s for Skala. On the CPUs the classical functionals pay under a second, while Skala pays 6.5 s on sixteen threads and 13.1 s on two, because it is the only one of the four that loads PyTorch at all.
+    The second is **process start-up**: creating the CUDA context and its library handles, executing the Python imports, and moving the functional onto the device. On the A100 it is ~8 s for all functionals. On a CPU the traditional functionals pay less than a second, while Skala pays ~7 s on 16 threads and ~13 s on two, because it is the only one of the four that loads PyTorch.
 
-    The third is the **first-evaluation overhead**, paid the first time the exchange-correlation functional runs on a given system. Part of it is genuine TorchScript compilation, roughly fixed at one to two seconds. The rest grows with the system, reaching about twelve seconds at five thousand orbitals, and that part is neither compilation nor -- despite appearances -- memory allocation: a calculation that reserves 23 GB pays the same as one that reserves 48 GB. It tracks the cost of one exchange-correlation evaluation instead, at one to two times it, which is the signature of per-shape work done once on first use.
-
-    None of the three is plotted anywhere in this report, because all three land outside the measured region: the benchmark pays them in an unmeasured warmup before the SCF it reports. That is why the first iteration typically costs within a percent or two of the steady state, rather than the several-fold excess an unwarmed run would show. It also means the second and third are paid in full by every calculation here: the benchmark runs a fresh process per molecule for isolation, so nothing carries over. A longer-lived process computing many molecules would pay process start-up once, and the first-evaluation overhead only when a system needs more than any before it.
-closing: |
-  Treat the measured points as the primary evidence. The fitted lines summarize
-  local scaling, while the environment cards define the hardware and software
-  needed to reproduce the absolute timings.
+    The third is the **first-evaluation overhead**, paid the first time the exchange-correlation functional runs on a given system. This includes TorchScript compilation, roughly fixed at 1–2 s, compilation of some GPU4PySCF custom kernels, and GPU memory allocation.

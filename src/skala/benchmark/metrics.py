@@ -14,10 +14,11 @@ so the composition bands are differences of measured quantities rather than
 attributed fractions:
 
 ``xc_eval``
-    The exchange-correlation functional itself, evaluated to first order --
-    energy and derivative, which is what an SCF iteration needs. libxc's
-    ``eval_xc_eff(deriv=1)`` returns both together; for Skala it is the network's
-    forward pass plus the autograd backward that differentiates it.
+    The exchange-correlation functional itself, without the contraction of its
+    derivative into the AO basis. libxc's ``eval_xc_eff(deriv=1)`` returns energy
+    and derivative together and cannot be split further; for Skala it is the
+    forward pass alone, because its backward performs that contraction (see
+    :func:`_xc_eval_value`).
 ``numint - xc_eval``
     The rest of the exchange-correlation quadrature: atomic orbitals on the
     grid, density assembly, and Vxc assembly.
@@ -143,7 +144,7 @@ METRIC_DEFINITIONS: dict[str, MetricDefinition] = {
         source_columns=("num_scf_iterations",),
     ),
     "setup": MetricDefinition(
-        label="Setup before the first XC evaluation",
+        label="Setup before the SCF loop",
         unit="ms",
         axes=("num_aos",),
         requires_cycles=False,
@@ -172,7 +173,7 @@ CYCLE_COMPOSITION_BANDS: dict[str, CompositionDefinition] = {
 
 RUN_COMPOSITION_BANDS: dict[str, CompositionDefinition] = {
     "setup": CompositionDefinition(
-        label="Setup before the first XC evaluation",
+        label="Setup before the SCF loop",
         short_label="Setup",
     ),
     "iterations": CompositionDefinition(

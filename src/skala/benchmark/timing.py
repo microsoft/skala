@@ -78,8 +78,10 @@ class ScfTiming:
 
     #: The whole instrumented span, on the device timeline for GPU runs.
     total_ms: float
-    #: Kernel entry until the first numerical-integration call: grid
-    #: construction, one-electron integrals, and the initial guess.
+    #: Kernel entry until the SCF loop starts: grid construction, one-electron
+    #: integrals, the initial guess, and the Fock build on that guess. That
+    #: build is a full effective-potential evaluation, so setup contains one
+    #: exchange-correlation quadrature in addition to the one-time work.
     setup_ms: float
     #: Work after the last cycle, chiefly pyscf's post-loop convergence check.
     finalize_ms: float

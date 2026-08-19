@@ -15,7 +15,7 @@ from markdown_it.rules_inline import StateInline
 from ._normalize import as_mapping
 
 DEFAULT_PROSE: dict[str, Any] = {
-    "title": "Skala computational cost scaling benchmark",
+    "title": "Skala computational cost benchmark",
     "author": "",
     "date": "",
     "abstract": (
@@ -47,10 +47,6 @@ DEFAULT_PROSE: dict[str, Any] = {
             "Start-up and first-use costs are outside the plotted SCF timings."
         ),
     },
-    "closing": (
-        "No study-specific conclusions were supplied. Interpret the measured points "
-        "and fitted lines in the context of the recorded environments."
-    ),
 }
 
 

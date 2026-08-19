@@ -20,11 +20,6 @@ evaluation, numerical integration, the effective-potential build, and the full S
 The stacked timing bands are differences between these measurements rather than attributed
 estimates.
 
-For Skala, the exchange-correlation interval includes differentiation through the network to the
-density matrix. Libxc returns its derivative on the grid and PySCF contracts it afterwards, so
-this interval slightly over-counts Skala relative to the classical functionals.
-
-
 Compare a local implementation or machine
 -----------------------------------------
 

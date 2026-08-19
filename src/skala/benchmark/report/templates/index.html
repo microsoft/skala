@@ -80,21 +80,19 @@
     <p>
       Points are converged calculations. Dashed lines are precomputed piecewise
       log–log fits with at most one kink, selected by cross-validation.
-      Axes remain fixed while selections change, enabling direct visual comparison.
     </p>
 
     <article class="plot-block">
       <h3>{{ xc_eval_label }}</h3>
       <p class="chart-subtitle">
-        The functional itself: energy and derivative, timed in place inside the SCF
+        Evaluation of the XC functional on the grid
       </p>
       <p class="plot-intro">
-        For a classical functional this is libxc's combined energy-and-derivative
-        call; for Skala it is the network's forward pass plus the autograd
-        backward that differentiates it. On GPU it is timed with CUDA events,
-        because the backward is queued immediately behind the forward with no
-        synchronization between them, and a host clock would measure
-        kernel-launch overhead instead of work.
+        For a traditional functional this is libxc's combined energy-and-derivative
+        call on the grid, which cannot be split further. For Skala it is the network's
+        forward pass alone: its backward differentiates all the way to the
+        density matrix and so also performs the contraction that pyscf does
+        outside the timed call for libxc.
       </p>
       <figure class="fig-wide">
         <div class="chart" id="chart-xc_eval" data-metric="xc_eval"></div>
@@ -113,19 +111,10 @@
         functional evaluation, and potential assembly
       </p>
       <p class="plot-intro">
-        Numerical integration evaluates the density and exchange-correlation model
+        XC quadrature evaluates the density and exchange-correlation model
         on the quadrature grid, then contracts the resulting potential back into the
-        AO basis. Its cost can therefore grow with both the number of grid points and
-        the size of the AO basis.
-      </p>
-      <div class="tex tex--display"
-        data-tex="v_{\mathrm{xc}}(\mathbf{r}) = \frac{\delta E_{\mathrm{xc}}[n]}{\delta n(\mathbf{r})}">
-        v_xc(r) = δE_xc[n] / δn(r)
-      </div>
-      <p class="plot-intro">
-        Toggle the horizontal axis to distinguish grid-driven growth from
-        basis-driven growth. Differences between the two views help identify
-        whether quadrature size or AO contractions dominate a measured trend.
+        AO basis.
+        In essence, it is the cost of the map from the density matrix to the XC energy and its derivative with respect to the density matrix.
       </p>
       <figure class="fig-wide">
         <div class="chart" id="chart-numint" data-metric="numint"></div>
@@ -146,7 +135,7 @@
         The effective potential is the J/K build plus the exchange-correlation
         quadrature, so subtracting numerical integration from it leaves J/K on
         its own. It is a difference of two measured quantities, and it is the
-        part of an iteration that does not depend on the functional.
+        part of an iteration that depends only on whether a functional is a hybrid or a non-hybrid.
       </p>
       <figure class="fig-wide">
         <div class="chart" id="chart-jk" data-metric="jk"></div>
@@ -161,9 +150,7 @@
       </p>
       <p class="plot-intro">
         The outermost of the three nested layers. Numerical integration sits
-        inside it, and the neural forward pass inside that, so the vertical gaps
-        between these three panels are themselves measured quantities rather
-        than estimates.
+        inside it, and the neural forward pass inside that.
       </p>
       <figure class="fig-wide">
         <div class="chart" id="chart-cycle" data-metric="cycle"></div>
@@ -178,9 +165,7 @@
     <article class="plot-block">
       <p class="plot-intro">
         End-to-end SCF time depends on the work performed in each iteration and on
-        the number of cycles, <span class="tex" data-tex="N_{\mathrm{SCF}}">N_SCF</span>,
-        required to reach convergence. Reading the panels together separates
-        algorithmic scaling within an iteration from changes in convergence behavior.
+        the number of cycles required to reach convergence.
       </p>
       <div class="plot-pair">
         <figure class="plot-pair__item">
@@ -194,19 +179,15 @@
           <div class="plot-commentary">{{ iterations_commentary }}</div>
         </figure>
       </div>
-      <p class="figure-note">
-        All panels use global fixed log domains. The forward, numerical-integration,
-        and iteration panels have independent x-axis toggles; iteration count and
-        total cost use the number of atomic orbitals.
-      </p>
     </article>
 
     <article class="plot-block">
       <h3>{{ setup_label }}</h3>
       <p class="plot-intro">
-        Work done once before the SCF loop, and therefore invisible in a
-        per-iteration average: grid construction, one-electron integrals, the
-        initial guess, and the density-fitting integral build.
+        Work before the SCF loop: grid construction, one-electron integrals, the initial guess,
+        the density-fitting integral build, and the Fock build on that guess.
+        That last one is a full effective-potential evaluation, so setup also
+        contains one exchange-correlation quadrature.
       </p>
       <div class="chart" id="chart-setup" data-metric="setup"></div>
       <div class="plot-commentary">{{ setup_commentary }}</div>
@@ -221,31 +202,14 @@
       The stacked bands partition a steady-state SCF iteration into four
       directly measured, nested layers: the exchange-correlation functional
       itself, the rest of the quadrature around it, the J/K build, and
-      everything else in the iteration. Because the layers nest, each band is a
-      difference of two measurements rather than an attributed share.
+      everything else in the iteration.
     </p>
     <div id="composition-charts"></div>
-    <p class="figure-note">
-      Fractions use the selected compute environment and basis set and are averaged
-      over molecules sharing an atomic-orbital count. Every stack totals 100%.
-    </p>
-    <div class="plot-commentary">{{ composition_commentary }}</div>
-
     <h3>One complete SCF</h3>
     <p>
-      The same calculation seen end to end. Setup runs once before the loop --
-      grid construction, one-electron integrals, the initial guess, and the
-      density-fitting integral build -- and is amortized over however many
-      iterations convergence takes, so its share shrinks as systems grow and
-      grows when convergence is easy.
+      The same calculation end to end.
     </p>
     <div id="run-composition-charts"></div>
-    <p class="figure-note">
-      The measured kernel only. What a process pays before it, described under
-      Process start-up caveats, is excluded, as is the post-loop convergence
-      check.
-    </p>
-    <div class="plot-commentary">{{ run_composition_commentary }}</div>
   </section>
 
   <section aria-labelledby="startup-title">

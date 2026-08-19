@@ -93,7 +93,8 @@ MEASUREMENT_FIELDS: list[tuple[str, pa.DataType]] = [
     ("kernel_time_ms", pa.float64()),  # mf.kernel() only
     # Kernel entry to the start of the SCF loop: grid construction,
     # one-electron integrals, the initial guess, and the initial-guess Fock
-    # build (which carries the one-time density-fitting integral build).
+    # build (which carries the one-time density-fitting integral build and,
+    # being a full effective-potential evaluation, one XC quadrature).
     ("setup_ms", pa.float64()),
     # Work after the last cycle, chiefly pyscf's post-loop convergence check.
     # setup_ms + sum(cycles.wall_ms) + finalize_ms is the whole kernel.
