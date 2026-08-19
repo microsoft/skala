@@ -56,6 +56,8 @@ class SweepRequest:
     molecule_names: tuple[str, ...] | None = None
     time_limit_seconds: float | None = None
     protocol: BenchmarkProtocol = DEFAULT_PROTOCOL
+    #: Where the molecule set was fetched to; ``None`` uses the default.
+    dataset_dir: Path | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -98,7 +100,9 @@ def run_sweep(request: SweepRequest) -> Path:
     output_dir = request.output_dir
 
     molecules = _filter_molecules(
-        load_benchmark_molecules(), request.max_atoms, request.molecule_names
+        load_benchmark_molecules(request.dataset_dir),
+        request.max_atoms,
+        request.molecule_names,
     )
     all_tasks = build_tasks(
         molecules,

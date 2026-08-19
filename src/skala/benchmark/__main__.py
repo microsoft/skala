@@ -54,6 +54,25 @@ def main(argv: Sequence[str] | None = None) -> None:
         help="Maximum wall time per computation, for example 240m or 4h.",
     )
 
+    run_parser.add_argument(
+        "--dataset-dir",
+        default=None,
+        help=(
+            "Directory holding the fetched molecule set "
+            "(default: the fetch-dataset location)."
+        ),
+    )
+
+    fetch_parser = subparsers.add_parser(
+        "fetch-dataset",
+        help="Download the benchmark molecules from the datasets they come from.",
+    )
+    fetch_parser.add_argument(
+        "--dataset-dir",
+        default=None,
+        help="Directory to write the molecule set to.",
+    )
+
     collect_parser = subparsers.add_parser(
         "collect", help="Collect a raw dataset into report-ready JSON files."
     )
@@ -110,8 +129,13 @@ def main(argv: Sequence[str] | None = None) -> None:
                 molecule_names=tuple(args.name) if args.name else None,
                 time_limit_seconds=args.time_limit,
                 protocol=protocol,
+                dataset_dir=Path(args.dataset_dir) if args.dataset_dir else None,
             )
         )
+    elif args.command == "fetch-dataset":
+        from skala.benchmark.fetch import main as fetch_main
+
+        raise SystemExit(fetch_main(args.dataset_dir))
     elif args.command == "collect":
         from skala.benchmark.collect_results import collect_results
 
