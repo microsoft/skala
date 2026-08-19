@@ -13,7 +13,7 @@ dependencies:
   - pandas
   - pyarrow
   - pyyaml
-  - python
+  - python >=3.11,<3.14
   - pytorch-gpu >=2.9  # CUDA-enabled PyTorch for Skala model inference
   - scipy
   - cuda-version >=12,<13  # Constrains conda CUDA packages to CUDA 12

@@ -13,7 +13,7 @@ dependencies:
   - pandas
   - pyarrow
   - pyyaml
-  - python
+  - python >=3.11,<3.14
   - pytorch >=2.9 cpu_*
   - scipy
 # Testing and development
