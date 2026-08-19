@@ -31,5 +31,6 @@ dependencies:
   - pip:
     - huggingface_hub
     - pandas-stubs
+    - pyarrow-stubs >=20,<21
     - scipy-stubs
     - types-PyYAML

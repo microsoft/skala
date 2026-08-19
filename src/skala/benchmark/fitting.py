@@ -232,8 +232,8 @@ def _continuous_convex_lines(
     if knots:
         knot_array = np.asarray(knots, dtype=np.float64)
         columns = [x]
-        for knot in knot_array:
-            columns.append(np.maximum(0.0, x - knot))
+        for knot_value in knot_array:
+            columns.append(np.maximum(0.0, x - knot_value))
         basis = np.column_stack(columns)
     else:
         basis = x.reshape(-1, 1)
@@ -246,7 +246,7 @@ def _continuous_convex_lines(
 
     slopes: list[float] = [float(segment_slopes[0])]
     intercepts: list[float] = [intercept]
-    running_slope = float(segment_slopes[0])
+    running_slope: float = float(segment_slopes[0])
     running_intercept = intercept
     for knot, next_slope in zip(knots, segment_slopes[1:], strict=True):
         hinge = float(next_slope) - running_slope

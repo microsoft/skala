@@ -241,7 +241,7 @@ def _load_checkpoint_state(
     completed: set[TaskKey] = set()
     for path in sorted(partition.glob("*.parquet")):
         try:
-            rows = pq.read_table(path).to_pylist()  # type: ignore[no-untyped-call]
+            rows = pq.read_table(path).to_pylist()
         except Exception as exc:
             raise ValueError(f"unreadable benchmark checkpoint: {path}") from exc
         for row in rows:

@@ -34,6 +34,7 @@ dependencies:
   - pip:
     - huggingface_hub
     - pandas-stubs
+    - pyarrow-stubs >=20,<21
     - scipy-stubs
     - types-PyYAML
     - gpu4pyscf-cuda12x >=1.8,<1.9  # GPU-accelerated PySCF backend used by Skala

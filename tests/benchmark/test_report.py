@@ -50,10 +50,10 @@ def test_reference_report_is_reproducible(tmp_path: Path) -> None:
         ).read_bytes()
 
     data = json.loads((outputs[0] / "data.json").read_text())
-    index = (outputs[0] / "index.html").read_text()
+    index_html = (outputs[0] / "index.html").read_text()
     fits_match = re.search(
         r'<script id="report-fits" type="application/json">(.*?)</script>',
-        index,
+        index_html,
     )
     assert fits_match is not None
     fits = json.loads(fits_match.group(1))
@@ -63,10 +63,10 @@ def test_reference_report_is_reproducible(tmp_path: Path) -> None:
     assert data["meta"]["environments"][0]["env_id"].startswith("a100-")
     assert data["meta"]["bases"] == ["def2-svp", "def2-tzvp", "def2-qzvp"]
     assert fits
-    assert "Skala performance and scaling benchmark" in index
-    assert "On the A100 it is about 6.8 s" in index
-    assert "Compare your own timings with these results" in index
-    assert "https://microsoft.github.io/skala/benchmarks.html" in index
+    assert "Skala performance and scaling benchmark" in index_html
+    assert "On the A100 it is about 6.8 s" in index_html
+    assert "Compare your own timings with these results" in index_html
+    assert "https://microsoft.github.io/skala/benchmarks.html" in index_html
 
 
 def test_default_prose_is_neutral() -> None:

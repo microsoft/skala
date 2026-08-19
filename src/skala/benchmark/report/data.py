@@ -294,7 +294,7 @@ def environment_rows(
     rows: list[dict[str, Any]] = []
     for env_id in measurement_env_ids:
         selected = frame.loc[env_id]
-        raw: Mapping[str, Any] = (
+        raw = (
             selected.iloc[-1].to_dict()
             if isinstance(selected, pd.DataFrame)
             else selected.to_dict()

@@ -61,4 +61,5 @@ def test_report_metrics_use_the_steady_state_and_partition_the_cycle() -> None:
             "cycle_rest": 10.0,
         }
     )
+    assert composition is not None
     assert sum(composition.values()) == pytest.approx(100.0)
