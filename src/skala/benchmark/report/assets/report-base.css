@@ -68,15 +68,6 @@ hr {
   margin: 32px 0;
 }
 
-.eyebrow {
-  color: var(--teal);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 1.5px;
-  margin: 0 0 7px;
-  text-transform: uppercase;
-}
-
 .report h1 {
   font-size: 25px;
   font-weight: 600;
@@ -129,16 +120,8 @@ hr {
   border-bottom: 1px solid var(--rule);
   display: flex;
   gap: 12px;
-  justify-content: space-between;
+  justify-content: flex-end;
   padding: 12px 24px;
-}
-
-.report-header__brand {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
 }
 
 .report-header__actions {

@@ -15,7 +15,7 @@ from markdown_it.rules_inline import StateInline
 from ._normalize import as_mapping
 
 DEFAULT_PROSE: dict[str, Any] = {
-    "title": "Skala benchmark comparison",
+    "title": "Skala computational cost scaling benchmark",
     "author": "",
     "date": "",
     "abstract": (
@@ -28,8 +28,7 @@ DEFAULT_PROSE: dict[str, Any] = {
     ),
     "comparison": {
         "intro": (
-            "The cards show the hardware and software metadata recorded with each "
-            "benchmark run."
+            "The cards show the hardware and software metadata recorded with each benchmark run."
         ),
         "environments": {},
         "notes": [],
@@ -44,9 +43,7 @@ DEFAULT_PROSE: dict[str, Any] = {
         "setup": "Measured setup time before the SCF loop.",
         "composition": "Measured composition of one steady-state SCF iteration.",
         "run_composition": "Measured composition of the complete SCF kernel.",
-        "startup": (
-            "Start-up and first-use costs are outside the plotted SCF timings."
-        ),
+        "startup": ("Start-up and first-use costs are outside the plotted SCF timings."),
     },
     "closing": (
         "No study-specific conclusions were supplied. Interpret the measured points "
@@ -102,9 +99,7 @@ def load_prose(path: str | Path | None) -> dict[str, Any]:
 
     result = _deep_merge(DEFAULT_PROSE, loaded)
     result["comparison"] = as_mapping(result.get("comparison"))
-    result["comparison"]["environments"] = as_mapping(
-        result["comparison"].get("environments")
-    )
+    result["comparison"]["environments"] = as_mapping(result["comparison"].get("environments"))
     notes = result["comparison"].get("notes")
     result["comparison"]["notes"] = list(notes) if isinstance(notes, list) else []
     result["plots"] = as_mapping(result.get("plots"))
@@ -124,9 +119,7 @@ def markdown_to_html(markdown: Any) -> str:
     return _MARKDOWN.render(text) if text else ""
 
 
-def _deep_merge(
-    defaults: Mapping[str, Any], overrides: Mapping[str, Any]
-) -> dict[str, Any]:
+def _deep_merge(defaults: Mapping[str, Any], overrides: Mapping[str, Any]) -> dict[str, Any]:
     result = dict(defaults)
     for key, value in overrides.items():
         if isinstance(value, Mapping) and isinstance(result.get(key), Mapping):

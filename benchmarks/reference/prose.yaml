@@ -1,32 +1,31 @@
-title: Skala performance and scaling benchmark
+title: Skala computational cost benchmark report
 author: Microsoft Research, AI for Science
-date: 2026-08-18
+date: 2026-08-19
 environment_order:
   - a100-ppe-s07-v181-cutensor-warmfree-preload-20260817
   - d32v3-t16
   - d2v3-t2
 abstract: |
-  This report provides a reproducible performance reference for validating another Skala implementation and for understanding the runtime users should expect from the official implementation as molecular and basis size grow.
+  This report provides a reproducible computational cost reference for validating another Skala implementation and for understanding the runtime users should expect from the official implementation as molecular and basis size grow.
+  The report covers molecular sizes from H2 to ~400 non-hydrogen atoms, and hardware from a 2-thread CPU to a 16-thread CPU to an NVIDIA A100 GPU.
+  All measurements are done using PySCF and GPU4PySCF and the official [`skala`](https://github.com/microsoft/skala) package.
+  Comparisons are made to r2SCAN (meta-GGA non-hybrid), B3LYP (GGA hybrid), and M06-2X (meta-GGA hybrid), called via libxc.
+  In summary, Skala's computational cost is like that of a traditional meta-GGA non-hybrid on a GPU, and on a CPU it shows an overhead over traditional meta-GGAs that starts at ~10x for the smallest molecules and disappears by 15–20 non-hydrogen atoms.
 intro: |
-  Each point is a converged calculation from the fixed Skala benchmark protocol.
-  The controls compare compute environments and basis sets while keeping plot
-  domains fixed. Download the collected JSON files or clone the repository to
-  overlay a local run on the same report.
+  A neural-network XC functional introduces an entirely new component to a traditional XC calculation, and brings with it several new software engineering aspects and potential complications.
+  It is therefore all the more important to understand how this affects the computational cost of DFT calculations, both for users and for developers of DFT codes.
+  This report shows how the computational cost of Skala behaves along three independent axes—molecular size, basis set size, and compute environment—and compares it to the cost of traditional XC functionals—r2SCAN, B3LYP, and M06-2.
+  The compute environment axis covers both the hardware type (CPU vs GPU) and the degree of parallelism (number of CPU threads), which can be both conceptually understood along the lines of strong scaling.
+
+  For insight into the computational cost, the report breaks down the total cost per SCF cycle to four components: The evaluation of the XC functional itself, the rest of the XC quadrature (includes evaluation of the density on the grid, and contraction of the XC potential back to the AO basis), the Coulomb and exchange build, and the Fock diagonalization.
 comparison:
   intro: |
-    Hardware and software metadata were captured with every sweep. Absolute
-    timings should be compared only after accounting for these environment
-    differences.
+    Three environments are captured here: GPU4PySCF on an NVIDIA A100 GPU, and PySCF on 2 and 16 CPU threads.
   environments:
-    d32v3-t16: |
-      Sixteen-thread CPU reference, reaching just under 5,000 atomic orbitals.
-    d2v3-t2: |
-      Two-thread CPU reference. Its 8 GB of memory limits it to roughly half
-      the system size the sixteen-thread machine reaches.
-    a100-ppe-s07-v181-cutensor-warmfree-preload-20260817: |
-      NVIDIA A100 reference using GPU4PySCF 1.8.1 with cuTENSOR.
+    d32v3-t16:
+    d2v3-t2:
+    a100-ppe-s07-v181-cutensor-warmfree-preload-20260817:
   notes:
-  - Use the same benchmark protocol and numerical settings when validating another implementation.
 plots:
   xc_eval: The functional's own evaluation, excluding the contraction of its derivative into the AO basis. For libxc that is the single `eval_xc_eff` call, which returns the energy and its derivative on the grid together and cannot be split further; pyscf contracts afterwards. For Skala it is the network's forward pass, because its backward differentiates all the way to the density matrix and so performs that contraction itself. Excluding it on both sides is what makes the two comparable; the contraction is counted in numerical integration instead.
   numint: Numerical integration includes grid and AO evaluation, density construction, exchange-correlation evaluation, and potential assembly. Growth with grid size exposes quadrature work; growth with AO count also captures the increasing cost of basis-dependent operations.
