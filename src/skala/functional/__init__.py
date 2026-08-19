@@ -10,6 +10,8 @@ exchange-correlation functionals, including traditional functionals
 
 import logging
 import os
+from dataclasses import dataclass
+from pathlib import Path
 
 import torch
 from huggingface_hub import hf_hub_download
@@ -38,9 +40,11 @@ __all__ = [
     "SPW92",
     "TPSS",
     "ExcFunctionalBase",
+    "FunctionalArtifact",
     "SkalaFunctional",
     "TracedFunctional",
     "load_functional",
+    "resolve_functional_artifact",
 ]
 
 _SKALA_VERSIONS = {
@@ -49,6 +53,60 @@ _SKALA_VERSIONS = {
     "skala-1.1-rev0": ("skala-1.1.fun", "skala-1.1-cuda.fun"),
     "skala-1.1-rev1": ("skala-1.1-rev1.fun", "skala-1.1-rev1-cuda.fun"),
 }
+
+
+@dataclass(frozen=True)
+class FunctionalArtifact:
+    """Resolved serialized functional with its integrity metadata."""
+
+    path: Path
+    expected_hash: str | None
+
+    def load(self, device: torch.device | None = None) -> TracedFunctional:
+        """Load and verify the resolved functional on one device."""
+        return TracedFunctional.load(
+            self.path,
+            device=device,
+            expected_hash=self.expected_hash,
+        )
+
+
+def resolve_functional_artifact(
+    name: str, device: torch.device | None = None
+) -> FunctionalArtifact:
+    """Resolve one published Skala functional to a verified local artifact.
+
+    Args:
+        name: Published Skala functional name.
+        device: Device whose CPU or CUDA artifact should be resolved.
+
+    Returns:
+        Local artifact path and its expected SHA-256 hash.
+
+    Raises:
+        ValueError: If ``name`` is not a published Skala functional.
+    """
+    func_name = name.lower()
+    if func_name not in _SKALA_VERSIONS:
+        raise ValueError(f"Cannot resolve non-Skala functional {name!r}")
+
+    env_path = os.environ.get("SKALA_LOCAL_MODEL_PATH")
+    if env_path is not None:
+        logging.getLogger(__name__).warning(
+            "Loading model from SKALA_LOCAL_MODEL_PATH; "
+            "SHA-256 hash verification is disabled."
+        )
+        return FunctionalArtifact(Path(env_path), None)
+
+    device_type = torch.get_default_device().type if device is None else device.type
+    repo_id = f"microsoft/{func_name.partition('-rev')[0]}"
+    cpu_file, cuda_file = _SKALA_VERSIONS[func_name]
+    filename = cpu_file if device_type == "cpu" else cuda_file
+    path = hf_hub_download(repo_id=repo_id, filename=filename)
+    return FunctionalArtifact(
+        Path(path),
+        KNOWN_HASHES.get((repo_id, filename)),
+    )
 
 
 def load_functional(
@@ -99,25 +157,7 @@ def load_functional(
         )
 
     if func_name in _SKALA_VERSIONS:
-        env_path = os.environ.get("SKALA_LOCAL_MODEL_PATH")
-        if env_path is not None:
-            logging.getLogger(__name__).warning(
-                "Loading model from SKALA_LOCAL_MODEL_PATH; "
-                "SHA-256 hash verification is disabled."
-            )
-            path = env_path
-            expected_hash = None
-        else:
-            device_type = (
-                torch.get_default_device().type if device is None else device.type
-            )
-            repo_id = f"microsoft/{func_name.partition('-rev')[0]}"
-            cpu_file, cuda_file = _SKALA_VERSIONS[func_name]
-            filename = cpu_file if device_type == "cpu" else cuda_file
-            path = hf_hub_download(repo_id=repo_id, filename=filename)
-            expected_hash = KNOWN_HASHES.get((repo_id, filename))
-
-        return TracedFunctional.load(path, device=device, expected_hash=expected_hash)
+        return resolve_functional_artifact(func_name, device).load(device)
 
     elif func_name in XC_FUNCTIONAL_MAP:
         func = XC_FUNCTIONAL_MAP[func_name]()

@@ -22,7 +22,11 @@ import torch
 from pytest_benchmark.fixture import BenchmarkFixture
 
 from skala.features import Feature, FeatureMap
-from skala.functional import TracedFunctional, load_functional
+from skala.functional import (
+    FunctionalArtifact,
+    TracedFunctional,
+    resolve_functional_artifact,
+)
 from skala.functional.model import SkalaFunctional
 
 # Trace the first irregular layout and check the graph against every other
@@ -61,6 +65,7 @@ WORKLOADS: tuple[Workload, ...] = ("inference", "backward")
 Implementation = Literal["published", "local"]
 IMPLEMENTATIONS: tuple[Implementation, ...] = ("published", "local")
 RuntimeResults = dict[tuple[str, Workload], dict[Implementation, float]]
+PublishedModel = tuple[torch.device, FunctionalArtifact]
 VXC_FEATURES = (
     Feature.DENSITY,
     Feature.GRAD,
@@ -369,13 +374,13 @@ def _trace_current_model(
     return load_module(archive, map_location=device)
 
 
-def _build_traced_model_case(device: torch.device) -> TracedModelCase:
+def _build_traced_model_case(
+    device: torch.device, artifact: FunctionalArtifact
+) -> TracedModelCase:
     if device.type == "cuda" and not torch.cuda.is_available():
         raise RuntimeError("CUDA is not available")
 
-    published = load_functional("skala-1.1", device=device)
-    if not isinstance(published, TracedFunctional):
-        raise TypeError("Expected the published Skala 1.1 model to be traced")
+    published = artifact.load(device)
     local = _trace_current_model(published, device)
     chunks = tuple(
         _make_features(
@@ -418,12 +423,19 @@ def _build_traced_model_case(device: torch.device) -> TracedModelCase:
         pytest.param("cuda", id="cuda", marks=pytest.mark.gpu),
     ],
 )
-def traced_model_case(request: pytest.FixtureRequest) -> Iterator[TracedModelCase]:
-    """Build both traces and all measured inputs on one target device."""
+def published_model(request: pytest.FixtureRequest) -> PublishedModel:
+    """Resolve the published model once for one target device."""
     device = torch.device(str(request.param))
     if device.type == "cuda" and not torch.cuda.is_available():
         pytest.skip("CUDA is not available")
-    case = _build_traced_model_case(device)
+    return device, resolve_functional_artifact("skala-1.1", device=device)
+
+
+@pytest.fixture(scope="module")
+def traced_model_case(published_model: PublishedModel) -> Iterator[TracedModelCase]:
+    """Build both traces and all measured inputs on one target device."""
+    device, artifact = published_model
+    case = _build_traced_model_case(device, artifact)
     yield case
     del case
     if device.type == "cuda":
@@ -561,10 +573,12 @@ def test_traced_model_runtime(
 
 
 def _prepare_memory_workload(
-    implementation: str, device: torch.device, workload: Workload
+    implementation: str,
+    device: torch.device,
+    artifact: FunctionalArtifact,
+    workload: Workload,
 ) -> tuple[Any, tuple[FeatureMap, ...]]:
-    published = load_functional("skala-1.1", device=device)
-    assert isinstance(published, TracedFunctional)
+    published = artifact.load(device)
 
     if implementation == "local":
         model = _trace_current_model(published, device)
@@ -622,6 +636,7 @@ def _measure_cuda_peak(
 def _memory_worker(
     implementation: str,
     device_name: str,
+    artifact: FunctionalArtifact,
     workload: Workload,
     control: Connection,
 ) -> None:
@@ -631,7 +646,9 @@ def _memory_worker(
         os.environ["MKL_NUM_THREADS"] = str(THREAD_COUNT)
         torch.set_num_threads(THREAD_COUNT)
         device = torch.device(device_name)
-        model, chunks = _prepare_memory_workload(implementation, device, workload)
+        model, chunks = _prepare_memory_workload(
+            implementation, device, artifact, workload
+        )
         if device.type == "cpu":
             peak_bytes = _measure_cpu_peak(model, chunks, workload)
         elif device.type == "cuda":
@@ -646,14 +663,17 @@ def _memory_worker(
 
 
 def _measure_peak_memory(
-    implementation: str, device_name: str, workload: Workload
+    implementation: str,
+    device_name: str,
+    artifact: FunctionalArtifact,
+    workload: Workload,
 ) -> int:
     """Return peak inference allocations from one isolated worker."""
     context = mp.get_context("spawn")
     control, worker_control = context.Pipe()
     worker = context.Process(
         target=_memory_worker,
-        args=(implementation, device_name, workload, worker_control),
+        args=(implementation, device_name, artifact, workload, worker_control),
     )
     worker.start()
     worker_control.close()
@@ -681,24 +701,16 @@ def _measure_peak_memory(
         control.close()
 
 
-@pytest.mark.parametrize(
-    "device_name",
-    [
-        pytest.param("cpu", id="cpu"),
-        pytest.param("cuda", id="cuda", marks=pytest.mark.gpu),
-    ],
-)
 @pytest.mark.parametrize("workload", WORKLOADS)
 def test_traced_model_peak_memory(
-    device_name: str,
+    published_model: PublishedModel,
     record_property: Callable[[str, object], None],
     workload: Workload,
 ) -> None:
     """Require forward and backward peak allocations within 1% of published."""
-    if device_name == "cuda" and not torch.cuda.is_available():
-        pytest.skip("CUDA is not available")
-
-    report = _measure_memory(device_name, workload)
+    device, artifact = published_model
+    device_name = device.type
+    report = _measure_memory(device_name, artifact, workload)
     mib = 1024**2
     record_property("device", device_name)
     record_property("workload", workload)
@@ -817,9 +829,11 @@ def _measure_runtime(case: TracedModelCase, workload: Workload) -> RatioReport:
     return _ratio_report(local_median, published_median, MAX_RUNTIME_RATIO)
 
 
-def _measure_memory(device_name: str, workload: Workload) -> RatioReport:
-    published_bytes = _measure_peak_memory("published", device_name, workload)
-    local_bytes = _measure_peak_memory("local", device_name, workload)
+def _measure_memory(
+    device_name: str, artifact: FunctionalArtifact, workload: Workload
+) -> RatioReport:
+    published_bytes = _measure_peak_memory("published", device_name, artifact, workload)
+    local_bytes = _measure_peak_memory("local", device_name, artifact, workload)
     return _ratio_report(float(local_bytes), float(published_bytes), MAX_MEMORY_RATIO)
 
 
@@ -852,11 +866,12 @@ def _device_label(device: torch.device) -> str:
 
 def _run_script_device(device_name: str) -> bool:
     device = torch.device(device_name)
+    artifact = resolve_functional_artifact("skala-1.1", device=device)
     print("\nSkala local vs published trace")
     print(f"Execution device: {_device_label(device)}")
     print(f"CPU threads: {torch.get_num_threads()}")
     print(f"Workload: {TOTAL_GRID_POINTS:,} points")
-    case = _build_traced_model_case(device)
+    case = _build_traced_model_case(device, artifact)
 
     print("\nAccuracy differences")
     forward_accuracy = _measure_forward_accuracy(case)
@@ -885,7 +900,7 @@ def _run_script_device(device_name: str) -> bool:
     memory_reports: list[RatioReport] = []
     mib = 1024**2
     for workload in WORKLOADS:
-        report = _measure_memory(device_name, workload)
+        report = _measure_memory(device_name, artifact, workload)
         memory_reports.append(report)
         print(
             f"  {workload:<12} published={report.published / mib:.3f}  "
