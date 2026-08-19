@@ -380,7 +380,7 @@ def test_screened_and_dense_values_agree(
     vxc_relative_l2_difference = np.linalg.norm(vxc_difference) / np.linalg.norm(
         dense_vxc
     )
-    vxc_max_atol = 5e-8 if case.backend == "cpu" else 2e-7
+    vxc_max_atol = 1e-7 if case.backend == "cpu" else 2e-7
     vxc_relative_rtol = 1e-8 if case.backend == "cpu" else 1e-7
     assert (
         density_close

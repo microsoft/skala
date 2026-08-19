@@ -14,10 +14,10 @@ from gpu4pyscf.grad.rks import grids_noresponse_cc, grids_response_cc
 from gpu4pyscf.grad.uhf import Gradients as UHFGradient
 from gpu4pyscf.scf.hf import SCF
 from pyscf import gto
-from pyscf.dispersion.dftd3 import DFTD3Dispersion
 from torch.utils.dlpack import from_dlpack
 
 import skala.pyscf.features as feature
+from skala.dispersion import DFTD3Dispersion
 from skala.features import Feature, FeatureMap
 from skala.functional.base import ExcFunctionalBase
 
@@ -352,7 +352,7 @@ class SkalaRKSGradient(RHFGradient):  # type: ignore[misc]
         nuc_g = super().grad_nuc(mol, atmlst)
         if self.with_dftd3 is None:
             return nuc_g
-        disp_g = self.with_dftd3.get_dispersion(grad=True)["gradient"]
+        disp_g = self.with_dftd3.get_gradient()
         if atmlst is not None:
             disp_g = disp_g[atmlst]
         nuc_g += disp_g
@@ -452,7 +452,7 @@ class SkalaUKSGradient(UHFGradient):  # type: ignore[misc]
         nuc_g = super().grad_nuc(mol, atmlst)
         if self.with_dftd3 is None:
             return nuc_g
-        disp_g = self.with_dftd3.get_dispersion(grad=True)["gradient"]
+        disp_g = self.with_dftd3.get_gradient()
         if atmlst is not None:
             disp_g = disp_g[atmlst]
         nuc_g += disp_g

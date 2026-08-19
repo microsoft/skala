@@ -25,7 +25,9 @@ dependencies = [
     "numpy",
     "opt_einsum_fx",
     "pyscf>=2.11,<2.15",
-    "pyscf-dispersion",
+    "pyscf-dispersion>=1.5; sys_platform == 'linux'",
+    "dftd3>=1.2.1,<1.3; sys_platform == 'darwin'",
+    "dftd3>=1.3; sys_platform != 'linux' and sys_platform != 'darwin'",
     "torch>=2.9"
 ]
 

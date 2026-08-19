@@ -32,7 +32,10 @@ dependencies:
     # Conda PySCF pulls XCFun with pybind11 ABI 4, conflicting with PyTorch >=2.9's ABI 11.
     # PyPI wheels bundle XCFun and avoid that solver conflict.
     - pyscf >=2.11,<2.15
-    # Use its bundled DFT-D3 library instead of installing a second, incompatible copy.
-    - pyscf-dispersion
+    # Linux GPU4PySCF requires this backend; use standalone DFT-D3 elsewhere because
+    # current pyscf-dispersion releases do not provide macOS wheels.
+    - pyscf-dispersion >=1.5; sys_platform == 'linux'
+    - dftd3 >=1.2.1,<1.3; sys_platform == 'darwin'
+    - dftd3 >=1.3; sys_platform != 'linux' and sys_platform != 'darwin'
     - scipy-stubs
     - types-PyYAML

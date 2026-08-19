@@ -8,13 +8,13 @@ from typing import Any
 import numpy as np
 import torch
 from pyscf import dft, gto
-from pyscf.dispersion.dftd3 import DFTD3Dispersion
 from pyscf.grad.rhf import Gradients as RHFGradient
 from pyscf.grad.rks import grids_noresponse_cc, grids_response_cc
 from pyscf.grad.uks import Gradients as UHFGradient
 from pyscf.scf.hf import SCF
 
 import skala.pyscf.features as feature
+from skala.dispersion import DFTD3Dispersion
 from skala.features import Feature, FeatureMap
 from skala.functional.base import ExcFunctionalBase
 
@@ -300,7 +300,7 @@ class SkalaRKSGradient(RHFGradient):  # type: ignore[misc]
         nuc_g = super().grad_nuc(mol, atmlst)
         if self.with_dftd3 is None:
             return nuc_g
-        disp_g = self.with_dftd3.get_dispersion(grad=True)["gradient"]
+        disp_g = self.with_dftd3.get_gradient()
         if atmlst is not None:
             disp_g = disp_g[atmlst]
         nuc_g += disp_g
@@ -378,7 +378,7 @@ class SkalaUKSGradient(UHFGradient):  # type: ignore[misc]
         nuc_g = super().grad_nuc(mol, atmlst)
         if self.with_dftd3 is None:
             return nuc_g
-        disp_g = self.with_dftd3.get_dispersion(grad=True)["gradient"]
+        disp_g = self.with_dftd3.get_gradient()
         if atmlst is not None:
             disp_g = disp_g[atmlst]
         nuc_g += disp_g
