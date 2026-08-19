@@ -132,6 +132,7 @@ filterwarnings = [
     'ignore:`torch\.jit\.script` is deprecated\. Please switch to `torch\.compile` or `torch\.export`\.:DeprecationWarning',
     'ignore:`torch\.jit\.save` is deprecated\. Please switch to `torch\.export`\.:DeprecationWarning',
     'ignore:`torch\.jit\.save` is not supported in Python 3\.14+ and may break\. Please switch to `torch\.export`\.:DeprecationWarning',
+    'ignore:`torch\.jit\.trace_method` is deprecated\. Please switch to `torch\.compile` or `torch\.export`\.:DeprecationWarning',
     # From gpu4pyscf if cutensor is not available
     'ignore:using cupy as the tensor contraction engine\.:UserWarning',
     # Deprecation warning in huggingface_hub package
