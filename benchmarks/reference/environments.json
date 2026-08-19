@@ -45,7 +45,7 @@
     "gpu4pyscf_version": null,
     "gpu_count": 0,
     "gpu_models": [],
-    "hostname": "351091b5a72845bdb5d9cc3cfc7e0fdb0000C5",
+    "hostname": "716bb4cdf5514a6ba71843203238ab3e00003X",
     "interconnect": null,
     "label": "D2_v3 - 2 threads",
     "mem_total_gb": 7.8,
@@ -56,7 +56,7 @@
     "pyscf_version": "2.10.0",
     "python_version": "3.11.15",
     "skala_version": "2026.8",
-    "timestamp": "2026-08-16T17:45:03.430074+00:00",
+    "timestamp": "2026-08-15T05:16:13.365629+00:00",
     "torch_version": "2.9.1",
     "versions": {
       "ase": "3.29.0",
