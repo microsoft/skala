@@ -63,8 +63,8 @@ def test_reference_report_is_reproducible(tmp_path: Path) -> None:
     assert data["meta"]["environments"][0]["env_id"].startswith("a100-")
     assert data["meta"]["bases"] == ["def2-svp", "def2-tzvp", "def2-qzvp"]
     assert fits
-    assert "Skala performance and scaling benchmark" in index_html
-    assert "On the A100 it is about 6.8 s" in index_html
+    assert "Skala computational cost benchmark report" in index_html
+    assert "machine cold start" in index_html
     assert "Compare your own timings with these results" in index_html
     assert "https://microsoft.github.io/skala/benchmarks.html" in index_html
 
@@ -73,8 +73,7 @@ def test_default_prose_is_neutral() -> None:
     prose = json.dumps(load_prose(None))
 
     assert "No study-specific interpretation was supplied" in prose
-    assert "No study-specific conclusions were supplied" in prose
-    assert "On the A100 it is about 6.8 s" not in prose
+    assert "machine cold start" not in prose
     assert "--prose" not in prose
 
 
