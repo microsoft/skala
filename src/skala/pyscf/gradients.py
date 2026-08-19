@@ -98,7 +98,7 @@ def veff_and_expl_nuc_grad(
         )
         return functional.get_exc(exc_mol_feats)
 
-    _, dExc_func = torch.func.vjp(exc_feat_func, *nuc_feat_tensors)
+    dExc_func = torch.func.vjp(exc_feat_func, *nuc_feat_tensors)[1]
     dExc_tuple = dExc_func(torch.tensor(1.0, dtype=rdm1.dtype))
     dExc: FeatureMap = {}
     for i in range(len(dExc_tuple)):

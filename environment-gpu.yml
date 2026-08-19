@@ -16,7 +16,7 @@ dependencies:
   - pyscf >=2.8,<2.14
   - pyyaml
   - python
-  - pytorch-gpu  # CUDA-enabled PyTorch for Skala model inference
+  - pytorch-gpu >=2.9  # CUDA-enabled PyTorch for Skala model inference
   - scipy
   - cuda-version >=12,<13  # Constrains conda CUDA packages to CUDA 12
   - cuda-nvrtc >=12,<13  # Runtime compiler used by CuPy for GPU kernels

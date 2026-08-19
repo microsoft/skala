@@ -23,7 +23,7 @@ dependencies = [
     "numpy",
     "opt_einsum_fx",
     "pyscf>=2.8,<2.14",
-    "torch"
+    "torch>=2.9"
 ]
 
 optional-dependencies.dev = [
@@ -67,7 +67,7 @@ strict = true
 no_namespace_packages = true
 python_version = "3.12"
 exclude = ["third_party/"]
-disable_error_code = ["no-any-return"]
+disable_error_code = ["no-any-return", "unused-ignore"]
 
 [[tool.mypy.overrides]]
 module = [

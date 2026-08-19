@@ -16,7 +16,7 @@ dependencies:
   - pyscf >=2.8,<2.14
   - pyyaml
   - python
-  - pytorch * cpu_*
+  - pytorch >=2.9 cpu_*
   - scipy
 # Testing and development
   - memray
