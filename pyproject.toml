@@ -12,9 +12,12 @@ readme = "README.md"
 keywords = []
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Development Status :: 5 - Production/Stable",
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "ase",
     "dftd3",
@@ -65,7 +68,7 @@ urls.homepage = "https://aka.ms/dft"
 [tool.mypy]
 strict = true
 no_namespace_packages = true
-python_version = "3.12"
+python_version = "3.11"
 exclude = ["third_party/"]
 disable_error_code = ["no-any-return", "unused-ignore"]
 

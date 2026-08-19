@@ -6,14 +6,12 @@ dependencies:
   - dftd3-python
   - e3nn
   - h5py
-  - hdf5 >=2.1,<2.2
   - jinja2
   - markdown-it-py
   - numpy
   - opt_einsum_fx
   - pandas
   - pyarrow
-  - pyscf >=2.8,<2.14
   - pyyaml
   - python
   - pytorch-gpu >=2.9  # CUDA-enabled PyTorch for Skala model inference
@@ -35,6 +33,9 @@ dependencies:
     - huggingface_hub
     - pandas-stubs
     - pyarrow-stubs >=20,<21
+    # Conda PySCF pulls XCFun with pybind11 ABI 4, conflicting with PyTorch >=2.9's ABI 11.
+    # PyPI wheels bundle XCFun and avoid that solver conflict.
+    - pyscf >=2.8,<2.14
     - scipy-stubs
     - types-PyYAML
     - gpu4pyscf-cuda12x >=1.8,<1.9  # GPU-accelerated PySCF backend used by Skala
