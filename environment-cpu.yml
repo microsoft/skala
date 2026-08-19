@@ -32,6 +32,6 @@ dependencies:
     - pyarrow-stubs >=20,<21
     # Conda PySCF pulls XCFun with pybind11 ABI 4, conflicting with PyTorch >=2.9's ABI 11.
     # PyPI wheels bundle XCFun and avoid that solver conflict.
-    - pyscf >=2.8,<2.14
+    - pyscf >=2.11,<2.15
     - scipy-stubs
     - types-PyYAML
