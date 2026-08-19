@@ -33,7 +33,7 @@ forward accuracy, Vxc feature backpropagation, runtime, and peak memory. Backpro
 density, density-gradient, and kinetic-energy-density inputs. Accuracy also compares the model
 derivatives used for nuclear gradients with respect to grid coordinates, grid weights, and coarse
 atomic coordinates. Full nuclear forces require additional molecular AO and grid-response terms
-outside this synthetic benchmark. The tests use 200,000 deterministic tensor values; they require
+outside this synthetic benchmark. The tests use 200,000 deterministic grid points; they require
 neither molecular setup nor golden output data. Run the CPU cases with four threads:
 
 ```bash
