@@ -119,7 +119,7 @@ jobs:
       uses: ./.github/actions/cpu-diagnostics
 
   gpu-test:
-    runs-on: microsoft-skala-gpu-pool
+    runs-on: microsoft-skala-small-gpu-pool
     needs:
       - lint
     env:
