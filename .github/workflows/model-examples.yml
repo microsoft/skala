@@ -3,8 +3,7 @@ name: "Model examples"
 on:
   push:
     branches: [main]
-    paths:
-      - '.github/actions/cpu-diagnostics/action.yml'
+    paths: &model-example-paths
       - '.github/workflows/model-examples.yml'
       - 'environment-cpu.yml'
       - 'examples/cpp/cpp_integration/**'
@@ -13,14 +12,7 @@ on:
       - 'src/skala/**'
   pull_request:
     branches: [main]
-    paths:
-      - '.github/actions/cpu-diagnostics/action.yml'
-      - '.github/workflows/model-examples.yml'
-      - 'environment-cpu.yml'
-      - 'examples/cpp/cpp_integration/**'
-      - 'examples/fortran/ftorch_integration/**'
-      - 'pyproject.toml'
-      - 'src/skala/**'
+    paths: *model-example-paths
 
 permissions:
   contents: read
