@@ -95,12 +95,16 @@ get_exc_and_grad(const torch::jit::Method &exc_func, const FeatureDict &features
   std::vector<at::Tensor> input_tensors;
   std::vector<std::string> tensor_keys;
 
-  for (const auto &kv : features)
-  {
-    auto tensor_with_grad = kv.value().clone().requires_grad_(true);
-    features_with_grad.insert(kv.key(), tensor_with_grad);
-    input_tensors.push_back(tensor_with_grad);
-    tensor_keys.push_back(kv.key());
+  for (const auto& entry : features) {
+    std::string key = entry.key();
+    bool requires_grad = (key == "density" || key == "grad" || key == "kin" || key == "coarse_0_atomic_coords" || key == "grid_coords" || key == "grid_weights");
+
+    auto tensor = entry.value().clone().requires_grad_(requires_grad);
+    if (requires_grad) {
+      input_tensors.push_back(tensor);
+      tensor_keys.push_back(key);
+    }
+    features_with_grad.insert(key, tensor);
   }
 
   IValueList args;
