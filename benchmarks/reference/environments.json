@@ -22,14 +22,14 @@
     "numpy_version": "2.3.5",
     "pyscf_version": "2.10.0",
     "python_version": "3.11.15",
-    "skala_version": "2026.8",
+    "skala_version": "2026.9",
     "timestamp": "2026-08-17T09:16:14.027002+00:00",
     "torch_version": "2.9.1",
     "versions": {
       "ase": "3.29.0",
       "dftd3": "1.2.1",
       "pyarrow": "25.0.0",
-      "skala": "2026.8"
+      "skala": "2026.9"
     }
   },
   {
@@ -55,14 +55,14 @@
     "numpy_version": "2.3.5",
     "pyscf_version": "2.10.0",
     "python_version": "3.11.15",
-    "skala_version": "2026.8",
+    "skala_version": "2026.9",
     "timestamp": "2026-08-15T05:16:13.365629+00:00",
     "torch_version": "2.9.1",
     "versions": {
       "ase": "3.29.0",
       "dftd3": "1.2.1",
       "pyarrow": "25.0.0",
-      "skala": "2026.8"
+      "skala": "2026.9"
     }
   },
   {
@@ -90,14 +90,14 @@
     "numpy_version": "2.2.6",
     "pyscf_version": "2.10.0",
     "python_version": "3.11.15",
-    "skala_version": "2026.8",
+    "skala_version": "2026.9",
     "timestamp": "2026-08-17T07:23:56.834931+00:00",
     "torch_version": "2.9.1+cu128",
     "versions": {
       "ase": "3.29.0",
       "dftd3": "1.2.1",
       "pyarrow": "25.0.0",
-      "skala": "2026.8"
+      "skala": "2026.9"
     }
   }
 ]
