@@ -2,9 +2,31 @@ name: Model benchmarks
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main]
+    paths:
+      - '.github/actions/cpu-diagnostics/action.yml'
+      - '.github/workflows/model-benchmark.yml'
+      - 'conftest.py'
+      - 'environment-cpu.yml'
+      - 'environment-gpu.yml'
+      - 'pyproject.toml'
+      - 'src/skala/__init__.py'
+      - 'src/skala/features.py'
+      - 'src/skala/functional/**'
+      - 'tests/test_traced_model_comparison.py'
   pull_request:
-    branches: [main, dev]
+    branches: [main]
+    paths:
+      - '.github/actions/cpu-diagnostics/action.yml'
+      - '.github/workflows/model-benchmark.yml'
+      - 'conftest.py'
+      - 'environment-cpu.yml'
+      - 'environment-gpu.yml'
+      - 'pyproject.toml'
+      - 'src/skala/__init__.py'
+      - 'src/skala/features.py'
+      - 'src/skala/functional/**'
+      - 'tests/test_traced_model_comparison.py'
   workflow_dispatch:
 
 permissions:
