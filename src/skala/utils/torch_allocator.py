@@ -5,6 +5,8 @@ Adapted from pytorch_pfn_extras.
 https://github.com/pfnet/pytorch-pfn-extras/blob/master/pytorch_pfn_extras/cuda/_allocator.py
 """
 
+import sys
+from collections.abc import Callable
 from typing import Any
 
 import cupy
@@ -45,5 +47,14 @@ def _torch_alloc(size: int, device_id: int) -> Any:
     return torch.cuda.caching_allocator_alloc(size, device_id, torch_stream_ptr)
 
 
-def _torch_free(mem_ptr: int, device_id: int) -> None:
-    torch.cuda.caching_allocator_delete(mem_ptr)  # type: ignore[no-untyped-call]
+def _torch_free(
+    mem_ptr: int,
+    device_id: int,
+    caching_allocator_delete: Callable[
+        [int], None
+    ] = torch.cuda.caching_allocator_delete,
+    is_finalizing: Callable[[], bool] = sys.is_finalizing,
+) -> None:
+    if is_finalizing():
+        return
+    caching_allocator_delete(mem_ptr)
