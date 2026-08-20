@@ -20,7 +20,7 @@ Skala is a neural network-based exchange-correlation (XC) functional for density
 
 ## Development environment
 
-1. **Python version**: ≥3.10 (target 3.11 for tooling).
+1. **Python version**: 3.11–3.13 (target 3.11 for tooling).
 2. **Environment setup** (conda recommended):
    ```bash
    mamba env create -f environment.yml

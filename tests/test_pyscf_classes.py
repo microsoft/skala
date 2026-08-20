@@ -1,5 +1,6 @@
 from collections.abc import Callable
 
+import numpy as np
 import pytest
 from pyscf import dft, gto
 
@@ -88,6 +89,17 @@ def test_skala_class(
     assert isinstance(ks, SkalaRKS if mol.spin == 0 else SkalaUKS)
     assert ks.with_dftd3 is not None if with_dftd3 else ks.with_dftd3 is None
     assert isinstance(ks.grids, SkalaGrids)
+
+
+def test_skala_dftd3_results(mol: gto.Mole, skala_xc: ExcFunctionalBase) -> None:
+    """Test DFT-D3 energy and gradient evaluation."""
+    ks = SkalaKS(mol, xc=skala_xc, with_dftd3=True)
+
+    assert np.isfinite(ks.energy_nuc())
+
+    gradient = ks.nuc_grad_method().grad_nuc()
+    assert gradient.shape == (mol.natm, 3)
+    assert np.isfinite(gradient).all()
 
 
 def test_skala_class_with_dftd3_and_native_functional_raises() -> None:

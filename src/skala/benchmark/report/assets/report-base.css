@@ -1,0 +1,268 @@
+/* Shared layout and typography for the standalone benchmark report. */
+
+:root {
+  --font-sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+  --ink: #111;
+  --muted: #737373;
+  --rule: #e5e5e5;
+  --bg: #fff;
+  --teal: #1f6f74;
+  --teal-bright: #49c5b1;
+  --teal-btn: #1a6168;
+  --series-1: #49c5b1;
+  --series-2: #8661c5;
+  --series-3: #ffb900;
+  --series-4: #0078d4;
+  --series-5: #ffa38b;
+  --series-6: #b1b3b3;
+  --measure: 720px;
+  --band: 1080px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.6;
+  overflow-x: hidden;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+.report {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 30px 24px 120px;
+}
+
+.report p {
+  margin: 0 0 13px;
+}
+
+.report ul,
+.report ol {
+  margin: 0 0 13px;
+  padding-left: 1.4em;
+}
+
+.report li {
+  margin: 3px 0;
+}
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--rule);
+  margin: 32px 0;
+}
+
+.report h1 {
+  font-size: 25px;
+  font-weight: 600;
+  letter-spacing: -0.4px;
+  line-height: 1.2;
+  margin: 0 0 5px;
+}
+
+.title-rule {
+  background: var(--teal-bright);
+  border-radius: 2px;
+  height: 3px;
+  margin: 10px 0 14px;
+  width: 44px;
+}
+
+.byline {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0 0 20px;
+}
+
+.report h2 {
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  margin: 30px 0 8px;
+}
+
+.report h3 {
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 600;
+  margin: 22px 0 7px;
+}
+
+.report a {
+  color: var(--teal);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.report a:hover {
+  text-decoration-thickness: 2px;
+}
+
+.report-header {
+  align-items: center;
+  border-bottom: 1px solid var(--rule);
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  padding: 12px 24px;
+}
+
+.report-header__actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+}
+
+.icon-btn {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #e2e2e2;
+  border-radius: 7px;
+  color: var(--teal);
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.icon-btn:hover {
+  background: #f4f4f4;
+}
+
+.icon-btn svg {
+  height: 16px;
+  width: 16px;
+}
+
+.callout {
+  background: #eef7f6;
+  border-radius: 8px;
+  display: flex;
+  font-size: 14.5px;
+  gap: 10px;
+  line-height: 1.55;
+  margin: 16px 0;
+  padding: 13px 15px;
+}
+
+.callout__icon {
+  color: var(--teal);
+  flex: 0 0 auto;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.cards {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin: 18px 0;
+}
+
+.card {
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.card__head {
+  background: #fafafa;
+  border-bottom: 1px solid var(--rule);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 9px 14px;
+}
+
+.card__body {
+  font-size: 14px;
+  padding: 12px 14px;
+}
+
+.card__row {
+  border-bottom: 1px solid #f1f1f1;
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 0;
+}
+
+.card__row:last-child {
+  border-bottom: 0;
+}
+
+.card__row b {
+  font-variant-numeric: tabular-nums;
+}
+
+.report pre {
+  background: #f7faf9;
+  border: 1px solid #dcebe7;
+  border-radius: 8px;
+  margin: 16px 0;
+  overflow: auto;
+  padding: 14px 16px;
+}
+
+.report code {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.62;
+}
+
+.report :not(pre) > code {
+  background: #f1f1f2;
+  border-radius: 4px;
+  font-size: 0.88em;
+  padding: 1px 5px;
+}
+
+.report pre code {
+  background: none;
+  padding: 0;
+}
+
+figure {
+  margin: 22px 0 36px;
+}
+
+figure.fig-wide {
+  left: 50%;
+  position: relative;
+  transform: translateX(-50%);
+  width: min(var(--band), calc(100vw - 48px));
+}
+
+figcaption {
+  color: var(--muted);
+  font-size: 12.5px;
+  margin-top: 8px;
+}
+
+.chart {
+  width: 100%;
+}
+
+.report footer {
+  border-top: 1px solid var(--rule);
+  color: var(--muted);
+  font-size: 12.5px;
+  margin-top: 48px;
+  padding-top: 16px;
+}

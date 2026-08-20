@@ -87,11 +87,11 @@ def test_mgga_supported_features_are_linear_in_density_matrix(
     tangent = torch.tensor([[0.2, -0.1], [-0.1, 0.3]], dtype=torch.float64)
 
     features = feature_function(dm, ao)
-    _, feature_jvp = torch.func.jvp(
+    feature_jvp = torch.func.jvp(
         lambda value: feature_function(value, ao),
         (dm,),
         (tangent,),
-    )
+    )[1]
 
     def first_jvp(value: torch.Tensor) -> torch.Tensor:
         return torch.func.jvp(
@@ -100,11 +100,11 @@ def test_mgga_supported_features_are_linear_in_density_matrix(
             (tangent,),
         )[1]
 
-    _, second_jvp = torch.func.jvp(
+    second_jvp = torch.func.jvp(
         first_jvp,
         (dm,),
         (torch.ones_like(dm),),
-    )
+    )[1]
 
     assert feature_function.deriv == expected_deriv
     assert feature_function.nfeats == expected_nfeats
@@ -138,7 +138,9 @@ def test_mgga_analytic_vjp_matches_autograd(
     dm_shape = (3, 3) if spin_channels is None else (spin_channels, 3, 3)
     dm = torch.randn(dm_shape, dtype=torch.float64, generator=generator)
 
-    features, pullback = torch.func.vjp(lambda value: feature_function(value, ao), dm)
+    vjp_result = torch.func.vjp(lambda value: feature_function(value, ao), dm)
+    features = vjp_result[0]
+    pullback = vjp_result[1]
     cotangent = torch.randn(features.shape, dtype=features.dtype, generator=generator)
 
     expected = pullback(cotangent)[0]
@@ -691,14 +693,16 @@ def test_blockwise_ao_feature_transforms_follow_linear_operator(
             value, carbon, grids, feature_function, None, False
         )
 
-    features, feature_tangent = torch.func.jvp(evaluate, (dm,), (tangent,))
+    jvp_result = torch.func.jvp(evaluate, (dm,), (tangent,))
+    features = jvp_result[0]
+    feature_tangent = jvp_result[1]
     assert features.shape[:1] == dm.shape[:-2]
     torch.testing.assert_close(feature_tangent, evaluate(tangent))
 
     def first_jvp(value: torch.Tensor) -> torch.Tensor:
         return torch.func.jvp(evaluate, (value,), (tangent,))[1]
 
-    _, second_jvp = torch.func.jvp(first_jvp, (dm,), (torch.ones_like(dm),))
+    second_jvp = torch.func.jvp(first_jvp, (dm,), (torch.ones_like(dm),))[1]
     torch.testing.assert_close(second_jvp, torch.zeros_like(features))
 
     feature_cotangent = torch.arange(
@@ -723,11 +727,11 @@ def test_blockwise_ao_feature_transforms_follow_linear_operator(
         torch.sum(features * feature_cotangent),
         torch.sum(dm * dm_cotangent),
     )
-    _, adjoint_tangent = torch.func.jvp(
+    adjoint_tangent = torch.func.jvp(
         apply_adjoint,
         (feature_cotangent,),
         (cotangent_tangent,),
-    )
+    )[1]
     torch.testing.assert_close(adjoint_tangent, apply_adjoint(cotangent_tangent))
 
 

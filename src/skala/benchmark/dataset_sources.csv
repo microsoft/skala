@@ -1,0 +1,59 @@
+source,path,name,formula,natoms,charge,multiplicity,subtag,livdft_hash
+gmtkn55,W4-11/h2/coord,H2,H2,2,0,1,small,4cd54d900816a2f05a82f056b0c15680f301c4de
+gmtkn55,W4-11/h2o/coord,H2O,H2O,3,0,1,small,765e7d7ab444811250f2517eb8ce0223459c0ad9
+gmtkn55,W4-11/nccn/coord,C2N2,C2N2,4,0,1,small,df4ab9957d850e51d813722a442aa6f55a744fbe
+gmtkn55,W4-11/hnco/coord,CHNO,CHNO,4,0,1,small,3b9aa881541a232f51cd633585846d10ba822e2a
+gmtkn55,W4-11/hooh/coord,H2O2,H2O2,4,0,1,small,46ce63de8d8ad48760a4ce268436abdf533f6f35
+gmtkn55,W4-11/nh3/coord,H3N,H3N,4,0,1,small,17d57a4b6cda9d5189c5ff003cdc28ba82715ee7
+gmtkn55,TAUT15/7a/coord,CH2N4,CH2N4,7,0,1,small,2fc35fb9d00558bc75dfe81ec29f2128c441e587
+gmtkn55,ICONF/N3H5_2/coord,H5N3,H5N3,8,0,1,small,de8c8f7be60f38eb36000d89b4682680e22e1741
+gmtkn55,DARC/maleinNH/coord,C4H3NO2,C4H3NO2,10,0,1,small,6493000e1ac6852d2dff3317b6adefa6cbd9c0cd
+gmtkn55,BHPERI/05r/coord,C4H5N,C4H5N,10,0,1,small,14a6e4bca6a2a1ac1ada96d9edf375607791849a
+gmtkn55,FH51/propyloxirane/coord,C5H10O,C5H10O,16,0,1,small,fee8af70e6007581e17aa5214e3772a962b08814
+gmtkn55,S22/21a/coord,C8H7N,C8H7N,16,0,1,small,ea718d0a24e49de019652647422f476057f8befe
+gmtkn55,DARC/P7/coord,C8H6O4,C8H6O4,18,0,1,small,8a1f922a33e7c9c390a2e64262c2aed43efc2053
+gmtkn55,IDISP/ant/coord,C14H10,C14H10,24,0,1,small,ceb015edd63126a5ec84e7fe0d3b42ea3d530844
+conformer-benchmark,α-glucose (1),α-glucose (1),C6H12O6,24,0,1,large,8c62f202085bf256788c8cba2109c2c9465cdd92
+conformer-benchmark,cis-1-ethyl-2-methylcyclohexane (2),cis-1-ethyl-2-methylcyclohexane (2),C9H18,27,0,1,large,32e27e7ba1648365cc2145423b5660ca93c83fcc
+conformer-benchmark,n-decane (3),n-decane (3),C10H22,32,0,1,large,54de30f95ecaa5bfc77987419083e405d491f530
+conformer-benchmark,α-Ionone (4),α-Ionone (4),C13H20O,34,0,1,large,b096c418f749ce0c8b23a3507148b4860aabdfaf
+conformer-benchmark,Guaiol (5),Guaiol (5),C15H26O,42,0,1,large,848e1ee35bf58f71f76b77451f2b4a6b91641760
+conformer-benchmark,Phe-Phe (6),Phe-Phe (6),C18H20N2O3,43,0,1,large,32864b5981f2538588f09f3cafff9114fb58a17b
+conformer-benchmark,Capecitabine (8),Capecitabine (8),C15FH22N3O6,47,0,1,large,b682c7f6e59ff57186c3f6c9e21a56802aca2f70
+conformer-benchmark,Rivaroxaban (7),Rivaroxaban (7),C19ClH18N3O5S,47,0,1,large,560adab65521d3c885bbf2a5f05dfafed04f7f5f
+conformer-benchmark,Oseltamivir (9),Oseltamivir (9),C16H28N2O4,50,0,1,large,766204928d5111da9a03257fe5659e0016d55528
+conformer-benchmark,Abiraterone (10),Abiraterone (10),C24H31NO,57,0,1,large,60540a1cf197eee12458341e4cc7d7c9b3629d5f
+conformer-benchmark,Pacritinib (11),Pacritinib (11),C28H32N4O3,67,0,1,large,b6b17a07b291d6428b2c481feadffe2295448841
+conformer-benchmark,Macrocarpal A (13),Macrocarpal A (13),C28H40O6,74,0,1,large,eda081dd01af3afbfa6fb3979a4a3ce5e2dbc3b0
+conformer-benchmark,Etoposide (12),Etoposide (12),C29H32O13,74,0,1,large,8885b191eb59900df5d6288fd986850f9cb13ccd
+conformer-benchmark,Grubbs cat. (14),Grubbs cat. (14),C31Cl2H38N2ORu,75,0,1,large,f8e5b11f01430e023e3e42a9608c772124f201fe
+conformer-benchmark,(Ala)10 (15),(Ala)10 (15),C30H52N10O11,103,0,1,large,5ebaced1ae9a9938f59abc9dffa5a05984883ab9
+conformer-benchmark,Paclitaxel (16),Paclitaxel (16),C47H51NO14,113,0,1,large,86cc4637b8f02b7f311a7fde402e20c5294f16b9
+conformer-benchmark,Nonactin (17),Nonactin (17),C40H64O12,116,0,1,large,ad2045ed9b7417b3e7ef67ba100b9e83bfddaf82
+conformer-benchmark,Vinblastine (18),Vinblastine (18),C46H58N4O9,117,0,1,large,07e53bc758247f5da101f9c82ab53da92342f896
+conformer-benchmark,Ledipasvir (19),Ledipasvir (19),C49F2H54N8O6,119,0,1,large,e58a31f17aa85768d1f51b6e10f550ab13784471
+conformer-benchmark,Everolimus (20),Everolimus (20),C53H83NO14,151,0,1,large,6ee8f214e9431631862edc13e0b3e2242ec9b21f
+conformer-benchmark,Adocobalmin+ (21),Adocobalmin+ (21),C58CoH84N16O11,170,0,2,large,6507d9e9a7fa634c0c576b7d1d974c6cd92fcfea
+conformer-benchmark,Vancomycin (22),Vancomycin (22),C66Cl2H75N9O24,176,0,1,large,841533c64447d7eb88283b64620fb4ff3d543cd7
+hs13l,3_AB/coord.xyz,C152H52N10Zn2,C152H52N10Zn2,216,0,1,large,928d291813e934c9c6acb984a37544e188176e7b
+hs13l,6_AB/coord.xyz,C122H95IO16,C122H95IO16,234,0,1,large,a94a97a71ebb0241e896d2d1e5356d6e6014992c
+hs13l,4_A/coord.xyz,C108H128O12,C108H128O12,248,0,1,large,4edb626636867842fc345e2b0cd4a2cb12614edd
+hs13l,4_AB/coord.xyz,C114H139IO12,C114H139IO12,266,0,1,large,261984ad9f5a64f3ffd11092642b4c65493597be
+s30l,20_s30l/24_di.xyz,C62H78N30O14,C62H78N30O14,184,2,1,large,f7d07ddb135e328bbe4104f053adf8144cfdd943
+s30l,20_s30l/13_di.xyz,C92H89N11O13,C92H89N11O13,205,0,1,large,df530608116454fadf97d6cffff767f669dbf2fa
+lnci16,BrCap_complex/struc.xyz,Br4C180F16H136N20O24,Br4C180F16H136N20O24,380,0,1,large,a72f475828f48f69ccc94db7e6e8ea0f7c97a090
+lnci16,BNTube_complex/struc.xyz,B168C3H39N169O2,B168C3H39N169O2,381,0,1,large,f4be0a8e0adac5c0f4da9fd2e0453d564d44f766
+lnci16,DithBrCap_complex/struc.xyz,Br4C188F16H152N20O24S4,Br4C188F16H152N20O24S4,408,0,1,large,3bbba18a1caff1ed54d6bab442978c9872e22ab6
+lnci16,BpocMeOH_complex/struc.xyz,B24C241H124O49,B24C241H124O49,438,0,1,large,14357e294b1d63d81a67bed7f382b4e9bd40ff38
+lnci16,BpocBenz_complex/struc.xyz,B24C246H126O48,B24C246H126O48,444,0,1,large,da21bf27c3c666f9f64d2dc7b3f787b281df0bec
+lnci16,MolMus_complex/struc.xyz,C154H236N12O66,C154H236N12O66,468,0,1,large,b57ec844c5afe5a5a88bb972227bed5c61b4c7ae
+lnci16,2xHB238_complex/struc.xyz,C412H114N8S4,C412H114N8S4,538,0,1,large,1a52528ee2aabbe5c48c909d0499f391b4e7196b
+lnci16,GramA_complex/struc.xyz,C198H280N40O34,C198H280N40O34,552,0,1,large,f61cfec7ba7dc74a0263a405e9b0009ec18d3cb3
+lnci16,Rotax_complex/struc.xyz,C402H292N2O24,C402H292N2O24,720,0,1,large,ee89bb818c32c20894369b4f3bc4a1dfbd7e39a5
+lnci16,DHComplex_complex/struc.xyz,C310F16H324N50O50,C310F16H324N50O50,750,0,1,large,b22d9f2fac735119b14085f4a6a3cce91b4c9c6d
+lnci16,FullGraph_complex/struc.xyz,C614H162O24S4,C614H162O24S4,804,0,1,large,7f556fd86c1b6d0f36c17b3cb58651cae42f6205
+lnci16,DNA_complex/struc.xyz,C270H342N108O164P26,C270H342N108O164P26,910,0,1,large,5e1027f29c423d0696b3d5222a3a5c45f4bed557
+lnci16,TYK2_complex/struc.xyz,C287Cl2H500N79O85S2,C287Cl2H500N79O85S2,955,1,1,large,e29e10cc50778bda4f3e1cda038277322068c27e
+lnci16,FXa_complex/struc.xyz,C315ClH510N83O107S5,C315ClH510N83O107S5,1021,-2,1,large,e13bd2e04d0b1e63d1547a8092b9bff0a3e2c887
+lnci16,SH3_complex/struc.xyz,C339H502N88O98,C339H502N88O98,1027,0,1,large,c9df3d425afc05dd07d266d76be84b36ce78fc81
+lnci16,Nylon_complex/struc.xyz,C624H1152N104O108,C624H1152N104O108,1988,0,1,large,72bb1fe73cd94d3eaeeb3d44e8ab1c13365af53c

@@ -47,8 +47,8 @@ jobs:
       fail-fast: false
       matrix:
         runner: [ubuntu-latest]
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
-        pyscf-version: ["2.9", "2.11"]
+        python-version: ["3.11", "3.12", "3.13"]
+        pyscf-version: ["2.11", "2.14"]
         include:
           - runner: ubuntu-24.04-arm
             python-version: "3.12"
@@ -74,7 +74,12 @@ jobs:
         cache-downloads: true
         create-args: >-
           python=${{ matrix.python-version }}
-          pyscf=${{ matrix.pyscf-version }}
+
+    # Keep PySCF on PyPI: its wheels bundle XCFun instead of introducing Conda's
+    # pybind11 ABI 4 requirement, which conflicts with PyTorch >=2.9's ABI 11.
+    - name: Install matrix PySCF version
+      run: python -m pip install "pyscf==${{ matrix.pyscf-version }}"
+      shell: micromamba-shell {0}
 
     - name: Install package in development mode
       run: |
@@ -165,7 +170,11 @@ jobs:
         cache-downloads: true
         create-args: >-
           python=3.12
-          pyscf=2.13.1
+
+    # Keep PySCF on PyPI for the same XCFun/pybind11 ABI reason as the test matrix.
+    - name: Install profiling PySCF version
+      run: python -m pip install "pyscf==2.13.1"
+      shell: micromamba-shell {0}
 
     - name: Install package in development mode
       run: |

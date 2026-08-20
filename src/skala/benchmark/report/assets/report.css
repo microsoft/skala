@@ -1,0 +1,539 @@
+/* Report-specific controls and responsive D3 charts. */
+
+html,
+body {
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+.report {
+  max-width: min(var(--measure), 100%);
+  overflow-wrap: anywhere;
+  width: 100%;}
+
+.report h1,
+.intro,
+.abstract {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.abstract {
+  color: var(--muted);
+  font-size: 15px;
+  margin-bottom: 18px;
+}
+
+.abstract p {
+  margin-bottom: 8px;
+}
+
+.control-bar {
+  margin: 14px 0 6px;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.control-bar::before {
+  background: #fff;
+  border-bottom: 1px solid transparent;
+  bottom: 0;
+  content: "";
+  left: 50%;
+  opacity: 0;
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  transition:
+    opacity 0.2s ease,
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+  width: 100vw;
+  z-index: -1;
+}
+
+.control-bar.is-stuck::before {
+  border-bottom-color: var(--rule);
+  box-shadow: 0 6px 16px -12px rgba(0, 0, 0, 0.45);
+  opacity: 1;
+}
+
+.control-bar__inner {
+  margin: 0 auto;
+  max-width: var(--measure);
+  padding: 8px 0;
+}
+
+.control-bar__controls {
+  align-items: flex-end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+}
+
+.card__note {
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+  margin-top: 8px;
+}
+
+.env-cards {
+  margin: 12px 0 4px;
+}
+
+/* Fit up to four environment cards side by side by allowing a narrower track
+   than the default card grid. */
+.env-cards.cards {
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 720px) {
+  .env-cards.cards {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  }
+}
+
+/* Keep the fact label on one line; let long values (e.g. the processor
+   model string) wrap on the right instead of squeezing the label. */
+.env-cards .card__row > span {
+  flex: 0 0 auto;
+  padding-right: 12px;
+  white-space: nowrap;
+}
+
+.env-cards .card__row > b {
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.control {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.control__label {
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  margin-bottom: 5px;
+  text-transform: uppercase;
+}
+
+.control__key {
+  color: var(--muted);
+  font-size: 11px;
+  margin: 5px 0 0;
+  text-align: left;
+}
+
+.control__key kbd {
+  background: #f6f6f6;
+  border: 1px solid var(--rule);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  color: var(--ink);
+  font: 10px/1 var(--font-mono);
+  margin-right: 3px;
+  padding: 2px 5px;
+}
+
+.segmented {
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  display: inline-flex;
+  flex-wrap: wrap;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.segmented button {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-right: 1px solid var(--rule);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
+  min-height: 32px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 6px 12px;
+  white-space: nowrap;
+}
+
+.segmented button:last-child {
+  border-right: 0;
+}
+
+.segmented button[aria-checked="true"] {
+  background: var(--teal-btn);
+  color: #fff;
+  font-weight: 600;
+}
+
+.segmented button:hover:not([aria-checked="true"]) {
+  background: #f1f6f5;
+}
+
+.segmented button:focus-visible {
+  outline: 2px solid var(--teal-bright);
+  outline-offset: -3px;
+  position: relative;
+  z-index: 1;
+}
+
+.x-axis-caption {
+  color: var(--muted);
+  font-size: 12.5px;
+  margin: 2px 0 0;
+  text-align: center;
+}
+
+.x-axis-caption .x-axis-control {
+  display: inline;
+}
+
+.x-axis-caption .x-axis-control button {
+  appearance: none;
+  background: none;
+  border: 0;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  min-height: auto;
+  padding: 2px 4px;
+}
+
+.x-axis-caption .x-axis-control button + button {
+  border-left: 1px solid var(--rule);
+  margin-left: 4px;
+  padding-left: 10px;
+}
+
+.x-axis-caption .x-axis-control button[aria-checked="true"] {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.x-axis-caption .x-axis-control button:not([aria-checked="true"]) {
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+}
+
+.x-axis-caption .x-axis-control button:hover:not([aria-checked="true"]) {
+  color: var(--ink);
+}
+
+.x-axis-caption .x-axis-control button:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid var(--teal-bright);
+  outline-offset: 2px;
+}
+
+.x-axis-caption__key {
+  background: #f6f6f6;
+  border: 1px solid var(--rule);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  color: var(--muted);
+  font: 9.5px/1 var(--font-mono);
+  margin-left: 8px;
+  padding: 2px 5px;
+  vertical-align: 1px;
+}
+
+.plot-pair {
+  align-items: start;
+  display: grid;
+  gap: 8px 20px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 12px 0 6px;
+  width: min(var(--band), calc(100vw - 48px));
+  position: relative;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.plot-pair__item {
+  margin: 0;
+  min-width: 0;
+}
+
+.plot-block {
+  margin-top: 30px;
+}
+
+.plot-block h3 {
+  font-size: 16px;
+  margin: 0;
+}
+
+.plot-intro {
+  margin: 6px 0 4px;
+}
+
+.figure-note {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+.plot-block figure.fig-wide {
+  margin-bottom: 6px;
+  margin-top: 12px;
+}
+
+.composition-block {
+  margin-top: 18px;
+}
+
+.composition-block h3 {
+  font-size: 14px;
+  margin: 0 0 2px;
+}
+
+.composition-chart {
+  min-height: 220px;
+}
+
+.composition-area {
+  stroke: #fff;
+  stroke-width: 0.4;
+}
+
+.composition-overlay {
+  cursor: crosshair;
+}
+
+.composition-labels text {
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.chart-subtitle {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 2px 0 0;
+}
+
+.chart {
+  min-height: 240px;
+  position: relative;
+  width: 100%;
+}
+
+.chart[data-metric] {
+  min-height: 330px;
+}
+
+.chart svg {
+  display: block;
+  height: auto;
+  max-width: 100%;
+  overflow: visible;
+  width: 100%;
+}
+
+.chart .axis text {
+  fill: var(--muted);
+  font: 10.5px var(--font-sans);
+}
+
+.chart .axis path,
+.chart .axis line {
+  stroke: #cfcfcf;
+}
+
+.chart .grid line {
+  stroke: #ededed;
+}
+
+.chart .grid path {
+  display: none;
+}
+
+.chart .axis-label {
+  fill: var(--muted);
+  font: 11.5px var(--font-sans);
+}
+
+.chart .fit-line {
+  fill: none;
+  pointer-events: none;
+  stroke-dasharray: 5 4;
+  stroke-width: 1.7;
+}
+
+.chart .fit-kink {
+  fill: none;
+  pointer-events: none;
+  stroke-linecap: round;
+  stroke-width: 2.8;
+}
+
+.chart .fit-line--active {
+  stroke-width: 2.6;
+}
+
+.chart .fit-hit {
+  cursor: pointer;
+  fill: none;
+  pointer-events: stroke;
+  stroke: transparent;
+  stroke-width: 12;
+}
+
+.chart .point {
+  cursor: pointer;
+  opacity: 0.82;
+  stroke: #fff;
+  stroke-width: 0.8;
+}
+
+.chart .point:hover,
+.chart .point:focus {
+  opacity: 1;
+  outline: none;
+  stroke: var(--ink);
+  stroke-width: 1.4;
+}
+
+.chart .series-label {
+  cursor: pointer;
+  dominant-baseline: middle;
+  font: 600 10.5px var(--font-sans);
+}
+
+.chart .series-label:focus {
+  outline: none;
+  text-decoration: underline;
+}
+
+.chart .empty-message {
+  fill: var(--muted);
+  font: 12px var(--font-sans);
+  text-anchor: middle;
+}
+
+.plot-commentary {
+  color: var(--muted);
+  font-size: 12.5px;
+  margin: 4px 8px 0;
+}
+
+.plot-commentary p:last-child {
+  margin-bottom: 0;
+}
+
+.chart-tooltip {
+  background: var(--teal);
+  border-radius: 7px;
+  box-shadow: 0 5px 20px rgb(0 0 0 / 18%);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.42;
+  max-width: min(300px, calc(100vw - 24px));
+  padding: 10px 12px;
+  pointer-events: none;
+  position: fixed;
+  width: max-content;
+  z-index: 20;
+}
+
+.chart-tooltip strong {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.chart-tooltip dl {
+  display: grid;
+  gap: 1px 12px;
+  grid-template-columns: auto auto;
+  margin: 0;
+}
+
+.chart-tooltip dt {
+  color: rgb(255 255 255 / 75%);
+}
+
+.chart-tooltip dd {
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+  text-align: right;
+}
+
+@media (max-width: 760px) {
+  .report {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  figure.fig-wide {
+    max-width: calc(100vw - 24px);
+    width: calc(100vw - 24px);
+  }
+
+  .chart[data-metric] {
+    min-height: 310px;
+  }
+
+  .plot-pair {
+    grid-template-columns: minmax(0, 1fr);
+    width: calc(100vw - 24px);
+  }
+
+  .control-bar__controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .segmented {
+    display: flex;
+    width: 100%;
+  }
+
+  .segmented button {
+    flex: 1 1 auto;
+    min-height: 40px;
+    padding-left: 9px;
+    padding-right: 9px;
+  }
+}
+
+@media (max-width: 420px) {
+  .report-header {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .segmented {
+    border-radius: 8px;
+  }
+
+  .segmented button {
+    font-size: 12px;
+  }
+}
+
+.tex {
+  font-size: 1.02em;
+}
+
+.tex--display {
+  display: block;
+  margin: 14px auto;
+  text-align: center;
+}
+
+.tex--display math {
+  font-size: 1.12em;
+}

@@ -3,15 +3,18 @@ channels:
   - conda-forge
 dependencies:
   - ase
-  - dftd3-python
   - e3nn
   - h5py
-  - hdf5 >=2.1,<2.2
+  - jinja2
+  - markdown-it-py
   - numpy
   - opt_einsum_fx
-  - pyscf >=2.8,<2.14
-  - python
-  - pytorch-gpu  # CUDA-enabled PyTorch for Skala model inference
+  - pandas
+  - pyarrow
+  - pyyaml
+  - python >=3.11,<3.14
+  - pytorch-gpu >=2.9  # CUDA-enabled PyTorch for Skala model inference
+  - scipy
   - cuda-version >=12,<13  # Constrains conda CUDA packages to CUDA 12
   - cuda-nvrtc >=12,<13  # Runtime compiler used by CuPy for GPU kernels
   - cuda-cudart-dev >=12,<13  # Matching CUDA headers for CuPy kernel compilation
@@ -27,4 +30,14 @@ dependencies:
   - mypy >=2
   - pip:
     - huggingface_hub
+    - pandas-stubs
+    - pyarrow-stubs >=20,<21
+    # Conda PySCF pulls XCFun with pybind11 ABI 4, conflicting with PyTorch >=2.9's ABI 11.
+    # PyPI wheels bundle XCFun and avoid that solver conflict.
+    - pyscf >=2.11,<2.15
+    # GPU4PySCF requires this backend; do not install standalone DFT-D3 on Linux,
+    # because loading both native libraries in one process causes symbol collisions.
+    - pyscf-dispersion >=1.5; sys_platform == 'linux'
+    - scipy-stubs
+    - types-PyYAML
     - gpu4pyscf-cuda12x >=1.8,<1.9  # GPU-accelerated PySCF backend used by Skala

@@ -7,7 +7,6 @@ from typing import Any
 
 import numpy as np
 import torch
-from dftd3.pyscf import DFTD3Dispersion
 from pyscf import dft, gto
 from pyscf.grad.rhf import Gradients as RHFGradient
 from pyscf.grad.rks import grids_noresponse_cc, grids_response_cc
@@ -15,6 +14,7 @@ from pyscf.grad.uks import Gradients as UHFGradient
 from pyscf.scf.hf import SCF
 
 import skala.pyscf.features as feature
+from skala.dispersion import DFTD3Dispersion
 from skala.features import Feature, FeatureMap
 from skala.functional.base import ExcFunctionalBase
 
@@ -98,7 +98,7 @@ def veff_and_expl_nuc_grad(
         )
         return functional.get_exc(exc_mol_feats)
 
-    _, dExc_func = torch.func.vjp(exc_feat_func, *nuc_feat_tensors)
+    dExc_func = torch.func.vjp(exc_feat_func, *nuc_feat_tensors)[1]
     dExc_tuple = dExc_func(torch.tensor(1.0, dtype=rdm1.dtype))
     dExc: FeatureMap = {}
     for i in range(len(dExc_tuple)):
@@ -300,7 +300,7 @@ class SkalaRKSGradient(RHFGradient):  # type: ignore[misc]
         nuc_g = super().grad_nuc(mol, atmlst)
         if self.with_dftd3 is None:
             return nuc_g
-        disp_g = self.with_dftd3.kernel()[1]
+        disp_g = self.with_dftd3.get_gradient()
         if atmlst is not None:
             disp_g = disp_g[atmlst]
         nuc_g += disp_g
@@ -378,7 +378,7 @@ class SkalaUKSGradient(UHFGradient):  # type: ignore[misc]
         nuc_g = super().grad_nuc(mol, atmlst)
         if self.with_dftd3 is None:
             return nuc_g
-        disp_g = self.with_dftd3.kernel()[1]
+        disp_g = self.with_dftd3.get_gradient()
         if atmlst is not None:
             disp_g = disp_g[atmlst]
         nuc_g += disp_g

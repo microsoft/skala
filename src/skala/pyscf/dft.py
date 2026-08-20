@@ -56,10 +56,10 @@ from typing import Any, cast
 
 import numpy as np
 import torch
-from dftd3.pyscf import DFTD3Dispersion
 from pyscf import dft, gto
 from pyscf.df import df_jk
 
+from skala.dispersion import DFTD3Dispersion
 from skala.functional.base import ExcFunctionalBase
 from skala.pyscf.gradients import SkalaRKSGradient, SkalaUKSGradient
 from skala.pyscf.grids import SkalaGrids
@@ -112,7 +112,7 @@ class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
     def energy_nuc(self) -> float:
         enuc = float(super().energy_nuc())
         if self.with_dftd3:
-            edisp = float(self.with_dftd3.kernel()[0])
+            edisp = self.with_dftd3.get_energy()
             self.scf_summary["dispersion"] = edisp
             enuc += edisp
         return enuc
@@ -202,7 +202,7 @@ class SkalaUKS(dft.uks.UKS):  # type: ignore[misc]
     def energy_nuc(self) -> float:
         enuc = float(super().energy_nuc())
         if self.with_dftd3:
-            edisp = float(self.with_dftd3.kernel()[0])
+            edisp = self.with_dftd3.get_energy()
             self.scf_summary["dispersion"] = edisp
             enuc += edisp
         return enuc

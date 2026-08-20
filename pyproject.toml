@@ -12,18 +12,23 @@ readme = "README.md"
 keywords = []
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Development Status :: 5 - Production/Stable",
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.11,<3.14"
 dependencies = [
     "ase",
-    "dftd3",
     "e3nn",
     "huggingface_hub",
     "numpy",
     "opt_einsum_fx",
-    "pyscf>=2.8,<2.14",
-    "torch"
+    "pyscf>=2.11,<2.15",
+    "pyscf-dispersion>=1.5; sys_platform == 'linux'",
+    "dftd3>=1.2.1,<1.3; sys_platform == 'darwin'",
+    "dftd3>=1.3; sys_platform != 'linux' and sys_platform != 'darwin'",
+    "torch>=2.9"
 ]
 
 optional-dependencies.dev = [
@@ -38,7 +43,11 @@ optional-dependencies.dev = [
 ]
 optional-dependencies.doc = [
     "ipywidgets",
+    "jinja2",
+    "markdown-it-py",
     "myst-nb",
+    "pandas",
+    "pyyaml",
     "sphinx",
     "sphinx-book-theme",
     "sphinx-design",
@@ -46,17 +55,30 @@ optional-dependencies.doc = [
     "sphinxcontrib-moderncmakedomain",
     "sphinx-fortran",
 ]
+optional-dependencies.benchmark = [
+    "jinja2",
+    "markdown-it-py",
+    "pandas",
+    "pyarrow",
+    "pyyaml",
+]
 
 urls.repository = "https://github.com/microsoft/skala"
 urls.documentation = "https://microsoft.github.io/skala"
 urls.homepage = "https://aka.ms/dft"
+
+[tool.setuptools.package-data]
+# Without these the wheel ships only .py files, so a non-editable install has
+# neither the benchmark manifest nor the report's template and assets.
+"skala.benchmark" = ["dataset_sources.csv"]
+"skala.benchmark.report" = ["templates/*.html", "assets/*.css", "assets/*.js", "assets/vendor/*.js"]
 
 [tool.mypy]
 strict = true
 no_namespace_packages = true
 python_version = "3.12"
 exclude = ["third_party/"]
-disable_error_code = ["no-any-return"]
+disable_error_code = ["no-any-return", "unused-ignore"]
 
 [[tool.mypy.overrides]]
 module = [
@@ -116,6 +138,7 @@ filterwarnings = [
     'ignore:`torch\.jit\.script` is deprecated\. Please switch to `torch\.compile` or `torch\.export`\.:DeprecationWarning',
     'ignore:`torch\.jit\.save` is deprecated\. Please switch to `torch\.export`\.:DeprecationWarning',
     'ignore:`torch\.jit\.save` is not supported in Python 3\.14+ and may break\. Please switch to `torch\.export`\.:DeprecationWarning',
+    'ignore:`torch\.jit\.trace_method` is deprecated\. Please switch to `torch\.compile` or `torch\.export`\.:DeprecationWarning',
     # From gpu4pyscf if cutensor is not available
     'ignore:using cupy as the tensor contraction engine\.:UserWarning',
     # Deprecation warning in huggingface_hub package
