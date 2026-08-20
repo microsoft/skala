@@ -1,18 +1,21 @@
 title: Skala computational cost benchmark report
 author: Microsoft Research, AI for Science
-date: 2026-08-19
+date: 2026-08-20
 environment_order:
   - a100-ppe-s07-v181-cutensor-warmfree-preload-20260817
   - d32v3-t16
   - d2v3-t2
 abstract: |
-  This living report provides a reproducible computational cost reference for validating another Skala implementation and for understanding the runtime users should expect from the official implementation as molecular and basis size grow.
+  This living report provides a reproducible computational cost reference.
+  People implementing Skala can use the report to validate their implementations against our (gpu4)pyscf reference, and
+  people using Skala can use it to form expectations about the computational cost of their calculations.
   The report covers molecular sizes from H2 to ~400 non-hydrogen atoms, and hardware from a 2-thread CPU to a 16-thread CPU to an NVIDIA A100 GPU.
   All measurements are done using PySCF and GPU4PySCF and the official [`skala`](https://github.com/microsoft/skala) package.
   Comparisons are made to r2SCAN (meta-GGA non-hybrid), B3LYP (GGA hybrid), and M06-2X (meta-GGA hybrid), called via libxc.
-  In summary, Skala's computational cost is like that of a traditional meta-GGA non-hybrid on a GPU, and on a CPU it shows an overhead over traditional meta-GGAs that starts at ~10x for the smallest molecules and disappears by 15–20 non-hydrogen atoms.
+  In summary, Skala's computational on GPUs is similar to meta-GGA non-hybrids.
+  On a CPU, it is roughly 10x as expensive as a meta-GGA non-hybrid for small molecules, but that overhead disappears for molecules with ~15–20 non-hydrogen atoms or ~500 atomic orbitals.
 intro: |
-  A neural-network XC functional introduces an entirely new component to a traditional XC calculation, and brings with it several new software engineering aspects and potential complications.
+  A neural-network XC functional introduces an entirely new component to a traditional XC calculation, and brings with it several new software engineering challenges.
   It is therefore all the more important to understand how this affects the computational cost of DFT calculations, both for users and for developers of DFT codes.
   This report shows how the computational cost of Skala behaves along three independent axes—molecular size, basis set size, and compute environment—and compares it to the cost of traditional XC functionals—r2SCAN, B3LYP, and M06-2X.
   The compute environment axis covers both the hardware type (CPU vs GPU) and the degree of parallelism (number of CPU threads), both of which can be conceptually understood along the lines of strong scaling.
@@ -30,26 +33,26 @@ plots:
   xc_eval: |
     In all environments and for all functionals, the cost scales roughly linearly with an initial onset, and Skala's evaluation is ~1.5 orders of magnitude more expensive than the traditional functionals.
     As shown below, this much higher cost doesn't translate into a higher total cost, because the XC grid evaluation is only a small part of the total SCF cycle.
-    The relative onset positions of Skala and the traditional functionals on CPU vs GPU differ, driving Skala's total SCF overhead on CPU for small molecules (see below).
+    The relative onset positions of Skala and the traditional functionals on CPU vs GPU differ, driving Skala's total SCF overhead on CPU for small molecules (see below). Use toggles on the top of the page to switch between GPU/CPU and basis sets.
   numint: |
     On a GPU, all functionals scale the same way, with the meta-GGAs being ~2x as expensive as the GGA.
     On a CPU, the relative cost of Skala dominates for small molecules, introducing a ~10x overhead for the smallest molecules, which disappears by ~15–20 non-hydrogen atoms.
-    The slightly better asymptotic scaling of Skala is the result of a marginally more efficient contraction of the XC potential in the Skala implementation.
+    The slightly better asymptotic scaling of Skala is the result of a marginally more efficient contraction of the XC potential in the Skala implementation. Use toggles on the top of the page to switch between GPU/CPU and basis sets.
   jk: |
     Hybrid functionals use DF-JK with precomputed 3-center integrals, while non-hybrids use direct DF-J.
-    This results in a lower cost of DF-JK for the smallest molecules, while the asymptotic scaling of Coulomb only is much better than that of Coulomb and exchange.
+    This results in a lower cost of DF-JK for the smallest molecules, while the asymptotic scaling of Coulomb only is much better than that of Coulomb and exchange. Use toggles on the top of the page to switch between GPU/CPU and basis sets.
   cycle: |
     Combining all above together, as a GGA hybrid, B3LYP is 1.5–2x cheaper for small molecules, while as non-hybrids, Skala and r2SCAN get cheaper for large molecules.
-    In addition, Skala features the same overhead on CPU for small molecules as seen in the XC quadrature.
+    In addition, Skala features the same overhead on CPU for small molecules as seen in the XC quadrature. Use toggles on the top of the page to switch between GPU/CPU and basis sets.
   iterations: |
     For all functionals we observe a very slow growth of the iteration count with system size.
-    For all functionals, all basis sets, and all environments we observe outliers for the largest systems, which took several times more iterations to converge.
+    For all functionals, all basis sets, and all environments we observe outliers for the largest systems, which took several times more iterations to converge. Use toggles on the top of the page to switch between GPU/CPU and basis sets.
   total: |
-    The measurements here are noisier than the per-iteration costs, because they combine the per-iteration cost with the iteration count.
+    The measurements here are noisier than the per-iteration costs, because they combine the per-iteration cost with the iteration count. Use toggles on the top of the page to switch between GPU/CPU and basis sets.
   setup: |
-    Containing both one XC quadrature and the 3-center integral build, the setup cost shows similar characteristics to the SCF iteration cost.
+    Containing both one XC quadrature and the 3-center integral build, the setup cost shows similar characteristics to the SCF iteration cost. Use toggles on the top of the page to switch between GPU/CPU and basis sets.
   startup: |-
-    Three costs are paid before a calculation can start, and none of them appears in the timings above. The first is the **machine cold start**. The first calculation on a fresh machine compiles the CUDA kernels into the CuPy cache on disk and reads the two gigabytes of PyTorch shared libraries into the operating system's page cache; every later process finds both already there. On this sweep that costs ~13 s. Neither is specific to quantum chemistry: the libraries are PyTorch's own, and all CuPy kernels an SCF compiles are CuPy's generic array ops.
+    Three costs are paid before a calculation can start, and none of them appears in the timings above. The first is the **machine cold start**. The first calculation on a fresh machine compiles the CUDA kernels into the CuPy cache on disk and reads the two gigabytes of PyTorch shared libraries into the operating system's page cache; every later process finds both already there. On this sweep, with GPUs enabled, that costs ~13 s. Neither is specific to quantum chemistry: the libraries are PyTorch's own, and all CuPy kernels an SCF compiles are CuPy's generic array ops.
 
     The second is **process start-up**: creating the CUDA context and its library handles, executing the Python imports, and moving the functional onto the device. On the A100 it is ~8 s for all functionals. On a CPU the traditional functionals pay less than a second, while Skala pays ~7 s on 16 threads and ~13 s on two, because it is the only one of the four that loads PyTorch.
 

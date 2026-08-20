@@ -1,242 +1,249 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{{ title }}</title>
-<link rel="stylesheet" href="report-base.css">
-<link rel="stylesheet" href="report.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ title }}</title>
+  <link rel="stylesheet" href="report-base.css">
+  <link rel="stylesheet" href="report.css">
 </head>
+
 <body>
-<header class="report-header">
-  <div class="report-header__actions">
-    <a class="icon-btn" title="Download report data" href="data.json" download
-      aria-label="Download report data">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-        <polyline points="7 10 12 15 17 10"></polyline>
-        <line x1="12" y1="15" x2="12" y2="3"></line>
-      </svg>
-    </a>
-  </div>
-</header>
+  <header class="report-header">
+    <div class="report-header__actions">
+      <a class="icon-btn" title="Download report data" href="data.json" download aria-label="Download report data">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+          stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+      </a>
+    </div>
+  </header>
 
-<main class="report">
-  <h1>{{ title }}</h1>
-  <div class="title-rule"></div>
-  {% if author and date %}<p class="byline">{{ author }} · {{ date }}</p>
-  {% elif author %}<p class="byline">{{ author }}</p>
-  {% elif date %}<p class="byline">{{ date }}</p>{% endif %}
+  <main class="report">
+    <h1>{{ title }}</h1>
+    <div class="title-rule"></div>
+    {% if author and date %}<p class="byline">{{ author }} · {{ date }}</p>
+    {% elif author %}<p class="byline">{{ author }}</p>
+    {% elif date %}<p class="byline">{{ date }}</p>{% endif %}
 
-  <div class="abstract">{{ abstract }}</div>
-  <div class="intro">{{ intro }}</div>
+    <div class="abstract">{{ abstract }}</div>
+    <div class="intro">{{ intro }}</div>
 
-  <section aria-labelledby="comparison-title">
-    <h2 id="comparison-title">Environments</h2>
-    <div>{{ comparison_intro }}</div>
-    <div class="cards env-cards">
-      {% for environment in environments %}
-      <div class="card">
-        <div class="card__head">{{ environment.label }}</div>
-        <div class="card__body">
-          {% for name, value in environment.facts %}
-          <div class="card__row"><span>{{ name }}</span><b>{{ value }}</b></div>
-          {% endfor %}
-          {% if environment.annotation %}
-          <div class="card__note">{{ environment.annotation }}</div>
-          {% endif %}
+    <section aria-labelledby="comparison-title">
+      <h2 id="comparison-title">Environments</h2>
+      <div>{{ comparison_intro }}</div>
+      <div class="cards env-cards">
+        {% for environment in environments %}
+        <div class="card">
+          <div class="card__head">{{ environment.label }}</div>
+          <div class="card__body">
+            {% for name, value in environment.facts %}
+            <div class="card__row"><span>{{ name }}</span><b>{{ value }}</b></div>
+            {% endfor %}
+            {% if environment.annotation %}
+            <div class="card__note">{{ environment.annotation }}</div>
+            {% endif %}
+          </div>
         </div>
+        {% endfor %}
+      </div>
+      {% for note in comparison_notes %}
+      <div class="callout note"><span class="callout__icon">ⓘ</span>
+        <div>{{ note }}</div>
       </div>
       {% endfor %}
-    </div>
-    {% for note in comparison_notes %}
-    <div class="callout note"><span class="callout__icon">ⓘ</span><div>{{ note }}</div></div>
-    {% endfor %}
-  </section>
+    </section>
 
-  <div class="control-bar__sentinel" aria-hidden="true"></div>
-  <div class="control-bar" role="group" aria-label="Plot controls">
-    <div class="control-bar__inner">
-      <div class="control-bar__controls">
-        <div class="control">
-          <div class="control__label" id="environment-label">Compute</div>
-          <div class="segmented" id="environment-control" role="radiogroup"
-            aria-labelledby="environment-label"></div>
-          <p class="control__key"><kbd>E</kbd> to switch</p>
-        </div>
-        <div class="control">
-          <div class="control__label" id="basis-label">Basis set</div>
-          <div class="segmented" id="basis-control" role="radiogroup"
-            aria-labelledby="basis-label"></div>
-          <p class="control__key"><kbd>B</kbd> to switch</p>
+    <div class="control-bar__sentinel" aria-hidden="true"></div>
+    <div class="control-bar" role="group" aria-label="Plot controls">
+      <div class="control-bar__inner">
+        <div class="control-bar__controls">
+          <div class="control">
+            <div class="control__label" id="environment-label">Compute</div>
+            <div class="segmented" id="environment-control" role="radiogroup" aria-labelledby="environment-label"></div>
+            <p class="control__key"><kbd>E</kbd> to switch</p>
+          </div>
+          <div class="control">
+            <div class="control__label" id="basis-label">Basis set</div>
+            <div class="segmented" id="basis-control" role="radiogroup" aria-labelledby="basis-label"></div>
+            <p class="control__key"><kbd>B</kbd> to switch</p>
+          </div>
         </div>
       </div>
     </div>
-  </div>
 
-  <section aria-labelledby="plots-title">
-    <h2 id="plots-title">Scaling plots</h2>
-    <p>
-      Points are converged calculations. Dashed lines are precomputed piecewise
-      log–log fits with at most one kink, selected by cross-validation.
-    </p>
+    <section aria-labelledby="plots-title">
+      <h2 id="plots-title">Scaling plots</h2>
+      <p>
+        Points are converged calculations. Dashed lines are piecewise
+        log–log. The fits are piecewise, with transitions selected by cross-validation. This allows
+        us to capture regimes where different computational components dominate.
+      </p>
 
-    <article class="plot-block">
-      <h3>{{ xc_eval_label }}</h3>
-      <p class="chart-subtitle">
-        Evaluation of the XC functional on the grid
-      </p>
-      <p class="plot-intro">
-        For a traditional functional this is libxc's combined energy-and-derivative
-        call on the grid, which cannot be split further. For Skala it is the network's
-        forward pass alone: its backward differentiates all the way to the
-        density matrix and so also performs the contraction that pyscf does
-        outside the timed call for libxc.
-      </p>
-      <figure class="fig-wide">
-        <div class="chart" id="chart-xc_eval" data-metric="xc_eval"></div>
-      </figure>
-      <p class="x-axis-caption">
-        <span class="x-axis-control" role="radiogroup" aria-label="XC eval x-axis"></span>
-        <kbd class="x-axis-caption__key" title="Press X to switch axis">X</kbd>
-      </p>
-      <div class="plot-commentary">{{ xc_eval_commentary }}</div>
-    </article>
-
-    <article class="plot-block">
-      <h3>{{ numint_label }}</h3>
-      <p class="chart-subtitle">
-        XC quadrature per iteration: grid and AO evaluation, density construction,
-        functional evaluation, and potential assembly
-      </p>
-      <p class="plot-intro">
-        XC quadrature evaluates the density and exchange-correlation model
-        on the quadrature grid, then contracts the resulting potential back into the
-        AO basis.
-        In essence, it is the cost of the map from the density matrix to the XC energy and its derivative with respect to the density matrix.
-      </p>
-      <figure class="fig-wide">
-        <div class="chart" id="chart-numint" data-metric="numint"></div>
-      </figure>
-      <p class="x-axis-caption">
-        <span class="x-axis-control" role="radiogroup" aria-label="Numint x-axis"></span>
-        <kbd class="x-axis-caption__key" title="Press X to switch axis">X</kbd>
-      </p>
-      <div class="plot-commentary">{{ numint_commentary }}</div>
-    </article>
-
-    <article class="plot-block">
-      <h3>{{ jk_label }}</h3>
-      <p class="chart-subtitle">
-        Coulomb and exchange matrices, the other half of the Fock build
-      </p>
-      <p class="plot-intro">
-        The effective potential is the J/K build plus the exchange-correlation
-        quadrature, so subtracting numerical integration from it leaves J/K on
-        its own. It is a difference of two measured quantities, and it is the
-        part of an iteration that depends only on whether a functional is a hybrid or a non-hybrid.
-      </p>
-      <figure class="fig-wide">
-        <div class="chart" id="chart-jk" data-metric="jk"></div>
-      </figure>
-      <div class="plot-commentary">{{ jk_commentary }}</div>
-    </article>
-
-    <article class="plot-block">
-      <h3>{{ cycle_label }}</h3>
-      <p class="chart-subtitle">
-        One whole SCF iteration, median over the steady-state cycles
-      </p>
-      <p class="plot-intro">
-        The outermost of the three nested layers. Numerical integration sits
-        inside it, and the neural forward pass inside that.
-      </p>
-      <figure class="fig-wide">
-        <div class="chart" id="chart-cycle" data-metric="cycle"></div>
-      </figure>
-      <p class="x-axis-caption">
-        <span class="x-axis-control" role="radiogroup" aria-label="Cycle x-axis"></span>
-        <kbd class="x-axis-caption__key" title="Press X to switch axis">X</kbd>
-      </p>
-      <div class="plot-commentary">{{ cycle_commentary }}</div>
-    </article>
-
-    <article class="plot-block">
-      <p class="plot-intro">
-        End-to-end SCF time depends on the work performed in each iteration and on
-        the number of cycles required to reach convergence.
-      </p>
-      <div class="plot-pair">
-        <figure class="plot-pair__item">
-          <figcaption class="chart-subtitle">{{ total_label }} · measured kernel wall time</figcaption>
-          <div class="chart" id="chart-total" data-metric="total"></div>
-          <div class="plot-commentary">{{ total_commentary }}</div>
+      <article class="plot-block">
+        <h3>{{ xc_eval_label }}</h3>
+        <p class="chart-subtitle">
+          Evaluation of the XC functional on the grid
+        </p>
+        <p class="plot-intro">
+          For a traditional functional this is libxc's combined energy-and-derivative
+          call on the grid, which cannot be split further. For Skala it is the network's
+          forward pass alone: its backward differentiates all the way to the
+          density matrix and so also performs the contraction that pyscf does
+          outside the timed call for libxc.
+        </p>
+        <figure class="fig-wide">
+          <div class="chart" id="chart-xc_eval" data-metric="xc_eval"></div>
         </figure>
-        <figure class="plot-pair__item">
-          <figcaption class="chart-subtitle">{{ iterations_label }} · converged iterations</figcaption>
-          <div class="chart" id="chart-iterations" data-metric="iterations"></div>
-          <div class="plot-commentary">{{ iterations_commentary }}</div>
+        <p class="x-axis-caption">
+          <span class="x-axis-control" role="radiogroup" aria-label="XC eval x-axis"></span>
+          <kbd class="x-axis-caption__key" title="Press X to switch axis">X</kbd>
+        </p>
+        <div class="plot-commentary">{{ xc_eval_commentary }}</div>
+      </article>
+
+      <article class="plot-block">
+        <h3>{{ numint_label }}</h3>
+        <p class="chart-subtitle">
+          XC quadrature per iteration: grid and AO evaluation, density construction,
+          functional evaluation, and potential assembly
+        </p>
+        <p class="plot-intro">
+          XC quadrature evaluates the density and exchange-correlation model
+          on the quadrature grid, then contracts the resulting potential back into the
+          AO basis.
+          In essence, it is the cost of the map from the density matrix to the XC energy and its derivative with respect
+          to the density matrix.
+        </p>
+        <figure class="fig-wide">
+          <div class="chart" id="chart-numint" data-metric="numint"></div>
         </figure>
-      </div>
-    </article>
+        <p class="x-axis-caption">
+          <span class="x-axis-control" role="radiogroup" aria-label="Numint x-axis"></span>
+          <kbd class="x-axis-caption__key" title="Press X to switch axis">X</kbd>
+        </p>
+        <div class="plot-commentary">{{ numint_commentary }}</div>
+      </article>
 
-    <article class="plot-block">
-      <h3>{{ setup_label }}</h3>
-      <p class="plot-intro">
-        Work before the SCF loop: grid construction, one-electron integrals, the initial guess,
-        the density-fitting integral build, and the Fock build on that guess.
-        That last one is a full effective-potential evaluation, so setup also
-        contains one exchange-correlation quadrature.
+      <article class="plot-block">
+        <h3>{{ jk_label }}</h3>
+        <p class="chart-subtitle">
+          Coulomb and exchange matrices, the other half of the Fock build
+        </p>
+        <p class="plot-intro">
+          The effective potential is the J/K build plus the exchange-correlation
+          quadrature, so subtracting numerical integration from it leaves J/K on
+          its own. It is a difference of two measured quantities, and it is the
+          part of an iteration that depends only on whether a functional is a hybrid or a non-hybrid.
+        </p>
+        <figure class="fig-wide">
+          <div class="chart" id="chart-jk" data-metric="jk"></div>
+        </figure>
+        <div class="plot-commentary">{{ jk_commentary }}</div>
+      </article>
+
+      <article class="plot-block">
+        <h3>{{ cycle_label }}</h3>
+        <p class="chart-subtitle">
+          One whole SCF iteration. Median over ‘steady-state’ cycles, excluding the first few that are
+          affected by startup overhead like JIT compilation.
+        </p>
+        <p class="plot-intro">
+          The outermost of the three nested layers. Numerical integration sits
+          inside it, and the neural forward pass inside that.
+        </p>
+        <figure class="fig-wide">
+          <div class="chart" id="chart-cycle" data-metric="cycle"></div>
+        </figure>
+        <p class="x-axis-caption">
+          <span class="x-axis-control" role="radiogroup" aria-label="Cycle x-axis"></span>
+          <kbd class="x-axis-caption__key" title="Press X to switch axis">X</kbd>
+        </p>
+        <div class="plot-commentary">{{ cycle_commentary }}</div>
+      </article>
+
+      <article class="plot-block">
+        <p class="plot-intro">
+          End-to-end SCF time depends on the work performed in each iteration and on
+          the number of cycles required to reach convergence.
+        </p>
+        <div class="plot-pair">
+          <figure class="plot-pair__item">
+            <figcaption class="chart-subtitle">{{ total_label }} · measured kernel wall time</figcaption>
+            <div class="chart" id="chart-total" data-metric="total"></div>
+            <div class="plot-commentary">{{ total_commentary }}</div>
+          </figure>
+          <figure class="plot-pair__item">
+            <figcaption class="chart-subtitle">{{ iterations_label }} · converged iterations</figcaption>
+            <div class="chart" id="chart-iterations" data-metric="iterations"></div>
+            <div class="plot-commentary">{{ iterations_commentary }}</div>
+          </figure>
+        </div>
+      </article>
+
+      <article class="plot-block">
+        <h3>{{ setup_label }}</h3>
+        <p class="plot-intro">
+          Work before the SCF loop: grid construction, one-electron integrals, the initial guess,
+          the density-fitting integral build, and the Fock build on that guess.
+          That last one is a full effective-potential evaluation, so setup also
+          contains one exchange-correlation quadrature.
+        </p>
+        <div class="chart" id="chart-setup" data-metric="setup"></div>
+        <div class="plot-commentary">{{ setup_commentary }}</div>
+      </article>
+    </section>
+
+    <section aria-labelledby="composition-title">
+      <h2 id="composition-title">Where the time goes</h2>
+
+      <h3>One SCF iteration</h3>
+      <p>
+        The stacked bands partition a steady-state SCF iteration into four
+        directly measured, nested layers: the exchange-correlation functional
+        itself, the rest of the quadrature around it, the J/K build, and
+        everything else in the iteration.
       </p>
-      <div class="chart" id="chart-setup" data-metric="setup"></div>
-      <div class="plot-commentary">{{ setup_commentary }}</div>
-    </article>
-  </section>
+      <div id="composition-charts"></div>
+      <h3>One complete SCF</h3>
+      <p>
+        The same calculation end to end.
+      </p>
+      <div id="run-composition-charts"></div>
+    </section>
 
-  <section aria-labelledby="composition-title">
-    <h2 id="composition-title">Where the time goes</h2>
+    <section aria-labelledby="startup-title">
+      <h2 id="startup-title">Process start-up caveats</h2>
+      {{ startup_commentary }}
+    </section>
 
-    <h3>One SCF iteration</h3>
-    <p>
-      The stacked bands partition a steady-state SCF iteration into four
-      directly measured, nested layers: the exchange-correlation functional
-      itself, the rest of the quadrature around it, the J/K build, and
-      everything else in the iteration.
-    </p>
-    <div id="composition-charts"></div>
-    <h3>One complete SCF</h3>
-    <p>
-      The same calculation end to end.
-    </p>
-    <div id="run-composition-charts"></div>
-  </section>
+    {% if closing %}
+    <section>
+      <h2>Closing notes</h2>{{ closing }}
+    </section>
+    {% endif %}
 
-  <section aria-labelledby="startup-title">
-    <h2 id="startup-title">Process start-up caveats</h2>
-    {{ startup_commentary }}
-  </section>
+    <section aria-labelledby="compare-title">
+      <h2 id="compare-title">Compare your own timings with these results</h2>
+      <p>
+        Follow the
+        <a href="https://microsoft.github.io/skala/benchmarks.html">benchmark documentation</a>
+        to run the same benchmark sweep on your machine or cluster and combine
+        your timings with these reference results.
+      </p>
+    </section>
+  </main>
 
-  {% if closing %}
-  <section><h2>Closing notes</h2>{{ closing }}</section>
-  {% endif %}
-
-  <footer>
-    <h2>Compare your own timings with these results</h2>
-    <p>
-      Follow the
-      <a href="https://microsoft.github.io/skala/benchmarks.html">benchmark documentation</a>
-      to run the same benchmark sweep on your machine or cluster and combine
-      your timings with these reference results.
-    </p>
-  </footer>
-</main>
-
-<div class="chart-tooltip" id="chart-tooltip" role="status" aria-live="polite" hidden></div>
-<script id="report-data" type="application/json">{{ data_json }}</script>
-<script id="report-fits" type="application/json">{{ fits_json }}</script>
-<script src="d3.min.js"></script>
-<script src="katex.min.js"></script>
-<script src="report.js"></script>
+  <div class="chart-tooltip" id="chart-tooltip" role="status" aria-live="polite" hidden></div>
+  <script id="report-data" type="application/json">{{ data_json }}</script>
+  <script id="report-fits" type="application/json">{{ fits_json }}</script>
+  <script src="d3.min.js"></script>
+  <script src="katex.min.js"></script>
+  <script src="report.js"></script>
 </body>
+
 </html>
