@@ -85,11 +85,14 @@ against our fixed reference measurements in ``benchmarks/reference``. This is th
 for users who want to validate an implementation, check a new machine, or confirm that a local build
 matches our published performance envelope.
 
-Install the benchmark dependencies from a source checkout, then fetch the molecule set once.
-Set threading variables before starting the run because worker subprocesses inherit them:
+Install Git LFS and run ``git lfs install`` once so the source checkout includes the reference
+measurements; use ``git lfs pull`` to populate an existing checkout. Then install the benchmark
+dependencies and fetch the molecule set once. Set threading variables before starting the run
+because worker subprocesses inherit them:
 
 .. code-block:: bash
 
+   git lfs pull
    pip install -e '.[benchmark]'
    python -m skala.benchmark fetch-dataset
    export OMP_NUM_THREADS=16

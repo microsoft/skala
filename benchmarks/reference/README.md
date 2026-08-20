@@ -1,3 +1,5 @@
 # Benchmark reference data
 
-These are reference timing measurements for the project. They are used to (1) generate the reference timing report in the documentation, and (2) allow others to compare their own measurements against ours.
+These reference timing measurements generate the documentation report and support comparisons with
+other implementations and machines. `measurements.json` is managed by Git LFS; run `git lfs pull`
+if it is not populated in an existing checkout.
