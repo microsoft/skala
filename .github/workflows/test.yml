@@ -2,9 +2,24 @@ name: Tests
 
 on:
   push:
-    branches: [ main, dev ]
+    branches: [main]
+    paths: &test-paths
+      - '.github/workflows/test.yml'
+      - '.pre-commit-config.yaml'
+      - 'benchmarks/reference/**'
+      - 'conftest.py'
+      - 'docs/_ext/**'
+      - 'environment-cpu.yml'
+      - 'environment-gpu.yml'
+      - 'pyproject.toml'
+      - 'src/skala/**'
+      - 'tests/**'
+      - '**/*.py'
+      - '**/*.pyi'
+      - '**/*.ipynb'
   pull_request:
-    branches: [ main, dev ]
+    branches: [main]
+    paths: *test-paths
 
 permissions:
   contents: read

@@ -6,6 +6,6 @@ dependencies:
 - cxx-compiler
 - ninja
 - nlohmann_json
-- libtorch
-- pytorch  # Only required to produce example features.
+- libtorch * cpu_*
+- pytorch >=2.9 cpu_*  # Only required to produce example features.
 - skala
