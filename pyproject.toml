@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "skala"
@@ -37,17 +37,14 @@ urls.repository = "https://github.com/microsoft/skala"
 urls.documentation = "https://microsoft.github.io/skala"
 urls.homepage = "https://aka.ms/dft"
 
-[tool.setuptools.package-data]
-# Without these the wheel ships only .py files, so a non-editable install has
-# neither the benchmark manifest nor the report's template and assets.
-"skala.benchmark" = ["dataset_sources.csv"]
-"skala.benchmark.report" = ["templates/*.html", "assets/*.css", "assets/*.js", "assets/vendor/*.js"]
+[tool.hatch.build.targets.wheel]
+packages = ["src/skala"]
 
 [tool.mypy]
 strict = true
 no_namespace_packages = true
 python_version = "3.11"
-exclude = ["third_party/"]
+exclude = ["build/", "third_party/"]
 disable_error_code = ["no-any-return", "unused-ignore"]
 
 [[tool.mypy.overrides]]
