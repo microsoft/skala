@@ -1,6 +1,9 @@
 [build-system]
-requires = ["setuptools"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/skala_cuda"]
 
 [project]
 name = "skala-cuda@CUDA@"
@@ -15,12 +18,13 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Operating System :: POSIX :: Linux",
     "Development Status :: 5 - Production/Stable",
 ]
 requires-python = ">=3.11,<3.14"
 dependencies = [
     "skala==@VERSION@",
-    "gpu4pyscf-cuda@CUDA@ >=1.8,<1.9",
+    "gpu4pyscf-cuda@CUDA@ ==1.8.1",
 ]
 urls.repository = "https://github.com/microsoft/skala"
 urls.documentation = "https://microsoft.github.io/skala"

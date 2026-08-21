@@ -1,0 +1,315 @@
+[workspace]
+name = "skala"
+version = "2026.9"
+description = "Skala Exchange Correlation Functional"
+channels = ["conda-forge"]
+platforms = [
+  "linux-64",
+  "linux-aarch64",
+  "osx-arm64",
+  { name = "linux-64-cuda12", platform = "linux-64", cuda = "12" },
+  { name = "linux-64-cuda13", platform = "linux-64", cuda = "13" },
+]
+requires-pixi = ">=0.75,<0.76"
+preview = ["pixi-build"]
+
+[workspace.conda-pypi-map]
+conda-forge = { mapping-mode = "overlay", mapping = { dftd3-python = "dftd3", pytorch = "torch", pytorch-gpu = "torch" } }
+
+[feature.python-runtime.dependencies]
+ase = "*"
+e3nn = "*"
+h5py = "*"
+numpy = "<2.5"
+opt_einsum_fx = "*"
+skala = { path = "." }
+
+[feature.model-assets.dependencies]
+huggingface_hub = "*"
+
+[feature.model-assets.tasks]
+download-checkpoint = "hf download microsoft/skala-1.1 skala-1.1-rev1.fun --local-dir ."
+generate-features = "python examples/cpp/cpp_integration/prepare_inputs.py --output-dir features"
+
+[feature.python-311.dependencies]
+python = "3.11.*"
+
+[feature.python-312.dependencies]
+python = "3.12.*"
+
+[feature.python-313.dependencies]
+python = "3.13.*"
+
+[feature.pyscf-214.pypi-dependencies]
+pyscf = "==2.14.*"
+
+[feature.dispersion.target.linux.pypi-dependencies]
+pyscf-dispersion = ">=1.5"
+
+[feature.dispersion.target.osx.dependencies]
+dftd3-python = ">=1.5,<2"
+
+[feature.torch-213-cpu]
+platforms = ["linux-64", "linux-aarch64", "osx-arm64"]
+
+[feature.torch-213-cpu.dependencies]
+pytorch = { version = "2.13.*", build = "cpu_*" }
+
+[feature.torch-212-cpu]
+platforms = ["linux-64", "linux-aarch64", "osx-arm64"]
+
+[feature.torch-212-cpu.dependencies]
+pytorch = { version = "2.12.*", build = "cpu_*" }
+
+[feature.torch-213-gpu]
+platforms = ["linux-64-cuda12", "linux-64-cuda13"]
+
+[feature.torch-213-gpu.dependencies]
+pytorch-gpu = "2.13.*"
+
+[feature.torch-212-gpu]
+platforms = ["linux-64-cuda12", "linux-64-cuda13"]
+
+[feature.torch-212-gpu.dependencies]
+pytorch-gpu = "2.12.*"
+
+[feature.cuda-12]
+platforms = ["linux-64-cuda12"]
+
+[feature.cuda-12.dependencies]
+cuda-cudart-dev = ">=12,<13"
+cuda-nvrtc = ">=12,<13"
+cuda-version = ">=12,<13"
+cutensor = ">=2"
+
+[feature.cuda-12.pypi-dependencies]
+gpu4pyscf-cuda12x = "==1.8.1"
+
+[feature.cuda-13]
+platforms = ["linux-64-cuda13"]
+
+[feature.cuda-13.dependencies]
+cuda-cudart-dev = ">=13,<14"
+cuda-nvrtc = ">=13,<14"
+cuda-version = ">=13,<14"
+cutensor = ">=2"
+
+[feature.cuda-13.pypi-dependencies]
+gpu4pyscf-cuda13x = "==1.8.1"
+
+[feature.test.dependencies]
+pytest = "*"
+pytest-benchmark = "*"
+pytest-cov = "*"
+pytest-randomly = "*"
+pytest-timeout = "*"
+
+[feature.test.tasks]
+test = { cmd = "pytest -v --doctest-modules --cov=skala --cov-report=xml --cov-report=term-missing --cov-report=html --durations=50 --durations-min=1.0 src/skala/ tests/", env = { OMP_NUM_THREADS = "4" } }
+
+[feature.gpu-test.tasks]
+gpu-verify = '''python -c "import cupy, gpu4pyscf, importlib.metadata, torch; gpu4pyscf_distribution = next(name for name in importlib.metadata.packages_distributions()['gpu4pyscf'] if name.startswith('gpu4pyscf-cuda')); gpu4pyscf_version = importlib.metadata.version(gpu4pyscf_distribution); print('torch', torch.__version__, 'cuda', torch.version.cuda); print('cupy', cupy.__version__, 'runtime', cupy.cuda.runtime.runtimeGetVersion(), 'driver', cupy.cuda.runtime.driverGetVersion()); print(gpu4pyscf_distribution, gpu4pyscf_version); assert gpu4pyscf_version == '1.8.1'; assert torch.cuda.is_available(); cupy.linalg.norm(cupy.arange(3.0)).get()"'''
+gpu-test = { cmd = "pytest -v -m 'gpu and not profiling and not model_benchmark' tests/", env = { OMP_NUM_THREADS = "4" } }
+gpu-doctest = { cmd = "pytest -v --doctest-modules src/skala/gpu4pyscf/", env = { OMP_NUM_THREADS = "4" } }
+model-benchmark-gpu = { cmd = "pytest -v -m model_benchmark -k cuda tests/test_traced_model_comparison.py", env = { OMP_NUM_THREADS = "4", MKL_NUM_THREADS = "4" } }
+
+[feature.lint.dependencies]
+mypy = ">=2"
+pre-commit = "*"
+ruff = "*"
+
+[feature.lint.pypi-dependencies]
+pandas-stubs = "*"
+pyarrow-stubs = ">=20,<21"
+scipy-stubs = "==1.17.1.5"
+types-PyYAML = "*"
+
+[feature.lint.tasks]
+lint = "pre-commit run --all-files"
+
+[feature.profiling.target.linux-64.dependencies]
+memray = "*"
+
+[feature.profiling.tasks]
+profile = { cmd = "pytest -v -m profiling tests/", env = { OMP_NUM_THREADS = "4" } }
+
+[feature.benchmark.dependencies]
+jinja2 = "*"
+markdown-it-py = "*"
+pandas = "*"
+pyarrow = "*"
+pyyaml = "*"
+scipy = "*"
+
+[feature.benchmark.tasks]
+model-benchmark-cpu = { cmd = "pytest -v -m model_benchmark -k cpu tests/test_traced_model_comparison.py", env = { OMP_NUM_THREADS = "4", MKL_NUM_THREADS = "4" } }
+
+[feature.docs.dependencies]
+ipywidgets = "*"
+myst-nb = "*"
+sphinx = "*"
+sphinx-book-theme = "*"
+sphinx-design = "*"
+sphinx-fortran = "*"
+sphinxcontrib-bibtex = "*"
+sphinxcontrib-moderncmakedomain = "*"
+
+[feature.docs.tasks]
+docs-check = "python -m pip check"
+docs-html = "sphinx-build -b html docs docs/_build/html && touch docs/_build/html/.nojekyll"
+docs-linkcheck = "sphinx-build -D nb_execution_mode=off -b linkcheck docs docs/_build/linkcheck"
+
+[feature.release.dependencies]
+python-build = "*"
+
+[feature.release.tasks.build-release]
+args = [{ arg = "package", choices = ["skala", "microsoft-skala", "skala-cuda12x", "skala-cuda13x"] }]
+cmd = "python tools/build_release.py {{ package }}"
+
+[feature.release.tasks]
+build-conda = "pixi publish --path . --target-dir dist-conda"
+
+[feature.native-toolchain]
+platforms = ["linux-64", "linux-64-cuda12"]
+
+[feature.native-toolchain.dependencies]
+c-compiler = "*"
+cmake = ">=3.20,<4"
+cxx-compiler = "*"
+ninja = "*"
+nlohmann_json = ">=3.9"
+
+[feature.fortran]
+platforms = ["linux-64"]
+
+[feature.fortran.dependencies]
+fortran-compiler = "*"
+
+[feature.hdf5-serial]
+platforms = ["linux-64", "linux-64-cuda12"]
+
+[feature.hdf5-serial.dependencies]
+hdf5 = { version = "*", build = "nompi_*" }
+
+[feature.mpi]
+platforms = ["linux-64"]
+
+[feature.mpi.dependencies]
+hdf5 = { version = "*", build = "mpi_openmpi_*" }
+openmpi = "*"
+
+[feature.gauxc-core]
+platforms = ["linux-64", "linux-64-cuda12"]
+
+[feature.gauxc-core.dependencies]
+gau2grid = ">=2.0.6"
+integratorxx = ">=1.0"
+libblas = "*"
+
+[feature.gauxc-cpu]
+platforms = ["linux-64"]
+
+[feature.gauxc-cpu.dependencies]
+exchcxx = { version = ">=1.0", build = "cpu_*" }
+
+[feature.gauxc-cuda12]
+platforms = ["linux-64-cuda12"]
+
+[feature.gauxc-cuda12.dependencies]
+cuda-compiler = ">=12,<13"
+cuda-nvrtc-dev = ">=12,<13"
+cuda-version = ">=12,<13"
+exchcxx = { version = ">=1.0", build = "cuda*" }
+libcublas-dev = ">=12,<13"
+libcusparse-dev = ">=12,<13"
+libmagma-devel = ">=2.10,<2.11"
+
+[feature.gauxc-core.tasks.gauxc-configure]
+args = [
+  { arg = "example", choices = ["c", "cpp", "fortran"] },
+  { arg = "toolchain", choices = ["openmp", "mpi", "cuda"] },
+]
+cmd = """bash -c 'cmake -B ../build_gauxc -S ../gauxc -G Ninja -DGAUXC_ENABLE_OPENMP={% if toolchain == "openmp" or toolchain == "cuda" %}ON{% else %}OFF{% endif %} -DGAUXC_ENABLE_MPI={% if toolchain == "mpi" %}ON{% else %}OFF{% endif %} -DGAUXC_ENABLE_CUDA={% if toolchain == "cuda" %}ON{% else %}OFF{% endif %}{% if toolchain == "cuda" %} -DCMAKE_CUDA_ARCHITECTURES="${CMAKE_CUDA_ARCHITECTURES:-60}"{% endif %} -DGAUXC_ENABLE_ONEDFT=ON -DGAUXC_ENABLE_C={% if example == "cpp" %}OFF{% else %}ON{% endif %} -DGAUXC_ENABLE_FORTRAN={% if example == "fortran" %}ON{% else %}OFF{% endif %} -DGAUXC_ENABLE_TESTS=OFF -DBUILD_SHARED_LIBS=ON -DCMAKE_INSTALL_PREFIX="$CONDA_PREFIX"'"""
+
+[feature.gauxc-core.tasks]
+gauxc-build = "cmake --build ../build_gauxc"
+gauxc-install = "cmake --install ../build_gauxc"
+gauxc-run-tpss = "Skala ../gauxc/tests/ref_data/onedft_he_def2qzvp_tpss_uks.hdf5 --model TPSS"
+gauxc-run-checkpoint = "Skala ../gauxc/tests/ref_data/onedft_he_def2qzvp_tpss_uks.hdf5 --model ./skala-1.1-rev1.fun"
+
+[feature.gauxc-core.tasks.gauxc-example-configure]
+args = [
+  { arg = "example", choices = ["c", "cpp", "fortran"] },
+  { arg = "toolchain", choices = ["openmp", "mpi", "cuda"] },
+]
+cmd = """bash -c 'cmake -B ../build_example -S examples/{{ example }}/gauxc_integration -G Ninja -DSkala_GauXC_ENABLE_OPENMP={% if toolchain == "openmp" or toolchain == "cuda" %}ON{% else %}OFF{% endif %} -DSkala_GauXC_ENABLE_MPI={% if toolchain == "mpi" %}ON{% else %}OFF{% endif %} -DSkala_GauXC_ENABLE_CUDA={% if toolchain == "cuda" %}ON{% else %}OFF{% endif %}{% if toolchain == "cuda" %} -DCMAKE_CUDA_ARCHITECTURES="${CMAKE_CUDA_ARCHITECTURES:-60}"{% endif %} -DCMAKE_INSTALL_PREFIX="$CONDA_PREFIX"'"""
+
+[feature.gauxc-core.tasks.gauxc-example-build]
+cmd = "cmake --build ../build_example"
+
+[feature.gauxc-core.tasks.gauxc-example-install]
+cmd = "cmake --install ../build_example"
+
+[feature.cpp-example.tasks]
+cpp-configure = "cmake -B build_example -S examples/cpp/cpp_integration -G Ninja"
+cpp-build = { cmd = "cmake --build build_example", depends-on = ["cpp-configure"] }
+cpp-run = "./build_example/skala_cpp_integration ./skala-1.1-rev1.fun ./features"
+
+[feature.ftorch.tasks]
+ftorch-configure = "cmake -B build_example -S examples/fortran/ftorch_integration -G Ninja -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX"
+ftorch-build = { cmd = "cmake --build build_example", depends-on = ["ftorch-configure"] }
+ftorch-install = { cmd = "cmake --install build_example", depends-on = ["ftorch-build"] }
+ftorch-run = "Skala ./skala-1.1-rev1.fun ./features"
+
+[environments]
+default = { features = ["python-runtime", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-213-cpu", "test", "lint", "profiling", "benchmark"], no-default-feature = true, platforms = ["linux-64", "linux-aarch64", "osx-arm64"] }
+lint = { features = ["python-runtime", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-213-cpu", "test", "lint", "profiling", "benchmark"], no-default-feature = true, platforms = ["linux-64"] }
+test-py311-pyscf214-torch213 = { features = ["python-runtime", "model-assets", "python-311", "pyscf-214", "dispersion", "torch-213-cpu", "test", "benchmark"], no-default-feature = true, platforms = ["linux-64"] }
+test-py312-pyscf214-torch212 = { features = ["python-runtime", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-212-cpu", "test", "profiling", "benchmark"], no-default-feature = true, platforms = ["linux-64", "linux-aarch64", "osx-arm64"] }
+test-py312-pyscf214-torch213 = { features = ["python-runtime", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-213-cpu", "test", "profiling", "benchmark"], no-default-feature = true, platforms = ["linux-64", "linux-aarch64", "osx-arm64"] }
+test-py313-pyscf214-torch213 = { features = ["python-runtime", "model-assets", "python-313", "pyscf-214", "dispersion", "torch-213-cpu", "test", "benchmark"], no-default-feature = true, platforms = ["linux-64"] }
+gpu-cuda12-torch212 = { features = ["python-runtime", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-212-gpu", "cuda-12", "test", "gpu-test", "benchmark"], no-default-feature = true, platforms = ["linux-64-cuda12"] }
+gpu-cuda12-torch213 = { features = ["python-runtime", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-213-gpu", "cuda-12", "test", "gpu-test", "benchmark"], no-default-feature = true, platforms = ["linux-64-cuda12"] }
+gpu-cuda13-torch213 = { features = ["python-runtime", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-213-gpu", "cuda-13", "test", "gpu-test", "benchmark"], no-default-feature = true, platforms = ["linux-64-cuda13"] }
+docs = { features = ["python-runtime", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-213-cpu", "benchmark", "docs"], no-default-feature = true, platforms = ["linux-64"] }
+assets = { features = ["python-312", "model-assets"], no-default-feature = true, platforms = ["linux-64"] }
+release = { features = ["python-312", "release"], no-default-feature = true, platforms = ["linux-64"] }
+cpp-integration = { features = ["python-runtime", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-213-cpu", "native-toolchain", "cpp-example"], no-default-feature = true, platforms = ["linux-64"] }
+gauxc-openmp = { features = ["python-312", "torch-213-cpu", "native-toolchain", "gauxc-core", "gauxc-cpu", "hdf5-serial"], no-default-feature = true, platforms = ["linux-64"] }
+gauxc-openmp-fortran = { features = ["python-312", "torch-213-cpu", "native-toolchain", "fortran", "gauxc-core", "gauxc-cpu", "hdf5-serial"], no-default-feature = true, platforms = ["linux-64"] }
+gauxc-mpi = { features = ["python-312", "torch-213-cpu", "native-toolchain", "gauxc-core", "gauxc-cpu", "mpi"], no-default-feature = true, platforms = ["linux-64"] }
+gauxc-mpi-fortran = { features = ["python-312", "torch-213-cpu", "native-toolchain", "fortran", "gauxc-core", "gauxc-cpu", "mpi"], no-default-feature = true, platforms = ["linux-64"] }
+gauxc-cuda12 = { features = ["python-312", "torch-213-gpu", "native-toolchain", "gauxc-core", "gauxc-cuda12", "hdf5-serial"], no-default-feature = true, platforms = ["linux-64-cuda12"] }
+ftorch = { features = ["python-312", "model-assets", "torch-213-cpu", "native-toolchain", "fortran", "ftorch"], no-default-feature = true, platforms = ["linux-64"] }
+
+[package]
+name = "skala"
+version = "2026.9"
+description = "Skala Exchange Correlation Functional"
+license-file = "LICENSE.txt"
+readme = "README.md"
+repository = "https://github.com/microsoft/skala"
+documentation = "https://microsoft.github.io/skala"
+publish = false
+
+[package.build]
+backend = { name = "pixi-build-python", version = "0.8.*", channels = ["https://prefix.dev/conda-forge"] }
+
+[package.build.config]
+ignore-pypi-mapping = true
+
+[package.host-dependencies]
+hatchling = "*"
+python = ">=3.11,<3.14"
+
+# PySCF and dispersion packages intentionally remain PyPI-only environment
+# dependencies because conda PySCF introduces an incompatible XCFun ABI.
+[package.run-dependencies]
+ase = "*"
+e3nn = "*"
+h5py = "*"
+huggingface_hub = "*"
+numpy = "*"
+opt_einsum_fx = "*"
+python = ">=3.11,<3.14"
+pytorch = ">=2.12,<2.14"

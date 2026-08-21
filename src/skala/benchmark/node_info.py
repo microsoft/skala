@@ -36,6 +36,7 @@ def _run(cmd: list[str]) -> str:
         proc = subprocess.run(
             cmd,
             capture_output=True,
+            check=False,
             text=True,
             timeout=30,
             env={**os.environ, "LC_ALL": "C"},  # stable, English lscpu/numactl labels
@@ -117,7 +118,7 @@ def _package_version(*names: str) -> str | None:
     """Return the version of the first installed distribution among ``names``.
 
     Several names because a package can ship under variants: gpu4pyscf installs
-    as ``gpu4pyscf-cuda12x`` or ``gpu4pyscf-cuda11x`` and never under its own
+    as ``gpu4pyscf-cuda12x`` or ``gpu4pyscf-cuda13x`` and never under its own
     import name.
     """
     for name in names:
@@ -188,7 +189,7 @@ def collect_environment(env_id: str, label: str) -> Environment:
         blas_impl=_blas_impl(),
         cuda_version=_cuda_version(),
         gpu4pyscf_version=_package_version(
-            "gpu4pyscf", "gpu4pyscf-cuda12x", "gpu4pyscf-cuda11x"
+            "gpu4pyscf", "gpu4pyscf-cuda12x", "gpu4pyscf-cuda13x"
         ),
         skala_version=_package_version("skala") or "",
         versions={

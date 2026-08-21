@@ -1,6 +1,6 @@
 from collections.abc import Callable, Iterator
 from itertools import combinations
-from typing import Any
+from typing import Any, TypeAlias, cast
 
 import numpy as np
 import pytest
@@ -33,7 +33,10 @@ from skala.pyscf.spatial_grid_layout import (
     prepare_spatial_grid_layout,
 )
 from skala.pyscf.xc_integrator import XCIntegrator
+from skala.typing import F64
 from tests.utils import QuadraticFunctional, force_ao_screening
+
+_NumPyNumInt: TypeAlias = SkalaNumInt[np.ndarray[Any, F64]]
 
 _MGGA_FEATURES = (Feature.DENSITY, Feature.GRAD, Feature.KIN, Feature.LAPL)
 _MGGA_FEATURE_COMBINATIONS = [
@@ -445,8 +448,8 @@ def test_grid_reuses_spatial_grid_layout_across_numints(
         "prepare_spatial_grid_layout",
         fake_prepare_spatial_grid_layout,
     )
-    numint = SkalaNumInt(QuadraticFunctional())
-    other_numint = SkalaNumInt(QuadraticFunctional())
+    numint: _NumPyNumInt = SkalaNumInt(QuadraticFunctional())
+    other_numint: _NumPyNumInt = SkalaNumInt(QuadraticFunctional())
 
     layout = numint.integrator._get_spatial_grid_layout(carbon, grids)
     assert other_numint.integrator._get_spatial_grid_layout(carbon, grids) is layout
@@ -489,7 +492,7 @@ class FakeKS:
 
 def test_call_rejects_second_order_evaluation(carbon: gto.Mole) -> None:
     """Direct callers must use gen_response instead of second_order evaluation."""
-    numint = SkalaNumInt(QuadraticFunctional())
+    numint: _NumPyNumInt = SkalaNumInt(QuadraticFunctional())
 
     with pytest.raises(NotImplementedError, match="second-order evaluation"):
         numint(
@@ -599,7 +602,7 @@ def test_first_and_second_order_use_same_screening_decision(
         "ModelFeatureChunker",
         fake_model_feature_chunker,
     )
-    numint = SkalaNumInt(QuadraticFunctional())
+    numint: _NumPyNumInt = SkalaNumInt(QuadraticFunctional())
     dm = torch.eye(carbon.nao_nr(), dtype=torch.float64)
     grids = SkalaGrids(carbon)
     grids.coords = np.zeros((1, 3))
@@ -935,7 +938,7 @@ def test_skala_grids_invalidate_spatial_layout(carbon: gto.Mole) -> None:
 
 def test_numint_reset_does_not_clear_grid_spatial_layout(carbon: gto.Mole) -> None:
     """Preserve the grid-owned spatial layout when resetting a NumInt instance."""
-    numint = SkalaNumInt(QuadraticFunctional())
+    numint: _NumPyNumInt = SkalaNumInt(QuadraticFunctional())
     grids = _minimal_atom_grid(carbon)
     spatial_grid_layout = prepare_spatial_grid_layout(
         carbon,
@@ -992,7 +995,7 @@ def test_cpu_rks_uks_dense_screened_equivalence(
 
     functional = load_functional_cached("skala-1.1")
     assert isinstance(functional, ExcFunctionalBase)
-    numint = SkalaNumInt(functional)
+    numint: _NumPyNumInt = SkalaNumInt(functional)
     grids = _minimal_atom_grid(mol)
     dm = mean_field.get_init_guess()
 
@@ -1011,7 +1014,7 @@ def test_cpu_quadratic_dense_screened_equivalence_heteronuclear() -> None:
     """Match dense and screened quadratic integration on a heteronuclear grid."""
     mol = gto.M(atom="H 0 0 0; F 0 0 0.92", basis="sto-3g", spin=0, verbose=0)
     grids = _minimal_atom_grid(mol)
-    numint = SkalaNumInt(QuadraticFunctional())
+    numint: _NumPyNumInt = SkalaNumInt(QuadraticFunctional())
     dm = dft.RKS(mol).get_init_guess()
 
     with force_ao_screening(False):
@@ -1021,7 +1024,12 @@ def test_cpu_quadratic_dense_screened_equivalence_heteronuclear() -> None:
         screened = numint.nr_rks(mol, grids, None, dm)
 
     for dense_value, screened_value in zip(dense, screened, strict=True):
-        assert np.allclose(dense_value, screened_value, rtol=1e-10, atol=1e-11)
+        assert np.allclose(
+            cast(float | np.ndarray, dense_value),
+            cast(float | np.ndarray, screened_value),
+            rtol=1e-10,
+            atol=1e-11,
+        )
 
 
 @pytest.mark.parametrize(
@@ -1072,7 +1080,7 @@ def test_cpu_response_dense_screened_equivalence() -> None:
     mol = gto.M(atom="H 0 0 0; F 0 0 0.92", basis="sto-3g", spin=0, verbose=0)
     grids = _minimal_atom_grid(mol)
     ks = FakeKS(mol, grids)
-    numint = SkalaNumInt(QuadraticFunctional())
+    numint: _NumPyNumInt = SkalaNumInt(QuadraticFunctional())
     mo_coeff = np.eye(mol.nao_nr())
     mo_occ = np.ones(mol.nao_nr())
     dm1 = np.arange(mol.nao_nr() ** 2, dtype=np.float64).reshape(
@@ -1158,7 +1166,7 @@ def test_screened_ao_traversals_are_independent_of_model_chunking(
         counting_apply,
     )
     functional = QuadraticFunctional()
-    numint = SkalaNumInt(functional)
+    numint: _NumPyNumInt = SkalaNumInt(functional)
 
     with force_ao_screening(True):
         if func_deriv == 1:

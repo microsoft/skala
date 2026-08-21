@@ -35,6 +35,8 @@ For detailed documentation on using GauXC visit the [Skala integration guide](ht
 ## Getting started: PySCF (CPU)
 
 All information below relates to the Python package `skala`.
+Skala supports Linux and macOS with Python 3.11 through 3.13, the latest
+PySCF release (2.14), and the two latest PyTorch release lines (2.12 and 2.13).
 
 `pip install skala` works out of the box and pulls every dependency from PyPI.
 If you don't already have PyTorch installed, install the CPU-only wheel first
@@ -45,14 +47,12 @@ pip install torch --index-url https://download.pytorch.org/whl/cpu
 pip install skala
 ```
 
-For a reproducible conda environment, use the provided
-[`environment-cpu.yml`](environment-cpu.yml), which pins CPU-only PyTorch and
-all runtime dependencies:
+For a reproducible source environment, use the default environment from the
+committed Pixi lockfile. It uses Python 3.12, PySCF 2.14, and CPU-only PyTorch 2.13:
 
 ```bash
-mamba env create -n skala -f environment-cpu.yml
-mamba activate skala
-pip install skala
+pixi install --locked -e default
+pixi run -e default python your_script.py
 ```
 
 Run an SCF calculation with Skala for a hydrogen molecule:
@@ -72,7 +72,8 @@ ks.kernel()
 ## Getting started: GPU4PySCF (GPU)
 
 The GPU install is more involved because `gpu4pyscf` ships CUDA-version-specific
-wheels that must match your CUDA toolkit.
+wheels that must match your CUDA toolkit. GPU environments and helper packages
+use the latest tested GPU4PySCF release, 1.8.1.
 
 To install all dependencies from PyPI, use the GPU specific package with the
 matching CUDA version, e.g., for CUDA 12:
@@ -81,30 +82,26 @@ matching CUDA version, e.g., for CUDA 12:
 pip install skala-cuda12x
 ```
 
-The `skala-cuda11x` and `skala-cuda13x` packages are also available for CUDA 11 and 13, respectively.
+The `skala-cuda13x` package is available for CUDA 13.
 
-The recommended path is the provided [`environment-gpu.yml`](environment-gpu.yml),
-which pins `pytorch-gpu`, CUDA 12, `cuda-nvrtc` and matching `cuda-cudart-dev`
-headers for CuPy kernel compilation, and `cutensor`, and installs
-`gpu4pyscf-cuda12x` from PyPI:
+For a reproducible source environment, choose one of the locked GPU environments:
 
-```bash
-mamba env create -n skala -f environment-gpu.yml
-mamba activate skala
-pip install skala
-```
+| Environment | CUDA | PyTorch |
+|---|---:|---:|
+| `gpu-cuda12-torch212` | 12 | 2.12 |
+| `gpu-cuda12-torch213` | 12 | 2.13 |
+| `gpu-cuda13-torch213` | 13 | 2.13 |
 
-If you are building inside a container without a GPU attached (e.g., CI or a
-Docker image built on a CPU-only host), set `CONDA_OVERRIDE_CUDA` so the solver
-proceeds without a device:
+For example:
 
 ```bash
-CONDA_OVERRIDE_CUDA=12.0 mamba env create -n skala -f environment-gpu.yml
+pixi install --locked -e gpu-cuda12-torch213
+pixi run -e gpu-cuda12-torch213 python your_script.py
 ```
 
-For CUDA 11 or 13, adjust `cuda-version`, `cuda-nvrtc`, `cuda-cudart-dev`, and
-the `gpu4pyscf-cuda{11,13}x` pin in `environment-gpu.yml` accordingly. Check
-your driver's maximum supported CUDA version with `nvidia-smi`.
+The workspace records CUDA 12 and CUDA 13 as explicit platforms, so the lock can
+be installed while building a container without an attached GPU. Check your
+driver's maximum supported CUDA version with `nvidia-smi`.
 
 Run an SCF calculation with Skala for a hydrogen molecule on GPU:
 

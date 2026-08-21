@@ -6,16 +6,14 @@ set -e
 set -o pipefail
 
 FILE=".devcontainer/skala_dev.Dockerfile"
-ENV_VARIANT="${1:-cpu}"
-BASE_NAME="skala-dev-${ENV_VARIANT}"
+BASE_NAME="skala-dev"
 TAG=${BASE_NAME}":"$(date +"%Y%m%dT%H%M%S")
 
-echo "Building Docker image with tag \"${TAG}\" (ENV_VARIANT=${ENV_VARIANT})" 
+echo "Building Docker image with tag \"${TAG}\""
 
 # To ignore the cache, use --no-cache
 docker build \
     --progress=plain \
-    --build-arg ENV_VARIANT="${ENV_VARIANT}" \
     --tag=${TAG} \
     --file=${FILE} \
     . \

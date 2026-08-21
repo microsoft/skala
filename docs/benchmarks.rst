@@ -93,11 +93,11 @@ because worker subprocesses inherit them:
 .. code-block:: bash
 
    git lfs pull
-   pip install -e '.[benchmark]'
-   python -m skala.benchmark fetch-dataset
+  pixi install --locked -e default
+  pixi run -e default python -m skala.benchmark fetch-dataset
    export OMP_NUM_THREADS=16
 
-   python -m skala.benchmark run benchmark-output \
+  pixi run -e default python -m skala.benchmark run benchmark-output \
      --env-id local-cpu \
      --env-label 'Local 16-core CPU' \
      --device cpu \
@@ -112,7 +112,7 @@ For a quick smoke test, use a separate output directory and restrict both molecu
 
 .. code-block:: bash
 
-   python -m skala.benchmark run benchmark-smoke \
+  pixi run -e default python -m skala.benchmark run benchmark-smoke \
      --env-id cpu-smoke \
      --device cpu \
      --max-atoms 3 \

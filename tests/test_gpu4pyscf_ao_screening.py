@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 from collections.abc import Callable, Iterator
 from types import SimpleNamespace
+from typing import Any
 
 import numpy as np
 import pytest
@@ -280,14 +283,14 @@ def test_gpu_screened_skala_matches_cpu_on_carbon_chain(
     assert isinstance(gpu_functional, ExcFunctionalBase)
 
     with force_ao_screening(False):
-        cpu_result = SkalaNumInt(cpu_functional, device=torch.device("cpu")).nr_rks(
-            mol, cpu_grids, None, dm
-        )
+        cpu_result: tuple[float, float, np.ndarray[Any, F64]] = SkalaNumInt(
+            cpu_functional, device=torch.device("cpu")
+        ).nr_rks(mol, cpu_grids, None, dm)
 
     with force_ao_screening(True):
-        gpu_result = SkalaNumInt(gpu_functional, device=torch.device("cuda:0")).nr_rks(
-            mol, gpu_grids, None, cupy.asarray(dm)
-        )
+        gpu_result: tuple[float, float, Array[Any, F64]] = SkalaNumInt(
+            gpu_functional, device=torch.device("cuda:0")
+        ).nr_rks(mol, gpu_grids, None, cupy.asarray(dm))
 
     gpu_vxc = cupy.asnumpy(gpu_result[2])
     vxc_difference = cpu_result[2] - gpu_vxc
@@ -376,7 +379,7 @@ def test_gpu_sparse_mask_sorts_scatters_and_unsorts(
     grids = SimpleNamespace(weights=weights, coords=coords)
 
     class FakeGpuNumInt:
-        def build(self, mol: gto.Mole, coords: Array[D2, F64]) -> "FakeGpuNumInt":
+        def build(self, mol: gto.Mole, coords: Array[D2, F64]) -> FakeGpuNumInt:
             self.gdftopt = SimpleNamespace(_ao_idx=sort_idx)
             return self
 

@@ -14,6 +14,27 @@ This project has adopted the [Microsoft Open Source Code of Conduct](https://ope
 For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/)
 or contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
 
+## Development setup
+
+Install Pixi 0.75, then create the default locked development environment from the repository root:
+
+```bash
+pixi install --locked -e default
+pixi run -e default pre-commit install
+```
+
+Run the standard checks through the tasks defined in `pixi.toml`:
+
+```bash
+pixi run -e default test
+pixi run -e default lint
+pixi run -e docs docs-html
+```
+
+Named compatibility environments cover Python 3.11 through 3.13, PySCF 2.14,
+PyTorch 2.12 and 2.13, GPU4PySCF 1.8.1, and CUDA 12 and 13. Keep `pixi.lock`
+synchronized with changes to `pixi.toml` or `pyproject.toml`.
+
 
 ## Model development
 
@@ -37,21 +58,21 @@ outside this synthetic benchmark. The tests use 200,000 deterministic grid point
 neither molecular setup nor golden output data. Run the CPU cases with four threads:
 
 ```bash
-OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 python -m pytest tests/test_traced_model_comparison.py -m model_benchmark -k cpu -v
+pixi run -e default model-benchmark-cpu
 ```
 
 On a CUDA-capable runner, execute both CPU and GPU cases by omitting the CPU filter:
 
 ```bash
-OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 python -m pytest tests/test_traced_model_comparison.py -m model_benchmark -v
+pixi run -e gpu-cuda12-torch213 model-benchmark-gpu
 ```
 
 The same comparison can be run as a standalone report. It prints maximum accuracy differences,
 local and published runtime medians, and isolated peak allocations for forward and backward work:
 
 ```bash
-python tests/test_traced_model_comparison.py --device cpu
-python tests/test_traced_model_comparison.py --device cuda
+pixi run -e default python tests/test_traced_model_comparison.py --device cpu
+pixi run -e gpu-cuda12-torch213 python tests/test_traced_model_comparison.py --device cuda
 ```
 
 Despite that feel free to open issues and PRs proposing model improvements, we are very

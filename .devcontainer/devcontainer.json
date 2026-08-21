@@ -2,16 +2,11 @@
     "name": "skala-dev-gpu",
     "build": {
         "dockerfile": "skala_dev.Dockerfile",
-        "context": "..",
-        "args": {
-            "ENV_VARIANT": "gpu"
-        }
+        "context": ".."
     },
-    "postCreateCommand": "",
-    "containerEnv": {
-        "PYTHONPATH": "${containerWorkspaceFolder}/src/"
-    },
+    "postCreateCommand": "pixi install --locked -e gpu-cuda12-torch211",
     "runArgs": [
+        "--gpus=all",
         "--shm-size=2gb",
         "--network=host"
     ],
@@ -45,7 +40,8 @@
                 ],
                 "mypy-type-checker.args": [
                     "--config-file=pyproject.toml"
-                ]
+                ],
+                "python.defaultInterpreterPath": "${containerWorkspaceFolder}/.pixi/envs/gpu-cuda12-torch211/bin/python"
             }
         }
     }

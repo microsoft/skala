@@ -14,7 +14,8 @@ We will cover
 
 .. tip::
 
-   For building GauXC and installing in the conda environment checkout :ref:`gauxc_install`.
+   For building GauXC and installing it into a locked Pixi environment, see
+   :ref:`gauxc_install`.
 
 Setting up CMake
 ----------------
@@ -464,12 +465,13 @@ The link interface of target "gauxc::gauxc" contains "gau2grid::gg" but the targ
 
 OpenMP not found with Apple Clang
     On macOS OpenMP support is not provided by default with Apple Clang.
-    Either disable OpenMP using the CMake option ``-DSkala_GauXC_ENABLE_OPENMP=OFF`` or install a version of Clang with OpenMP support, for example from conda-forge, and set the ``CXX`` environment variable to point to the new compiler.
+    Either disable OpenMP using the CMake option ``-DSkala_GauXC_ENABLE_OPENMP=OFF``
+    or provide an OpenMP-capable Clang toolchain.
 
 libtorch not found
-    Ensure that the libtorch library is installed and in the ``CMAKE_PREFIX_PATH``.
-    The libtorch library is part of the pytorch package on conda-forge and can be installed with
+    Use one of the ``gauxc-*`` Pixi environments and run CMake through
+    ``pixi run -e <environment>`` so LibTorch is in ``CMAKE_PREFIX_PATH``.
 
     .. code-block:: shell
 
-       conda install -c conda-forge pytorch
+       pixi run -e gauxc-openmp cmake --build ../build_example
