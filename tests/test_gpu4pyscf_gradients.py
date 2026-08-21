@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from typing import Any
 
 import pytest
 import torch
@@ -83,6 +84,33 @@ def test_torch_allocator_rejects_mismatched_streams() -> None:
         torch_allocator.use_torch_mempool_in_cupy()
         with pytest.raises(RuntimeError, match="must be same"):
             cupy.empty(1)
+
+
+def test_torch_allocator_free_delegates_before_finalization() -> None:
+    freed_pointers: list[int] = []
+    free_callback: Any = torch_allocator._torch_free
+
+    free_callback(
+        123,
+        0,
+        caching_allocator_delete=freed_pointers.append,
+        is_finalizing=lambda: False,
+    )
+
+    assert freed_pointers == [123]
+
+
+def test_torch_allocator_free_skips_interpreter_finalization() -> None:
+    def fail_if_called(mem_ptr: int) -> None:
+        raise AssertionError(f"unexpected allocator deletion for {mem_ptr}")
+
+    free_callback: Any = torch_allocator._torch_free
+    free_callback(
+        123,
+        0,
+        caching_allocator_delete=fail_if_called,
+        is_finalizing=lambda: True,
+    )
 
 
 @pytest.fixture(params=["HF", "H2O", "H2O+"])

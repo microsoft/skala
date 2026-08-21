@@ -155,6 +155,8 @@ jobs:
         -m "gpu and not profiling and not model_benchmark"
         tests/
       shell: micromamba-shell {0}
+      env:
+        CUDA_LAUNCH_BLOCKING: 1
 
     - name: Run GPU doctests
       run: >-
