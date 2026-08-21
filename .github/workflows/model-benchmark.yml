@@ -6,8 +6,8 @@ on:
     paths: &model-benchmark-paths
       - '.github/workflows/model-benchmark.yml'
       - 'conftest.py'
-      - 'environment-cpu.yml'
-      - 'environment-gpu.yml'
+      - 'pixi.lock'
+      - 'pixi.toml'
       - 'pyproject.toml'
       - 'src/skala/__init__.py'
       - 'src/skala/features.py'
@@ -34,28 +34,18 @@ jobs:
     - name: Print CPU diagnostics
       uses: ./.github/actions/cpu-diagnostics
 
-    - name: Setup micromamba
-      uses: mamba-org/setup-micromamba@f457c30a868e4760d3a6fcea5f25dc655b8edf39 # v3
+    - name: Setup Pixi
+      uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
       with:
-        environment-file: environment-cpu.yml
-        environment-name: skala
-        cache-environment: false
-        cache-downloads: true
-        create-args: >-
-          python=3.12
-
-    - name: Install package in development mode
-      run: pip install -e . --no-deps
-      shell: micromamba-shell {0}
+        pixi-version: v0.75.0
+        pixi-bin-path: ${{ runner.temp }}/bin/pixi
+        environments: default
+        locked: true
+        cache: false
+        post-cleanup: true
 
     - name: Run CPU model benchmarks
-      run: >-
-        pytest
-        -v
-        -m model_benchmark
-        -k cpu
-        tests/test_traced_model_comparison.py
-      shell: micromamba-shell {0}
+      run: pixi run model-benchmark-cpu
 
   gpu:
     name: GPU model benchmark
@@ -69,30 +59,18 @@ jobs:
     - name: Print CPU diagnostics
       uses: ./.github/actions/cpu-diagnostics
 
-    - name: Setup micromamba
-      uses: mamba-org/setup-micromamba@4b9113af4fba0e9e1124b252dd6497a419e7396d # v1
+    - name: Setup Pixi
+      uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
       with:
-        environment-file: environment-gpu.yml
-        environment-name: skala-gpu
-        cache-environment: false
-        cache-downloads: true
-
-    - name: Install package in development mode
-      run: pip install -e . --no-deps
-      shell: micromamba-shell {0}
+        pixi-version: v0.75.0
+        pixi-bin-path: ${{ runner.temp }}/bin/pixi
+        environments: gpu-cuda12-torch213
+        locked: true
+        cache: false
+        post-cleanup: true
 
     - name: Verify CUDA is available
-      run: >-
-        python -c
-        "import cupy, torch; assert torch.cuda.is_available();
-        cupy.linalg.norm(cupy.arange(3.0)).get()"
-      shell: micromamba-shell {0}
+      run: pixi run -e gpu-cuda12-torch213 gpu-verify
 
     - name: Run GPU model benchmarks
-      run: >-
-        pytest
-        -v
-        -m model_benchmark
-        -k cuda
-        tests/test_traced_model_comparison.py
-      shell: micromamba-shell {0}
+      run: pixi run -e gpu-cuda12-torch213 model-benchmark-gpu

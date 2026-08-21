@@ -2,6 +2,8 @@
 
 """Blockwise atomic-orbital feature evaluation and custom autograd."""
 
+from __future__ import annotations
+
 from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Protocol, cast

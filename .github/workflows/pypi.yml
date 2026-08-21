@@ -12,15 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [skala, microsoft-skala]
-        cuda: ['']
-        include:
-          - package: skala-cuda
-            cuda: 11x
-          - package: skala-cuda
-            cuda: 12x
-          - package: skala-cuda
-            cuda: 13x
+        package: [skala, microsoft-skala, skala-cuda12x, skala-cuda13x]
 
     steps:
     - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -30,49 +22,50 @@ jobs:
     - name: Print CPU diagnostics
       uses: ./.github/actions/cpu-diagnostics
 
-    - name: Set up Python
-      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+    - name: Setup Pixi
+      uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
       with:
-        python-version: "3.11"
-
-    - name: Install pypa/build
-      run: >-
-        python3 -m
-        pip install
-        build
-        --user
-
-    - name: Replace pyproject.toml
-      if: ${{ matrix.package == 'microsoft-skala' }}
-      run: |
-        VERSION=$(python3 -c "from tomllib import load; print(load(open('pyproject.toml', 'rb'))['project']['version'])")
-        rm -r src/skala
-        mkdir -p src/microsoft_skala
-        echo "from skala import *" > src/microsoft_skala/__init__.py
-        touch src/microsoft_skala/py.typed
-        sed -e "s/@VERSION@/$VERSION/g" .github/workflows/pypi/microsoft-skala.toml > pyproject.toml
-        cat pyproject.toml
-
-    - name: Replace pyproject.toml
-      if: ${{ matrix.package == 'skala-cuda' }}
-      run: |
-        VERSION=$(python3 -c "from tomllib import load; print(load(open('pyproject.toml', 'rb'))['project']['version'])")
-        CUDA=${{ matrix.cuda }}
-        rm -r src/skala
-        mkdir -p src/skala_cuda
-        echo "from skala import *" > src/skala_cuda/__init__.py
-        touch src/skala_cuda/py.typed
-        sed -e "s/@VERSION@/$VERSION/g" -e "s/@CUDA@/$CUDA/g" .github/workflows/pypi/skala-cuda.toml > pyproject.toml
-        cat pyproject.toml
+        pixi-version: v0.75.0
+        environments: release
+        locked: true
+        cache: false
 
     - name: Build a binary wheel and a source tarball
-      run: python3 -m build
+      run: pixi run -e release build-release ${{ matrix.package }}
 
     - name: Store the distribution packages
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
-        name: ${{ matrix.package }}${{ matrix.cuda }}-pkg
+        name: ${{ matrix.package }}-pkg
         path: dist/
+
+  build-conda:
+    name: Build unpublished conda artifact
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      with:
+        persist-credentials: false
+
+    - name: Print CPU diagnostics
+      uses: ./.github/actions/cpu-diagnostics
+
+    - name: Setup Pixi
+      uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
+      with:
+        pixi-version: v0.75.0
+        environments: release
+        locked: true
+        cache: false
+
+    - name: Build conda artifact
+      run: pixi run -e release build-conda
+
+    - name: Store conda artifact
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      with:
+        name: skala-conda-pkg
+        path: dist-conda/*.conda
 
   publish-to-pypi:
     name: Publish to PyPI
@@ -83,7 +76,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [skala, microsoft-skala, skala-cuda11x, skala-cuda12x, skala-cuda13x]
+        package: [skala, microsoft-skala, skala-cuda12x, skala-cuda13x]
     environment:
       name: pypi
       url: https://pypi.org/p/${{ matrix.package }}

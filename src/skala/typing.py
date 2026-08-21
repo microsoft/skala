@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MIT
 
+
 from typing import TypeAlias
 
 import numpy as np

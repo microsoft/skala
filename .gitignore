@@ -332,7 +332,12 @@ paket-files/
 __pycache__/
 *.pyc
 *.egg-info/
+.pixi/
 jupyter_execute/
+/build/
+/build_example/
+/dist/
+/dist-conda/
 
 # Cake - Uncomment if you are using it
 # tools/**

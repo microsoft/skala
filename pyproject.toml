@@ -15,52 +15,22 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
     "Development Status :: 5 - Production/Stable",
 ]
 requires-python = ">=3.11,<3.14"
 dependencies = [
     "ase",
     "e3nn",
+    "h5py",
     "huggingface_hub",
     "numpy",
     "opt_einsum_fx",
-    "pyscf>=2.11,<2.15",
+    "pyscf>=2.14,<2.15",
     "pyscf-dispersion>=1.5; sys_platform == 'linux'",
     "dftd3>=1.2.1,<1.3; sys_platform == 'darwin'",
-    "dftd3>=1.3; sys_platform != 'linux' and sys_platform != 'darwin'",
-    "torch>=2.9"
-]
-
-optional-dependencies.dev = [
-    "pre-commit",
-    "mypy>=2",
-    "memray",
-    "pytest",
-    "pytest-benchmark",
-    "pytest-cov",
-    "pytest-randomly",
-    "pytest-timeout",
-]
-optional-dependencies.doc = [
-    "ipywidgets",
-    "jinja2",
-    "markdown-it-py",
-    "myst-nb",
-    "pandas",
-    "pyyaml",
-    "sphinx",
-    "sphinx-book-theme",
-    "sphinx-design",
-    "sphinxcontrib-bibtex",
-    "sphinxcontrib-moderncmakedomain",
-    "sphinx-fortran",
-]
-optional-dependencies.benchmark = [
-    "jinja2",
-    "markdown-it-py",
-    "pandas",
-    "pyarrow",
-    "pyyaml",
+    "torch>=2.12,<2.14"
 ]
 
 urls.repository = "https://github.com/microsoft/skala"
@@ -76,7 +46,7 @@ urls.homepage = "https://aka.ms/dft"
 [tool.mypy]
 strict = true
 no_namespace_packages = true
-python_version = "3.12"
+python_version = "3.11"
 exclude = ["third_party/"]
 disable_error_code = ["no-any-return", "unused-ignore"]
 
@@ -132,7 +102,7 @@ markers = [
 ]
 filterwarnings = [
     "error",
-    # PyTorch 2.11 deprecated `torch.jit.load`; Skala's pretrained checkpoints
+    # Supported PyTorch versions deprecate `torch.jit.load`; Skala's pretrained checkpoints
     # are TorchScript archives, so `skala.functional.load` still uses it.
     'ignore:`torch\.jit\.load` is deprecated\. Please switch to `torch\.export`\.:DeprecationWarning',
     'ignore:`torch\.jit\.script` is deprecated\. Please switch to `torch\.compile` or `torch\.export`\.:DeprecationWarning',

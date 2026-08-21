@@ -67,6 +67,7 @@ from skala.gpu4pyscf.gradients import SkalaRKSGradient, SkalaUKSGradient
 from skala.gpu4pyscf.grids import SkalaGrids
 from skala.pyscf.numint import SkalaNumInt
 from skala.pyscf.utils import pyscf_version_newer_than_2_10
+from skala.typing import F64
 
 
 class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
@@ -80,6 +81,8 @@ class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
 
     cphf_grids: SkalaGrids
     """Grids object for CPHF"""
+
+    _numint: SkalaNumInt[cp.ndarray[Any, F64]]
 
     def __init__(
         self, mol: gto.Mole, xc: ExcFunctionalBase, *, with_dftd3: bool = True
@@ -162,6 +165,8 @@ class SkalaUKS(dft.uks.UKS):  # type: ignore[misc]
 
     cphf_grids: SkalaGrids
     """Grids object for CPHF"""
+
+    _numint: SkalaNumInt[cp.ndarray[Any, F64]]
 
     def __init__(
         self, mol: gto.Mole, xc: ExcFunctionalBase, *, with_dftd3: bool = True

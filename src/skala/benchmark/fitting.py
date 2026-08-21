@@ -8,6 +8,7 @@ import bisect
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
+from itertools import pairwise
 from typing import TypeAlias
 
 import numpy as np
@@ -167,7 +168,7 @@ def _candidate_knots(
     for index in range(1, unique_x.size - 1):
         candidates.add(float(unique_x[index]))
 
-    for left, right in zip(unique_x[1:-2], unique_x[2:-1], strict=True):
+    for left, right in pairwise(unique_x[1:-1]):
         candidates.add(float((left + right) / 2.0))
 
     sorted_indices = np.argsort(x, kind="stable")

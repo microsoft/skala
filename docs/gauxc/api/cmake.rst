@@ -135,7 +135,8 @@ Using an installed GauXC
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
 To integrate GauXC into your build system, you can use CMake's ``find_package`` command to locate the GauXC package and link against it in your ``CMakeLists.txt`` file.
-Make sure that the ``CMAKE_PREFIX_PATH`` variable includes the path to your GauXC installation (e.g., ``${CONDA_PREFIX}`` if installed via Conda).
+Make sure that the ``CMAKE_PREFIX_PATH`` variable includes the path to your GauXC installation.
+Pixi tasks set it to the selected environment, also exposed as ``${CONDA_PREFIX}``.
 
 .. code-block:: cmake
 

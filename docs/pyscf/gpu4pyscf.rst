@@ -22,21 +22,23 @@ The Skala functional can also be used in GPU4PySCF with an appropriate PyTorch C
 Installation
 ------------
 
-The recommended way to set up a GPU environment is the provided
-``environment-gpu.yml``, which pins ``pytorch-gpu``, ``cuda-version 12``,
-``cuda-nvrtc`` and matching ``cuda-cudart-dev`` headers for CuPy kernel
-compilation, and ``cutensor``. It installs ``gpu4pyscf-cuda12x >=1.8,<1.9``
-from PyPI as part of the environment file:
+The repository provides three locked GPU environments. They combine conda-forge
+PyTorch and CUDA libraries with PyPI PySCF and the latest tested GPU4PySCF
+release, 1.8.1:
+
+* ``gpu-cuda12-torch212``
+* ``gpu-cuda12-torch213``
+* ``gpu-cuda13-torch213``
+
+Install and verify one from the repository root, for example:
 
 .. code-block:: bash
 
-   mamba env create -n skala -f environment-gpu.yml
-   mamba activate skala
-   pip install skala
+   pixi install --locked -e gpu-cuda12-torch213
+   pixi run -e gpu-cuda12-torch213 gpu-verify
 
-For CUDA 11 or 13, adjust ``cuda-version``, ``cuda-nvrtc``,
-``cuda-cudart-dev``, and the ``gpu4pyscf-cuda{11,13}x`` pin in
-``environment-gpu.yml`` accordingly.
+CUDA 12 and CUDA 13 are supported. Check your driver's maximum supported CUDA
+version with ``nvidia-smi`` before selecting an environment.
 
-See the :doc:`installation guide </installation>` for more details, including
-how to install from conda-forge or inside a container without a GPU attached.
+See the :doc:`installation guide </installation>` for the complete compatibility
+matrix and container-build details.
