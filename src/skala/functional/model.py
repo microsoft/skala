@@ -501,7 +501,21 @@ class NonLocalModel(nn.Module):
         h_fine = self.post_up_layer(h_fine)
 
         # Non-linear transform with skip connection
-        features = torch.cat([features, h_fine * exp_m1_rho_total], dim=-1)
+        update = h_fine * exp_m1_rho_total
+        if features.is_cuda:
+            concat_linear = cast(nn.Linear, self.concat_layer[0])
+            features = torch.nn.functional.linear(
+                features,
+                concat_linear.weight[:, : self.input_nf],
+                concat_linear.bias,
+            )
+            features = features + torch.nn.functional.linear(
+                update,
+                concat_linear.weight[:, self.input_nf :],
+            )
+            return self.concat_layer[1](features)
+
+        features = torch.cat([features, update], dim=-1)
         return self.concat_layer(features)
 
     @property
