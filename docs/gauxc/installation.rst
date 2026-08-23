@@ -82,8 +82,8 @@ Download the pre-packaged source bundle from the Skala release page:
       tar xzvf gauxc-skala-r2.tar.gz
 
 The archive expands into a ``gauxc`` directory that already contains the Skala
-patches. Place it beside the Skala checkout because the Pixi build tasks use
-this layout:
+patches. Place it beside the Skala checkout because the CMake commands below
+assume this layout:
 
 .. code-block:: text
 
@@ -105,41 +105,72 @@ this layout:
 Configure and build
 -------------------
 
-From the Skala repository root, pick the environment and task argument that
-match your backend. The first argument selects the enabled language bindings;
-use ``c``, ``cpp``, or ``fortran``.
+From the Skala repository root, pick the environment and CMake options that
+match your backend. The following commands build the C++ API; enable
+:cmake:variable:`GAUXC_ENABLE_C` or :cmake:variable:`GAUXC_ENABLE_FORTRAN` when
+building the C or Fortran examples.
 
 .. tab-set::
    :sync-group: config
 
    .. tab-item:: OpenMP
 
-      .. code-block:: none
+         .. code-block:: bash
 
-             pixi run -e gauxc-openmp gauxc-configure cpp openmp
-             pixi run -e gauxc-openmp gauxc-build
-             pixi run -e gauxc-openmp gauxc-install
+             pixi run -e gauxc-openmp bash -c \
+                'cmake -B ../build_gauxc -S ../gauxc -G Ninja \
+                   -DGAUXC_ENABLE_OPENMP=ON \
+                   -DGAUXC_ENABLE_MPI=OFF \
+                   -DGAUXC_ENABLE_CUDA=OFF \
+                   -DGAUXC_ENABLE_ONEDFT=ON \
+                   -DGAUXC_ENABLE_C=OFF \
+                   -DGAUXC_ENABLE_FORTRAN=OFF \
+                   -DGAUXC_ENABLE_TESTS=OFF \
+                   -DBUILD_SHARED_LIBS=ON \
+                   -DCMAKE_INSTALL_PREFIX="$CONDA_PREFIX"'
+             pixi run -e gauxc-openmp cmake --build ../build_gauxc
+             pixi run -e gauxc-openmp cmake --install ../build_gauxc
 
    .. tab-item:: MPI
 
-      .. code-block:: none
+         .. code-block:: bash
 
-             pixi run -e gauxc-mpi gauxc-configure cpp mpi
-             pixi run -e gauxc-mpi gauxc-build
-             pixi run -e gauxc-mpi gauxc-install
+             pixi run -e gauxc-mpi bash -c \
+                'cmake -B ../build_gauxc -S ../gauxc -G Ninja \
+                   -DGAUXC_ENABLE_OPENMP=OFF \
+                   -DGAUXC_ENABLE_MPI=ON \
+                   -DGAUXC_ENABLE_CUDA=OFF \
+                   -DGAUXC_ENABLE_ONEDFT=ON \
+                   -DGAUXC_ENABLE_C=OFF \
+                   -DGAUXC_ENABLE_FORTRAN=OFF \
+                   -DGAUXC_ENABLE_TESTS=OFF \
+                   -DBUILD_SHARED_LIBS=ON \
+                   -DCMAKE_INSTALL_PREFIX="$CONDA_PREFIX"'
+             pixi run -e gauxc-mpi cmake --build ../build_gauxc
+             pixi run -e gauxc-mpi cmake --install ../build_gauxc
 
    .. tab-item:: CUDA
 
-      .. code-block:: none
+      .. code-block:: bash
 
-             pixi run -e gauxc-cuda12 gauxc-configure cpp cuda
-             pixi run -e gauxc-cuda12 gauxc-build
-             pixi run -e gauxc-cuda12 gauxc-install
+         pixi run -e gauxc-cuda12 bash -c \
+           'cmake -B ../build_gauxc -S ../gauxc -G Ninja \
+             -DGAUXC_ENABLE_OPENMP=ON \
+             -DGAUXC_ENABLE_MPI=OFF \
+             -DGAUXC_ENABLE_CUDA=ON \
+             -DCMAKE_CUDA_ARCHITECTURES="${CMAKE_CUDA_ARCHITECTURES:-60}" \
+             -DGAUXC_ENABLE_ONEDFT=ON \
+             -DGAUXC_ENABLE_C=OFF \
+             -DGAUXC_ENABLE_FORTRAN=OFF \
+             -DGAUXC_ENABLE_TESTS=OFF \
+             -DBUILD_SHARED_LIBS=ON \
+             -DCMAKE_INSTALL_PREFIX="$CONDA_PREFIX"'
+         pixi run -e gauxc-cuda12 cmake --build ../build_gauxc
+         pixi run -e gauxc-cuda12 cmake --install ../build_gauxc
 
-            CUDA tasks default to compute capability 6.0, GauXC's minimum for FP64
-            atomics. Set ``CMAKE_CUDA_ARCHITECTURES`` for the deployment GPU, for
-            example ``CMAKE_CUDA_ARCHITECTURES=80 pixi run -e gauxc-cuda12
-            gauxc-configure cpp cuda``.
+      This defaults to compute capability 6.0, GauXC's minimum for FP64
+      atomics. Set ``CMAKE_CUDA_ARCHITECTURES`` before the configure command for
+      the deployment GPU, for example ``CMAKE_CUDA_ARCHITECTURES=80``.
 
 .. note::
 
@@ -162,7 +193,8 @@ which can be compared against other libraries.
 
 .. code-block:: bash
 
-   pixi run -e gauxc-openmp gauxc-run-tpss
+   pixi run -e gauxc-openmp Skala \
+     ../gauxc/tests/ref_data/onedft_he_def2qzvp_tpss_uks.hdf5 --model TPSS
 
 Expected output includes the total TPSS energy computed using a checkpoint compatible for the Skala implementation
 for the reference density matrix.
@@ -177,12 +209,12 @@ for the reference density matrix.
 Install the library
 -------------------
 
-The ``gauxc-install`` task installs into the selected Pixi environment so
+The CMake install command installs into the selected Pixi environment so
 downstream projects can discover its CMake config files.
 
 .. code-block:: bash
 
-   pixi run -e gauxc-openmp gauxc-install
+   pixi run -e gauxc-openmp cmake --install ../build_gauxc
 
 This installs headers, libraries, and CMake config.
 

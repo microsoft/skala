@@ -12,10 +12,11 @@ pixi install --locked -e cpp-integration
 
 ## Build library
 
-The Pixi task configures and builds the example with CMake and Ninja:
+Configure and build the example with CMake and Ninja in the Pixi environment:
 
 ```bash
-pixi run -e cpp-integration cpp-build
+pixi run -e cpp-integration cmake -B build_example -S examples/cpp/cpp_integration -G Ninja
+pixi run -e cpp-integration cmake --build build_example
 ```
 
 ## Run example
@@ -35,7 +36,7 @@ pixi run -e default generate-features
 Finally, run $E_\text{xc}$ and (partial) $V_\text{xc}$ computations with the C++ example:
 
 ```bash
-pixi run -e cpp-integration cpp-run
+pixi run -e cpp-integration ./build_example/skala_cpp_integration ./skala-1.1-rev1.fun ./features
 ```
 
 **Note:** You are expected to add D3 dispersion correction (using b3lyp settings) to the final energy of Skala.

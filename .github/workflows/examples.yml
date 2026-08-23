@@ -100,33 +100,61 @@ jobs:
 
     - name: Configure GauXC
       if: ${{ matrix.gauxc == 'release' }}
-      run: >-
-        pixi run --manifest-path skala/pixi.toml
-        -e ${{ matrix.environment }}
-        gauxc-configure ${{ matrix.example }} ${{ matrix.toolchain }}
+      working-directory: skala
+      env:
+        GAUXC_ENABLE_C: ${{ matrix.example != 'cpp' && 'ON' || 'OFF' }}
+        GAUXC_ENABLE_FORTRAN: ${{ matrix.example == 'fortran' && 'ON' || 'OFF' }}
+        GAUXC_ENABLE_MPI: ${{ matrix.toolchain == 'mpi' && 'ON' || 'OFF' }}
+        GAUXC_ENABLE_OPENMP: ${{ matrix.toolchain == 'openmp' && 'ON' || 'OFF' }}
+      run: |
+        pixi run -e ${{ matrix.environment }} bash -c \
+          'cmake -B ../build_gauxc -S ../gauxc -G Ninja \
+            -DGAUXC_ENABLE_OPENMP="$GAUXC_ENABLE_OPENMP" \
+            -DGAUXC_ENABLE_MPI="$GAUXC_ENABLE_MPI" \
+            -DGAUXC_ENABLE_CUDA=OFF \
+            -DGAUXC_ENABLE_ONEDFT=ON \
+            -DGAUXC_ENABLE_C="$GAUXC_ENABLE_C" \
+            -DGAUXC_ENABLE_FORTRAN="$GAUXC_ENABLE_FORTRAN" \
+            -DGAUXC_ENABLE_TESTS=OFF \
+            -DBUILD_SHARED_LIBS=ON \
+            -DCMAKE_INSTALL_PREFIX="$CONDA_PREFIX"'
 
     - name: Build GauXC
       if: ${{ matrix.gauxc == 'release' }}
-      run: pixi run --manifest-path skala/pixi.toml -e ${{ matrix.environment }} gauxc-build
+      working-directory: skala
+      run: pixi run -e ${{ matrix.environment }} cmake --build ../build_gauxc
 
     - name: Install GauXC
       if: ${{ matrix.gauxc == 'release' }}
-      run: pixi run --manifest-path skala/pixi.toml -e ${{ matrix.environment }} gauxc-install
+      working-directory: skala
+      run: pixi run -e ${{ matrix.environment }} cmake --install ../build_gauxc
 
     - name: Configure project
-      run: >-
-        pixi run --manifest-path skala/pixi.toml
-        -e ${{ matrix.environment }}
-        gauxc-example-configure ${{ matrix.example }} ${{ matrix.toolchain }}
+      working-directory: skala
+      env:
+        GAUXC_ENABLE_MPI: ${{ matrix.toolchain == 'mpi' && 'ON' || 'OFF' }}
+        GAUXC_ENABLE_OPENMP: ${{ matrix.toolchain == 'openmp' && 'ON' || 'OFF' }}
+      run: |
+        pixi run -e ${{ matrix.environment }} bash -c \
+          'cmake -B ../build_example -S examples/${{ matrix.example }}/gauxc_integration -G Ninja \
+            -DSkala_GauXC_ENABLE_OPENMP="$GAUXC_ENABLE_OPENMP" \
+            -DSkala_GauXC_ENABLE_MPI="$GAUXC_ENABLE_MPI" \
+            -DSkala_GauXC_ENABLE_CUDA=OFF \
+            -DCMAKE_INSTALL_PREFIX="$CONDA_PREFIX"'
 
     - name: Build project
-      run: pixi run --manifest-path skala/pixi.toml -e ${{ matrix.environment }} gauxc-example-build
+      working-directory: skala
+      run: pixi run -e ${{ matrix.environment }} cmake --build ../build_example
 
     - name: Install project
-      run: pixi run --manifest-path skala/pixi.toml -e ${{ matrix.environment }} gauxc-example-install
+      working-directory: skala
+      run: pixi run -e ${{ matrix.environment }} cmake --install ../build_example
 
     - name: Run example
-      run: pixi run --manifest-path skala/pixi.toml -e ${{ matrix.environment }} gauxc-run-tpss
+      working-directory: skala
+      run: |
+        pixi run -e ${{ matrix.environment }} Skala \
+          ../gauxc/tests/ref_data/onedft_he_def2qzvp_tpss_uks.hdf5 --model TPSS
 
     - name: Download checkpoint
       uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
@@ -135,4 +163,8 @@ jobs:
         path: skala
 
     - name: Run example
-      run: pixi run --manifest-path skala/pixi.toml -e ${{ matrix.environment }} gauxc-run-checkpoint
+      working-directory: skala
+      run: |
+        pixi run -e ${{ matrix.environment }} Skala \
+          ../gauxc/tests/ref_data/onedft_he_def2qzvp_tpss_uks.hdf5 \
+          --model ./skala-1.1-rev1.fun

@@ -20,7 +20,18 @@ Configure, build, and install the example with:
 
 .. code-block:: bash
 
-   pixi run -e ftorch ftorch-install
+   pixi run -e ftorch bash -c \
+     'cmake -B build_example -S examples/fortran/ftorch_integration -G Ninja \
+       -DCMAKE_INSTALL_PREFIX="$CONDA_PREFIX"'
+   pixi run -e ftorch cmake --build build_example
+   pixi run -e ftorch cmake --install build_example
+
+After downloading the checkpoint and generating the input features, run the
+installed example directly:
+
+.. code-block:: bash
+
+   pixi run -e ftorch Skala ./skala-1.1-rev1.fun ./features
 
 
 Build system setup

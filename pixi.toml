@@ -224,43 +224,6 @@ libcublas-dev = ">=12,<13"
 libcusparse-dev = ">=12,<13"
 libmagma-devel = ">=2.10,<2.11"
 
-[feature.gauxc-core.tasks.gauxc-configure]
-args = [
-  { arg = "example", choices = ["c", "cpp", "fortran"] },
-  { arg = "toolchain", choices = ["openmp", "mpi", "cuda"] },
-]
-cmd = """bash -c 'cmake -B ../build_gauxc -S ../gauxc -G Ninja -DGAUXC_ENABLE_OPENMP={% if toolchain == "openmp" or toolchain == "cuda" %}ON{% else %}OFF{% endif %} -DGAUXC_ENABLE_MPI={% if toolchain == "mpi" %}ON{% else %}OFF{% endif %} -DGAUXC_ENABLE_CUDA={% if toolchain == "cuda" %}ON{% else %}OFF{% endif %}{% if toolchain == "cuda" %} -DCMAKE_CUDA_ARCHITECTURES="${CMAKE_CUDA_ARCHITECTURES:-60}"{% endif %} -DGAUXC_ENABLE_ONEDFT=ON -DGAUXC_ENABLE_C={% if example == "cpp" %}OFF{% else %}ON{% endif %} -DGAUXC_ENABLE_FORTRAN={% if example == "fortran" %}ON{% else %}OFF{% endif %} -DGAUXC_ENABLE_TESTS=OFF -DBUILD_SHARED_LIBS=ON -DCMAKE_INSTALL_PREFIX="$CONDA_PREFIX"'"""
-
-[feature.gauxc-core.tasks]
-gauxc-build = "cmake --build ../build_gauxc"
-gauxc-install = "cmake --install ../build_gauxc"
-gauxc-run-tpss = "Skala ../gauxc/tests/ref_data/onedft_he_def2qzvp_tpss_uks.hdf5 --model TPSS"
-gauxc-run-checkpoint = "Skala ../gauxc/tests/ref_data/onedft_he_def2qzvp_tpss_uks.hdf5 --model ./skala-1.1-rev1.fun"
-
-[feature.gauxc-core.tasks.gauxc-example-configure]
-args = [
-  { arg = "example", choices = ["c", "cpp", "fortran"] },
-  { arg = "toolchain", choices = ["openmp", "mpi", "cuda"] },
-]
-cmd = """bash -c 'cmake -B ../build_example -S examples/{{ example }}/gauxc_integration -G Ninja -DSkala_GauXC_ENABLE_OPENMP={% if toolchain == "openmp" or toolchain == "cuda" %}ON{% else %}OFF{% endif %} -DSkala_GauXC_ENABLE_MPI={% if toolchain == "mpi" %}ON{% else %}OFF{% endif %} -DSkala_GauXC_ENABLE_CUDA={% if toolchain == "cuda" %}ON{% else %}OFF{% endif %}{% if toolchain == "cuda" %} -DCMAKE_CUDA_ARCHITECTURES="${CMAKE_CUDA_ARCHITECTURES:-60}"{% endif %} -DCMAKE_INSTALL_PREFIX="$CONDA_PREFIX"'"""
-
-[feature.gauxc-core.tasks.gauxc-example-build]
-cmd = "cmake --build ../build_example"
-
-[feature.gauxc-core.tasks.gauxc-example-install]
-cmd = "cmake --install ../build_example"
-
-[feature.cpp-example.tasks]
-cpp-configure = "cmake -B build_example -S examples/cpp/cpp_integration -G Ninja"
-cpp-build = { cmd = "cmake --build build_example", depends-on = ["cpp-configure"] }
-cpp-run = "./build_example/skala_cpp_integration ./skala-1.1-rev1.fun ./features"
-
-[feature.ftorch.tasks]
-ftorch-configure = "cmake -B build_example -S examples/fortran/ftorch_integration -G Ninja -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX"
-ftorch-build = { cmd = "cmake --build build_example", depends-on = ["ftorch-configure"] }
-ftorch-install = { cmd = "cmake --install build_example", depends-on = ["ftorch-build"] }
-ftorch-run = "Skala ./skala-1.1-rev1.fun ./features"
-
 [environments]
 default = { features = ["python-runtime", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-213-cpu", "test", "lint", "profiling", "benchmark"], no-default-feature = true, platforms = ["linux-64", "linux-aarch64", "osx-arm64"] }
 lint = { features = ["python-runtime", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-213-cpu", "test", "lint", "profiling", "benchmark"], no-default-feature = true, platforms = ["linux-64"] }
@@ -274,13 +237,13 @@ gpu-cuda13-torch213 = { features = ["python-runtime", "model-assets", "python-31
 docs = { features = ["python-runtime", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-213-cpu", "benchmark", "docs"], no-default-feature = true, platforms = ["linux-64"] }
 assets = { features = ["python-312", "model-assets"], no-default-feature = true, platforms = ["linux-64"] }
 release = { features = ["python-312", "release"], no-default-feature = true, platforms = ["linux-64"] }
-cpp-integration = { features = ["python-runtime", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-213-cpu", "native-toolchain", "cpp-example"], no-default-feature = true, platforms = ["linux-64"] }
+cpp-integration = { features = ["python-runtime", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-213-cpu", "native-toolchain"], no-default-feature = true, platforms = ["linux-64"] }
 gauxc-openmp = { features = ["python-312", "torch-213-cpu", "native-toolchain", "gauxc-core", "gauxc-cpu", "hdf5-serial"], no-default-feature = true, platforms = ["linux-64"] }
 gauxc-openmp-fortran = { features = ["python-312", "torch-213-cpu", "native-toolchain", "fortran", "gauxc-core", "gauxc-cpu", "hdf5-serial"], no-default-feature = true, platforms = ["linux-64"] }
 gauxc-mpi = { features = ["python-312", "torch-213-cpu", "native-toolchain", "gauxc-core", "gauxc-cpu", "mpi"], no-default-feature = true, platforms = ["linux-64"] }
 gauxc-mpi-fortran = { features = ["python-312", "torch-213-cpu", "native-toolchain", "fortran", "gauxc-core", "gauxc-cpu", "mpi"], no-default-feature = true, platforms = ["linux-64"] }
 gauxc-cuda12 = { features = ["python-312", "torch-213-gpu", "native-toolchain", "gauxc-core", "gauxc-cuda12", "hdf5-serial"], no-default-feature = true, platforms = ["linux-64-cuda12"] }
-ftorch = { features = ["python-312", "model-assets", "torch-213-cpu", "native-toolchain", "fortran", "ftorch"], no-default-feature = true, platforms = ["linux-64"] }
+ftorch = { features = ["python-312", "model-assets", "torch-213-cpu", "native-toolchain", "fortran"], no-default-feature = true, platforms = ["linux-64"] }
 
 [package]
 name = "skala"

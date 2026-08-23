@@ -92,7 +92,9 @@ jobs:
         cache: false
 
     - name: Configure and build project
-      run: pixi run -e cpp-integration cpp-build
+      run: |
+        pixi run -e cpp-integration cmake -B build_example -S examples/cpp/cpp_integration -G Ninja
+        pixi run -e cpp-integration cmake --build build_example
 
     - name: Download features
       uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
@@ -107,7 +109,9 @@ jobs:
         path: .
 
     - name: Run example
-      run: pixi run -e cpp-integration cpp-run
+      run: |
+        pixi run -e cpp-integration ./build_example/skala_cpp_integration \
+          ./skala-1.1-rev1.fun ./features
 
   ftorch:
     runs-on: ubuntu-latest
@@ -130,7 +134,12 @@ jobs:
         cache: false
 
     - name: Configure, build, and install project
-      run: pixi run -e ftorch ftorch-install
+      run: |
+        pixi run -e ftorch bash -c \
+          'cmake -B build_example -S examples/fortran/ftorch_integration -G Ninja \
+            -DCMAKE_INSTALL_PREFIX="$CONDA_PREFIX"'
+        pixi run -e ftorch cmake --build build_example
+        pixi run -e ftorch cmake --install build_example
 
     - name: Download features
       uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
@@ -145,4 +154,4 @@ jobs:
         path: .
 
     - name: Run example
-      run: pixi run -e ftorch ftorch-run
+      run: pixi run -e ftorch Skala ./skala-1.1-rev1.fun ./features
