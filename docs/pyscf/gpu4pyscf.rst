@@ -35,7 +35,7 @@ Install and verify one from the repository root, for example:
 .. code-block:: bash
 
    pixi install --locked -e gpu-cuda12-torch213
-   pixi run -e gpu-cuda12-torch213 gpu-verify
+   pixi run -e gpu-cuda12-torch213 python tools/verify_gpu.py
 
 CUDA 12 and CUDA 13 are supported. Check your driver's maximum supported CUDA
 version with ``nvidia-smi`` before selecting an environment.

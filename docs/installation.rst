@@ -57,8 +57,13 @@ always use the selected environment:
 .. code-block:: bash
 
    pixi run -e default python your_script.py
-   pixi run -e default test
-   pixi run -e default lint
+  pixi run -e default pytest -v --doctest-modules \
+    --cov=skala --cov-report=xml --cov-report=term-missing --cov-report=html \
+    --durations=50 --durations-min=1.0 src/skala/ tests/
+  pixi run -e default pre-commit run --all-files
+
+The generic ``pytest`` task sets ``OMP_NUM_THREADS=4`` and forwards all
+additional arguments.
 
 The locked compatibility environments are:
 
@@ -103,8 +108,9 @@ For example, install and test the primary CUDA environment with:
 .. code-block:: bash
 
   pixi install --locked -e gpu-cuda12-torch213
-  pixi run -e gpu-cuda12-torch213 gpu-verify
-  pixi run -e gpu-cuda12-torch213 gpu-test
+  pixi run -e gpu-cuda12-torch213 python tools/verify_gpu.py
+  pixi run -e gpu-cuda12-torch213 \
+    pytest -v -m 'gpu and not profiling and not model_benchmark' tests/
 
 The CUDA platforms are encoded in the lockfile, so container builds do not need
 a CUDA override when no GPU is attached. Runtime GPU checks still require a
@@ -120,7 +126,9 @@ To test your installation, you can run the tests:
 
 .. code-block:: bash
 
-   pixi run -e default test
+  pixi run -e default pytest -v --doctest-modules \
+    --cov=skala --cov-report=xml --cov-report=term-missing --cov-report=html \
+    --durations=50 --durations-min=1.0 src/skala/ tests/
 
 
 Model checkpoints

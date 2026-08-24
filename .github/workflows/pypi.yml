@@ -27,11 +27,12 @@ jobs:
       with:
         pixi-version: v0.75.0
         environments: release
+        activate-environment: true
         locked: true
         cache: false
 
     - name: Build a binary wheel and a source tarball
-      run: pixi run -e release build-release ${{ matrix.package }}
+      run: python tools/build_release.py ${{ matrix.package }}
 
     - name: Store the distribution packages
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -55,11 +56,12 @@ jobs:
       with:
         pixi-version: v0.75.0
         environments: release
+        activate-environment: true
         locked: true
         cache: false
 
     - name: Build conda artifact
-      run: pixi run -e release build-conda
+      run: pixi publish --path . --target-dir dist-conda
 
     - name: Store conda artifact
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

@@ -24,13 +24,15 @@ pixi run -e cpp-integration cmake --build build_example
 Download the Skala model from Hugging Face:
 
 ```bash
-pixi run -e cpp-integration download-checkpoint
+pixi run -e cpp-integration hf download microsoft/skala-1.1 \
+	skala-1.1-rev1.fun --local-dir .
 ```
 
 Prepare the molecular features for a test molecule (H2) using the provided script:
 
 ```bash
-pixi run -e default generate-features
+pixi run -e default python examples/cpp/cpp_integration/prepare_inputs.py \
+	--output-dir features
 ```
 
 Finally, run $E_\text{xc}$ and (partial) $V_\text{xc}$ computations with the C++ example:

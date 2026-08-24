@@ -13,6 +13,7 @@ on:
       - 'src/skala/features.py'
       - 'src/skala/functional/**'
       - 'tests/test_traced_model_comparison.py'
+      - 'tools/verify_gpu.py'
   pull_request:
     branches: [main]
     paths: *model-benchmark-paths
@@ -40,12 +41,15 @@ jobs:
         pixi-version: v0.75.0
         pixi-bin-path: ${{ runner.temp }}/bin/pixi
         environments: default
+        activate-environment: true
         locked: true
         cache: false
         post-cleanup: true
 
     - name: Run CPU model benchmarks
-      run: pixi run model-benchmark-cpu
+      run: >-
+        pytest -v -m model_benchmark -k cpu
+        tests/test_traced_model_comparison.py
 
   gpu:
     name: GPU model benchmark
@@ -65,12 +69,15 @@ jobs:
         pixi-version: v0.75.0
         pixi-bin-path: ${{ runner.temp }}/bin/pixi
         environments: gpu-cuda12-torch213
+        activate-environment: true
         locked: true
         cache: false
         post-cleanup: true
 
     - name: Verify CUDA is available
-      run: pixi run -e gpu-cuda12-torch213 gpu-verify
+      run: python tools/verify_gpu.py
 
     - name: Run GPU model benchmarks
-      run: pixi run -e gpu-cuda12-torch213 model-benchmark-gpu
+      run: >-
+        pytest -v -m model_benchmark -k cuda
+        tests/test_traced_model_comparison.py

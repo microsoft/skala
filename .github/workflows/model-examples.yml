@@ -34,11 +34,13 @@ jobs:
       with:
         pixi-version: v0.75.0
         environments: assets
+        activate-environment: true
         locked: true
         cache: false
 
     - name: Download checkpoint
-      run: pixi run -e assets download-checkpoint
+      run: >-
+        hf download microsoft/skala-1.1 skala-1.1-rev1.fun --local-dir .
 
     - name: Upload checkpoint
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -59,11 +61,13 @@ jobs:
       with:
         pixi-version: v0.75.0
         environments: default
+        activate-environment: true
         locked: true
         cache: false
 
     - name: Generate features
-      run: pixi run generate-features
+      run: >-
+        python examples/cpp/cpp_integration/prepare_inputs.py --output-dir features
 
     - name: Upload features
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -88,13 +92,14 @@ jobs:
       with:
         pixi-version: v0.75.0
         environments: cpp-integration
+        activate-environment: true
         locked: true
         cache: false
 
     - name: Configure and build project
       run: |
-        pixi run -e cpp-integration cmake -B build_example -S examples/cpp/cpp_integration -G Ninja
-        pixi run -e cpp-integration cmake --build build_example
+        cmake -B build_example -S examples/cpp/cpp_integration -G Ninja
+        cmake --build build_example
 
     - name: Download features
       uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
@@ -110,7 +115,7 @@ jobs:
 
     - name: Run example
       run: |
-        pixi run -e cpp-integration ./build_example/skala_cpp_integration \
+        ./build_example/skala_cpp_integration \
           ./skala-1.1-rev1.fun ./features
 
   ftorch:
@@ -130,16 +135,16 @@ jobs:
       with:
         pixi-version: v0.75.0
         environments: ftorch
+        activate-environment: true
         locked: true
         cache: false
 
     - name: Configure, build, and install project
       run: |
-        pixi run -e ftorch bash -c \
-          'cmake -B build_example -S examples/fortran/ftorch_integration -G Ninja \
-            -DCMAKE_INSTALL_PREFIX="$CONDA_PREFIX"'
-        pixi run -e ftorch cmake --build build_example
-        pixi run -e ftorch cmake --install build_example
+        cmake -B build_example -S examples/fortran/ftorch_integration -G Ninja \
+          -DCMAKE_INSTALL_PREFIX="$CONDA_PREFIX"
+        cmake --build build_example
+        cmake --install build_example
 
     - name: Download features
       uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
@@ -154,4 +159,4 @@ jobs:
         path: .
 
     - name: Run example
-      run: pixi run -e ftorch Skala ./skala-1.1-rev1.fun ./features
+      run: Skala ./skala-1.1-rev1.fun ./features

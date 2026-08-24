@@ -38,11 +38,12 @@ jobs:
       with:
         pixi-version: v0.75.0
         environments: lint
+        activate-environment: true
         locked: true
         cache: false
 
     - name: Run pre-commit hooks
-      run: pixi run -e lint lint
+      run: pre-commit run --all-files
 
   test:
     runs-on: ${{ matrix.runner }}
@@ -81,11 +82,15 @@ jobs:
       with:
         pixi-version: v0.75.0
         environments: ${{ matrix.environment }}
+        activate-environment: true
         locked: true
         cache: false
 
     - name: Run tests with coverage
-      run: pixi run -e ${{ matrix.environment }} test
+      run: >-
+        pytest -v --doctest-modules --cov=skala --cov-report=xml
+        --cov-report=term-missing --cov-report=html --durations=50
+        --durations-min=1.0 src/skala/ tests/
 
     - name: Print CPU diagnostics on failure
       if: ${{ failure() }}
@@ -117,18 +122,20 @@ jobs:
         pixi-version: v0.75.0
         pixi-bin-path: ${{ runner.temp }}/bin/pixi
         environments: ${{ matrix.environment }}
+        activate-environment: true
         locked: true
         cache: false
         post-cleanup: true
 
     - name: Verify CUDA is available
-      run: pixi run -e ${{ matrix.environment }} gpu-verify
+      run: python tools/verify_gpu.py
 
     - name: Run GPU tests
-      run: pixi run -e ${{ matrix.environment }} gpu-test
+      run: >-
+        pytest -v -m 'gpu and not profiling and not model_benchmark' tests/
 
     - name: Run GPU doctests
-      run: pixi run -e ${{ matrix.environment }} gpu-doctest
+      run: pytest -v --doctest-modules src/skala/gpu4pyscf/
 
   profiling:
     name: "Profiling (Python=3.12 & PySCF=2.14 & PyTorch=2.13)"
@@ -148,8 +155,9 @@ jobs:
       with:
         pixi-version: v0.75.0
         environments: test-py312-pyscf214-torch213
+        activate-environment: true
         locked: true
         cache: false
 
     - name: Run profiling tests
-      run: pixi run -e test-py312-pyscf214-torch213 profile
+      run: pytest -v -m profiling tests/

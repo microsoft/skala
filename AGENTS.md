@@ -28,7 +28,7 @@ Skala is a neural network-based exchange-correlation (XC) functional for density
 3. **Pre-commit hooks** (required before committing):
    ```bash
   pixi run -e default pre-commit install
-  pixi run -e default lint
+  pixi run -e default pre-commit run --all-files
    ```
 
 ## Code style & linting
@@ -50,8 +50,11 @@ When editing code:
 - Framework: pytest with pytest-cov.
 - Run tests:
   ```bash
-  pixi run -e default test
+  pixi run -e default pytest -v --doctest-modules \
+    --cov=skala --cov-report=xml --cov-report=term-missing --cov-report=html \
+    --durations=50 --durations-min=1.0 src/skala/ tests/
   ```
+- The generic `pytest` task sets `OMP_NUM_THREADS=4` and forwards all additional arguments.
 - Keep test files in `tests/` with `test_` prefix.
 - Use fixtures for expensive setup (molecule construction, model loading).
 - Prefer fast unit tests; integration tests that run DFT should be marked or placed separately.
@@ -61,7 +64,7 @@ When editing code:
 - Engine: Sphinx with myst-nb (executes notebooks during build).
 - Build locally:
   ```bash
-  pixi run -e docs docs-html
+  pixi run -e docs sphinx-build -b html docs docs/_build/html
   ```
 - Notebooks in `docs/` should be executable with a 5-minute timeout.
 - Use reStructuredText for standalone pages; Jupyter notebooks for tutorials.
@@ -91,9 +94,9 @@ When editing code:
 | Task | Command |
 |------|---------|
 | Format code | `pixi run -e default ruff format src/ tests/` |
-| Lint code | `pixi run -e default lint` |
-| Run tests | `pixi run -e default test` |
-| Build docs | `pixi run -e docs docs-html` |
+| Lint code | `pixi run -e default pre-commit run --all-files` |
+| Run tests | `pixi run -e default pytest -v --doctest-modules --cov=skala --cov-report=xml --cov-report=term-missing --cov-report=html --durations=50 --durations-min=1.0 src/skala/ tests/` |
+| Build docs | `pixi run -e docs sphinx-build -b html docs docs/_build/html` |
 | Type check | `pixi run -e default mypy src/skala` |
 
 ## Contact

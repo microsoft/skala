@@ -33,11 +33,13 @@ jobs:
       with:
         pixi-version: v0.75.0
         environments: assets
+        activate-environment: true
         locked: true
         cache: false
 
     - name: Download checkpoint
-      run: pixi run -e assets download-checkpoint
+      run: >-
+        hf download microsoft/skala-1.1 skala-1.1-rev1.fun --local-dir .
 
     - name: Upload checkpoint
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -53,7 +55,7 @@ jobs:
       fail-fast: false
       matrix:
         toolchain: ["openmp", "mpi"]
-        gauxc: ["release", "main"]
+        source: ["pinned-release", "development"]
         example: ["cpp", "c", "fortran"]
         include:
           - toolchain: openmp
@@ -89,17 +91,20 @@ jobs:
         pixi-version: v0.75.0
         working-directory: skala
         environments: ${{ matrix.environment }}
+        activate-environment: true
         locked: true
         cache: false
 
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+    - name: Checkout development GauXC
+      if: ${{ matrix.source == 'development' }}
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       with:
         repository: wavefunction91/gauxc
         ref: skala
         path: gauxc
 
     - name: Configure GauXC
-      if: ${{ matrix.gauxc == 'release' }}
+      if: ${{ matrix.source == 'development' }}
       working-directory: skala
       env:
         GAUXC_ENABLE_C: ${{ matrix.example != 'cpp' && 'ON' || 'OFF' }}
@@ -107,27 +112,26 @@ jobs:
         GAUXC_ENABLE_MPI: ${{ matrix.toolchain == 'mpi' && 'ON' || 'OFF' }}
         GAUXC_ENABLE_OPENMP: ${{ matrix.toolchain == 'openmp' && 'ON' || 'OFF' }}
       run: |
-        pixi run -e ${{ matrix.environment }} bash -c \
-          'cmake -B ../build_gauxc -S ../gauxc -G Ninja \
-            -DGAUXC_ENABLE_OPENMP="$GAUXC_ENABLE_OPENMP" \
-            -DGAUXC_ENABLE_MPI="$GAUXC_ENABLE_MPI" \
-            -DGAUXC_ENABLE_CUDA=OFF \
-            -DGAUXC_ENABLE_ONEDFT=ON \
-            -DGAUXC_ENABLE_C="$GAUXC_ENABLE_C" \
-            -DGAUXC_ENABLE_FORTRAN="$GAUXC_ENABLE_FORTRAN" \
-            -DGAUXC_ENABLE_TESTS=OFF \
-            -DBUILD_SHARED_LIBS=ON \
-            -DCMAKE_INSTALL_PREFIX="$CONDA_PREFIX"'
+        cmake -B ../build_gauxc -S ../gauxc -G Ninja \
+          -DGAUXC_ENABLE_OPENMP="$GAUXC_ENABLE_OPENMP" \
+          -DGAUXC_ENABLE_MPI="$GAUXC_ENABLE_MPI" \
+          -DGAUXC_ENABLE_CUDA=OFF \
+          -DGAUXC_ENABLE_ONEDFT=ON \
+          -DGAUXC_ENABLE_C="$GAUXC_ENABLE_C" \
+          -DGAUXC_ENABLE_FORTRAN="$GAUXC_ENABLE_FORTRAN" \
+          -DGAUXC_ENABLE_TESTS=OFF \
+          -DBUILD_SHARED_LIBS=ON \
+          -DCMAKE_INSTALL_PREFIX="$CONDA_PREFIX"
 
     - name: Build GauXC
-      if: ${{ matrix.gauxc == 'release' }}
+      if: ${{ matrix.source == 'development' }}
       working-directory: skala
-      run: pixi run -e ${{ matrix.environment }} cmake --build ../build_gauxc
+      run: cmake --build ../build_gauxc
 
     - name: Install GauXC
-      if: ${{ matrix.gauxc == 'release' }}
+      if: ${{ matrix.source == 'development' }}
       working-directory: skala
-      run: pixi run -e ${{ matrix.environment }} cmake --install ../build_gauxc
+      run: cmake --install ../build_gauxc
 
     - name: Configure project
       working-directory: skala
@@ -135,26 +139,24 @@ jobs:
         GAUXC_ENABLE_MPI: ${{ matrix.toolchain == 'mpi' && 'ON' || 'OFF' }}
         GAUXC_ENABLE_OPENMP: ${{ matrix.toolchain == 'openmp' && 'ON' || 'OFF' }}
       run: |
-        pixi run -e ${{ matrix.environment }} bash -c \
-          'cmake -B ../build_example -S examples/${{ matrix.example }}/gauxc_integration -G Ninja \
-            -DSkala_GauXC_ENABLE_OPENMP="$GAUXC_ENABLE_OPENMP" \
-            -DSkala_GauXC_ENABLE_MPI="$GAUXC_ENABLE_MPI" \
-            -DSkala_GauXC_ENABLE_CUDA=OFF \
-            -DCMAKE_INSTALL_PREFIX="$CONDA_PREFIX"'
+        cmake -B ../build_example -S examples/${{ matrix.example }}/gauxc_integration -G Ninja \
+          -DSkala_GauXC_ENABLE_OPENMP="$GAUXC_ENABLE_OPENMP" \
+          -DSkala_GauXC_ENABLE_MPI="$GAUXC_ENABLE_MPI" \
+          -DSkala_GauXC_ENABLE_CUDA=OFF \
+          -DCMAKE_INSTALL_PREFIX="$CONDA_PREFIX"
 
     - name: Build project
       working-directory: skala
-      run: pixi run -e ${{ matrix.environment }} cmake --build ../build_example
+      run: cmake --build ../build_example
 
     - name: Install project
       working-directory: skala
-      run: pixi run -e ${{ matrix.environment }} cmake --install ../build_example
+      run: cmake --install ../build_example
 
     - name: Run example
       working-directory: skala
       run: |
-        pixi run -e ${{ matrix.environment }} Skala \
-          ../gauxc/tests/ref_data/onedft_he_def2qzvp_tpss_uks.hdf5 --model TPSS
+        Skala ../gauxc/tests/ref_data/onedft_he_def2qzvp_tpss_uks.hdf5 --model TPSS
 
     - name: Download checkpoint
       uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
@@ -165,6 +167,5 @@ jobs:
     - name: Run example
       working-directory: skala
       run: |
-        pixi run -e ${{ matrix.environment }} Skala \
-          ../gauxc/tests/ref_data/onedft_he_def2qzvp_tpss_uks.hdf5 \
+        Skala ../gauxc/tests/ref_data/onedft_he_def2qzvp_tpss_uks.hdf5 \
           --model ./skala-1.1-rev1.fun

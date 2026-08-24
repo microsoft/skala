@@ -31,17 +31,22 @@ jobs:
         with:
           pixi-version: v0.75.0
           environments: docs
+          activate-environment: true
           locked: true
           cache: false
 
       - name: Check environment consistency
-        run: pixi run -e docs docs-check
+        run: python -m pip check
 
       - name: Build documentation
-        run: pixi run -e docs docs-html
+        run: |
+          sphinx-build -b html docs docs/_build/html
+          touch docs/_build/html/.nojekyll
 
       - name: Check external links
-        run: pixi run -e docs docs-linkcheck
+        run: >-
+          sphinx-build -D nb_execution_mode=off -b linkcheck
+          docs docs/_build/linkcheck
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
