@@ -58,13 +58,14 @@ def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool 
 @pytest.hookimpl(wrapper=True)
 def pytest_runtest_call(item: pytest.Item) -> Iterator[None]:
     """Surface asynchronous CUDA failures at the test that launched them."""
-    yield
-
-    if CUDA_AVAILABLE and item.get_closest_marker("gpu") is not None:
-        try:
-            torch.cuda.synchronize()
-        except RuntimeError as error:
-            pytest.fail(
-                f"CUDA synchronization failed after {item.nodeid}: {error}",
-                pytrace=True,
-            )
+    try:
+        yield
+    finally:
+        if CUDA_AVAILABLE and item.get_closest_marker("gpu") is not None:
+            try:
+                torch.cuda.synchronize()
+            except RuntimeError as error:
+                pytest.fail(
+                    f"CUDA synchronization failed after {item.nodeid}: {error}",
+                    pytrace=True,
+                )
