@@ -228,7 +228,7 @@ Expected output includes the total TPSS energy computed using a checkpoint compa
 for the reference density matrix.
 
 .. tip::
-   
+
    If the executable cannot locate libtorch or other shared libraries, double-check
    that ``LD_LIBRARY_PATH`` includes ``${CONDA_PREFIX}/lib``
    (activating the environment usually handles this).
