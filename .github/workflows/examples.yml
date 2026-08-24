@@ -51,6 +51,8 @@ jobs:
     needs:
       - skala-checkpoint
     runs-on: ubuntu-latest
+    env:
+      GAUXC_REFERENCE_DATA: ${{ matrix.source == 'development' && '../gauxc/tests/ref_data/onedft_he_def2qzvp_tpss_uks.hdf5' || '../build_example/_deps/gauxc-src/tests/ref_data/onedft_he_def2qzvp_tpss_uks.hdf5' }}
     strategy:
       fail-fast: false
       matrix:
@@ -155,8 +157,7 @@ jobs:
 
     - name: Run example
       working-directory: skala
-      run: |
-        Skala ../gauxc/tests/ref_data/onedft_he_def2qzvp_tpss_uks.hdf5 --model TPSS
+      run: Skala "$GAUXC_REFERENCE_DATA" --model TPSS
 
     - name: Download checkpoint
       uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
@@ -166,6 +167,4 @@ jobs:
 
     - name: Run example
       working-directory: skala
-      run: |
-        Skala ../gauxc/tests/ref_data/onedft_he_def2qzvp_tpss_uks.hdf5 \
-          --model ./skala-1.1-rev1.fun
+      run: Skala "$GAUXC_REFERENCE_DATA" --model ./skala-1.1-rev1.fun
