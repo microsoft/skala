@@ -41,7 +41,7 @@
                 "mypy-type-checker.args": [
                     "--config-file=pyproject.toml"
                 ],
-                "python.defaultInterpreterPath": "${containerWorkspaceFolder}/.pixi/envs/gpu-cuda12-torch211/bin/python"
+                "python.defaultInterpreterPath": "${containerWorkspaceFolder}/.pixi/envs/gpu-cuda12-torch213/bin/python"
             }
         }
     }
