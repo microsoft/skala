@@ -4,7 +4,7 @@
         "dockerfile": "skala_dev.Dockerfile",
         "context": ".."
     },
-    "postCreateCommand": "pixi install --locked -e gpu-cuda12-torch211",
+    "postCreateCommand": "pixi install --locked -e gpu-cuda12-torch213",
     "runArgs": [
         "--gpus=all",
         "--shm-size=2gb",
