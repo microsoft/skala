@@ -5,9 +5,7 @@ on:
     branches: [main]
     paths: &gauxc-paths
       - '.github/workflows/examples.yml'
-      - 'examples/c/gauxc_integration/**'
-      - 'examples/cpp/gauxc_integration/**'
-      - 'examples/fortran/gauxc_integration/**'
+      - 'gauxc/**'
       - 'pixi.lock'
       - 'pixi.toml'
   pull_request:
@@ -141,7 +139,7 @@ jobs:
         GAUXC_ENABLE_MPI: ${{ matrix.toolchain == 'mpi' && 'ON' || 'OFF' }}
         GAUXC_ENABLE_OPENMP: ${{ matrix.toolchain == 'openmp' && 'ON' || 'OFF' }}
       run: |
-        cmake -B ../build_example -S examples/${{ matrix.example }}/gauxc_integration -G Ninja \
+        cmake -B ../build_example -S gauxc/examples/${{ matrix.example }}/gauxc_integration -G Ninja \
           -DSkala_GauXC_ENABLE_OPENMP="$GAUXC_ENABLE_OPENMP" \
           -DSkala_GauXC_ENABLE_MPI="$GAUXC_ENABLE_MPI" \
           -DSkala_GauXC_ENABLE_CUDA=OFF \

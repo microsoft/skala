@@ -36,7 +36,7 @@ def render_template(template: Path, replacements: dict[str, str]) -> str:
 
 def render_compatibility_pyproject(repository: Path, package: str) -> tuple[str, str]:
     """Render project metadata and return its import package name."""
-    version = project_version(repository)
+    version = project_version(repository / "skala")
     if package == "microsoft-skala":
         template = (
             repository / ".github" / "workflows" / "pypi" / "microsoft-skala.toml"
@@ -56,14 +56,15 @@ def render_compatibility_pyproject(repository: Path, package: str) -> tuple[str,
 
 def prepare_source(repository: Path, staging: Path, package: str) -> None:
     """Create an isolated source tree for one distribution package."""
-    shutil.copy2(repository / "README.md", staging / "README.md")
-    shutil.copy2(repository / "LICENSE.txt", staging / "LICENSE.txt")
+    runtime = repository / "skala"
+    shutil.copy2(runtime / "README.md", staging / "README.md")
+    shutil.copy2(runtime / "LICENSE.txt", staging / "LICENSE.txt")
     source_root = staging / "src"
     source_root.mkdir()
 
     if package == "skala":
-        shutil.copy2(repository / "pyproject.toml", staging / "pyproject.toml")
-        shutil.copytree(repository / "src" / "skala", source_root / "skala")
+        shutil.copy2(runtime / "pyproject.toml", staging / "pyproject.toml")
+        shutil.copytree(runtime / "src" / "skala", source_root / "skala")
         return
 
     module_name, rendered = render_compatibility_pyproject(repository, package)

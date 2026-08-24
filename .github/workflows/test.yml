@@ -6,14 +6,13 @@ on:
     paths: &test-paths
       - '.github/workflows/test.yml'
       - '.pre-commit-config.yaml'
-      - 'benchmarks/reference/**'
-      - 'conftest.py'
-      - 'docs/_ext/**'
+      - 'docs/benchmark/**'
+      - 'gauxc/**/*.py'
+      - 'model/**/*.py'
       - 'pixi.lock'
       - 'pixi.toml'
       - 'pyproject.toml'
-      - 'src/skala/**'
-      - 'tests/**'
+      - 'skala/**'
       - '**/*.py'
       - '**/*.pyi'
       - '**/*.ipynb'
@@ -90,11 +89,40 @@ jobs:
       run: >-
         pytest -v --doctest-modules --cov=skala --cov-report=xml
         --cov-report=term-missing --cov-report=html --durations=50
-        --durations-min=1.0 src/skala/ tests/
+        --durations-min=1.0 skala/src/skala/ skala/tests/
 
     - name: Print CPU diagnostics on failure
       if: ${{ failure() }}
       uses: ./.github/actions/cpu-diagnostics
+
+  component-test:
+    name: Model, GauXC, and benchmark unit tests
+    runs-on: ubuntu-latest
+    needs:
+      - lint
+    env:
+      OMP_NUM_THREADS: 4
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      with:
+        lfs: true
+
+    - name: Print CPU diagnostics
+      uses: ./.github/actions/cpu-diagnostics
+
+    - name: Setup Pixi
+      uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
+      with:
+        pixi-version: v0.75.0
+        environments: lint
+        activate-environment: true
+        locked: true
+        cache: false
+
+    - name: Run component unit tests
+      run: >-
+        pytest -v model/tests/test_model.py model/tests/test_utils.py
+        gauxc/tests/ docs/benchmark/tests/
 
   gpu-test:
     runs-on: microsoft-skala-gpu-pool
@@ -132,13 +160,13 @@ jobs:
 
     - name: Run GPU tests
       run: >-
-        pytest -v -m 'gpu and not profiling and not model_benchmark' tests/
+        pytest -v -m 'gpu and not profiling and not model_benchmark' skala/tests/
       env:
         CUDA_LAUNCH_BLOCKING: 1
 
 
     - name: Run GPU doctests
-      run: pytest -v --doctest-modules src/skala/gpu4pyscf/
+      run: pytest -v --doctest-modules skala/src/skala/gpu4pyscf/
 
   profiling:
     name: "Profiling (Python=3.12 & PySCF=2.14 & PyTorch=2.13)"
@@ -163,4 +191,4 @@ jobs:
         cache: false
 
     - name: Run profiling tests
-      run: pytest -v -m profiling tests/
+      run: pytest -v -m profiling skala/tests/

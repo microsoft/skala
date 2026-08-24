@@ -61,13 +61,14 @@ jobs:
         cache: false
 
     - name: Build conda artifact
-      run: pixi publish --path . --target-dir dist-conda
+      run: pixi publish --path skala --target-dir dist-conda
 
     - name: Store conda artifact
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
         name: skala-conda-pkg
         path: dist-conda/*.conda
+        if-no-files-found: error
 
   publish-to-pypi:
     name: Publish to PyPI

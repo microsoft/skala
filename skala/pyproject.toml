@@ -1,0 +1,46 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "skala"
+version = "2026.9"
+description = "Skala Exchange Correlation Functional"
+authors = []
+license-files = ["LICENSE.txt"]
+readme = "README.md"
+keywords = []
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Development Status :: 5 - Production/Stable",
+]
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "ase",
+    "huggingface_hub",
+    "numpy",
+    "pyscf>=2.14,<2.15",
+    "pyscf-dispersion>=1.5; sys_platform == 'linux'",
+    "dftd3>=1.5,<2; sys_platform == 'darwin'",
+    "torch>=2.12,<2.14"
+]
+
+urls.repository = "https://github.com/microsoft/skala"
+urls.documentation = "https://microsoft.github.io/skala"
+urls.homepage = "https://aka.ms/dft"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/skala"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/LICENSE.txt",
+    "/README.md",
+    "/pyproject.toml",
+    "/src/skala",
+]

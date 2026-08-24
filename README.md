@@ -15,15 +15,23 @@ Learn more about Skala in our [ArXiv paper](https://arxiv.org/abs/2506.14665).
 
 ## What's in here
 
-This repository contains two main components:
+This repository contains four components:
 
-1. The Python package `skala`, distributed [on PyPI](https://pypi.org/project/skala/) and on conda-forge. It contains a PyTorch implementation of the Skala model and its bindings to the quantum-chemistry packages [PySCF](https://pyscf.org/), [GPU4PySCF](https://pyscf.org/user/gpu.html), and [ASE](https://ase-lib.org/).
-2. Examples of using Skala from compiled code through LibTorch and GauXC:
-   - [Skala in C++ with libtorch](examples/cpp/cpp_integration)
+1. [`skala/`](skala) is the only published Python package. It contains the runtime needed to load released checkpoints and use Skala through [PySCF](https://pyscf.org/), [GPU4PySCF](https://pyscf.org/user/gpu.html), and [ASE](https://ase-lib.org/).
+2. [`model/`](model) contains the trainable model definition, its tests, and compiled-model examples. This development code is not included in the `skala` wheel or source distribution.
+3. [`gauxc/`](gauxc) contains the GauXC exporter, native integration examples, tests, and source documentation.
+4. [`docs/`](docs) contains the main Sphinx site and benchmark runner/report tooling.
+
+Compiled-code examples include:
+    - [Skala in C++ with libtorch](model/examples/cpp/cpp_integration)
    - [Skala in Fortran with FTorch](https://microsoft.github.io/skala/ftorch)
    - [Skala in C++ with GauXC](https://microsoft.github.io/skala/gauxc/cpp-library)
    - [Skala in C with GauXC](https://microsoft.github.io/skala/gauxc/c-library)
    - [Skala in Fortran with GauXC](https://microsoft.github.io/skala/gauxc/fortran-library)
+
+Development-only imports use separate namespaces: `skala_model`, `skala_gauxc`, and
+`skala_benchmark`. They are intentionally not compatibility aliases inside the released `skala`
+package.
 
 ### GauXC development version for PyTorch-based functionals like Skala
 
