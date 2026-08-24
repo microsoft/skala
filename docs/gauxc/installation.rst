@@ -184,28 +184,6 @@ building the C or Fortran examples.
    ``-DTorch_DIR=${CONDA_PREFIX}/share/cmake/Torch``.
 
 
-Quick verification
-------------------
-
-After the build finishes, run the bundled regression test to confirm that Skala-enabled functionals
-are working correctly. The Skala implementation can run different traditional functionals, like PBE and TPSS,
-which can be compared against other libraries.
-
-.. code-block:: bash
-
-   pixi run -e gauxc-openmp Skala \
-     ../gauxc/tests/ref_data/onedft_he_def2qzvp_tpss_uks.hdf5 --model TPSS
-
-Expected output includes the total TPSS energy computed using a checkpoint compatible for the Skala implementation
-for the reference density matrix.
-
-.. tip::
-   
-   If the executable cannot locate libtorch or other shared libraries, double-check
-   that ``LD_LIBRARY_PATH`` includes ``${CONDA_PREFIX}/lib``
-   (activating the environment usually handles this).
-
-
 Install the library
 -------------------
 
@@ -222,6 +200,38 @@ This installs headers, libraries, and CMake config.
 
    For using GauXC in your own CMake project, check out :ref:`gauxc-cmake-integration` in the CMake configuration documentation.
    Alternatively, you can follow the instructions in the :ref:`gauxc-cpp-library` tutorial for a full standalone example.
+
+
+Quick verification
+------------------
+
+The installed GauXC library does not provide a ``Skala`` executable by itself; it is
+built by the standalone C++ example project described in :ref:`gauxc-cpp-library`, which
+now discovers the GauXC installation from the previous step. Configure and build the
+example to obtain the ``Skala`` command line driver:
+
+.. code-block:: bash
+
+   pixi run -e gauxc-openmp cmake -B ../build_example -S ../skala/examples/cpp/gauxc_integration -G Ninja
+   pixi run -e gauxc-openmp cmake --build ../build_example
+
+Then run the bundled regression test to confirm that Skala-enabled functionals
+are working correctly. The Skala implementation can run different traditional functionals, like PBE and TPSS,
+which can be compared against other libraries.
+
+.. code-block:: bash
+
+   pixi run -e gauxc-openmp ../build_example/Skala \
+     ../gauxc/tests/ref_data/onedft_he_def2qzvp_tpss_uks.hdf5 --model TPSS
+
+Expected output includes the total TPSS energy computed using a checkpoint compatible for the Skala implementation
+for the reference density matrix.
+
+.. tip::
+   
+   If the executable cannot locate libtorch or other shared libraries, double-check
+   that ``LD_LIBRARY_PATH`` includes ``${CONDA_PREFIX}/lib``
+   (activating the environment usually handles this).
 
 
 Troubleshooting
