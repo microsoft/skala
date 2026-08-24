@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 import subprocess
 import sys
@@ -9,6 +10,7 @@ import tomllib
 from pathlib import Path
 
 PACKAGES = ("skala", "microsoft-skala", "skala-cuda12x", "skala-cuda13x")
+PLACEHOLDER_PATTERN = re.compile(r"@[A-Z][A-Z0-9_]*@")
 
 
 def project_version(repository: Path) -> str:
@@ -18,18 +20,22 @@ def project_version(repository: Path) -> str:
     return str(metadata["project"]["version"])
 
 
-def prepare_source(repository: Path, staging: Path, package: str) -> None:
-    """Create an isolated source tree for one distribution package."""
-    shutil.copy2(repository / "README.md", staging / "README.md")
-    shutil.copy2(repository / "LICENSE.txt", staging / "LICENSE.txt")
-    source_root = staging / "src"
-    source_root.mkdir()
+def render_template(template: Path, replacements: dict[str, str]) -> str:
+    """Render and validate a compatibility package project template."""
+    rendered = template.read_text(encoding="utf-8")
+    for placeholder, value in replacements.items():
+        rendered = rendered.replace(placeholder, value)
 
-    if package == "skala":
-        shutil.copy2(repository / "pyproject.toml", staging / "pyproject.toml")
-        shutil.copytree(repository / "src" / "skala", source_root / "skala")
-        return
+    unresolved = sorted(set(PLACEHOLDER_PATTERN.findall(rendered)))
+    if unresolved:
+        raise ValueError(f"Unresolved template placeholders: {', '.join(unresolved)}")
 
+    tomllib.loads(rendered)
+    return rendered
+
+
+def render_compatibility_pyproject(repository: Path, package: str) -> tuple[str, str]:
+    """Render project metadata and return its import package name."""
     version = project_version(repository)
     if package == "microsoft-skala":
         template = (
@@ -45,9 +51,22 @@ def prepare_source(repository: Path, staging: Path, package: str) -> None:
             "@CUDA@": package.removeprefix("skala-cuda"),
         }
 
-    rendered = template.read_text(encoding="utf-8")
-    for placeholder, value in replacements.items():
-        rendered = rendered.replace(placeholder, value)
+    return module_name, render_template(template, replacements)
+
+
+def prepare_source(repository: Path, staging: Path, package: str) -> None:
+    """Create an isolated source tree for one distribution package."""
+    shutil.copy2(repository / "README.md", staging / "README.md")
+    shutil.copy2(repository / "LICENSE.txt", staging / "LICENSE.txt")
+    source_root = staging / "src"
+    source_root.mkdir()
+
+    if package == "skala":
+        shutil.copy2(repository / "pyproject.toml", staging / "pyproject.toml")
+        shutil.copytree(repository / "src" / "skala", source_root / "skala")
+        return
+
+    module_name, rendered = render_compatibility_pyproject(repository, package)
     (staging / "pyproject.toml").write_text(rendered, encoding="utf-8")
 
     module = source_root / module_name

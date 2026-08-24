@@ -24,7 +24,7 @@ classifiers = [
 requires-python = ">=3.11,<3.14"
 dependencies = [
     "skala==@VERSION@",
-    "gpu4pyscf-cuda@CUDA@ ==1.8.1",
+    "gpu4pyscf-cuda@CUDA@==1.8.1",
 ]
 urls.repository = "https://github.com/microsoft/skala"
 urls.documentation = "https://microsoft.github.io/skala"
