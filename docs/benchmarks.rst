@@ -112,7 +112,7 @@ For a quick smoke test, use a separate output directory and restrict both molecu
 
 .. code-block:: bash
 
-  pixi run -e default python -m skala.benchmark run benchmark-smoke \
+   pixi run -e default python -m skala.benchmark run benchmark-smoke \
      --env-id cpu-smoke \
      --device cpu \
      --max-atoms 3 \
