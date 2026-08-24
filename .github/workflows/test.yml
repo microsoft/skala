@@ -124,9 +124,13 @@ jobs:
       OMP_NUM_THREADS: 4
     steps:
     - run: |
+        set -ex
         lspci | grep -i nvidia
         lshw -short
+        dmesg -T | grep -iE 'nvrm|nvidia' || true
+        sudo dmesg -T | grep -iE 'nvrm|nvidia' || true
         nvidia-smi || true
+        sudo nvidia-smi || true
     
     - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
