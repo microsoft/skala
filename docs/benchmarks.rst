@@ -93,16 +93,16 @@ because worker subprocesses inherit them:
 .. code-block:: bash
 
    git lfs pull
-  pixi install --locked -e default
-  pixi run -e default python -m skala.benchmark fetch-dataset
+   pixi install --locked -e default
+   pixi run -e default python -m skala.benchmark fetch-dataset
    export OMP_NUM_THREADS=16
 
-  pixi run -e default python -m skala.benchmark run benchmark-output \
-     --env-id local-cpu \
-     --env-label 'Local 16-core CPU' \
-     --device cpu \
-     --max-orbitals 250 \
-     --time-limit 4h
+   pixi run -e default python -m skala.benchmark run benchmark-output \
+      --env-id local-cpu \
+      --env-label 'Local 16-core CPU' \
+      --device cpu \
+      --max-orbitals 250 \
+      --time-limit 4h
 
 Choose the physical core count appropriate for the machine. GPU runs require a compatible CUDA,
 CuPy, and GPU4PySCF installation; requesting ``--device gpu`` fails instead of silently falling
