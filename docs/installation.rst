@@ -57,10 +57,10 @@ always use the selected environment:
 .. code-block:: bash
 
    pixi run -e default python your_script.py
-  pixi run -e default pytest -v --doctest-modules \
+   pixi run -e default pytest -v --doctest-modules \
     --cov=skala --cov-report=xml --cov-report=term-missing --cov-report=html \
     --durations=50 --durations-min=1.0 src/skala/ tests/
-  pixi run -e default pre-commit run --all-files
+   pixi run -e default pre-commit run --all-files
 
 The generic ``pytest`` task sets ``OMP_NUM_THREADS=4`` and forwards all
 additional arguments.
