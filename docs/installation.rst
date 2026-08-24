@@ -23,10 +23,10 @@ This will install the *skala* packages and all its dependencies, including
 * `pyscf <https://pyscf.org>`__
   for running the self-consistent field (SCF) calculations and evaluating the density features
 * `pyscf-dispersion <https://github.com/pyscf/dispersion>`__ on Linux or
-  `dftd3 <https://dftd3.readthedocs.io>`__ on macOS for computing
+  `dftd3 <https://dftd3.readthedocs.io>`__ on macOS on Apple Silicon for computing
   the D3 dispersion correction to the total energy
 
-Skala supports Linux and macOS with Python 3.11 through 3.13, PySCF 2.14,
+Skala supports Linux and macOS on Apple Silicon with Python 3.11 through 3.13, PySCF 2.14,
 and PyTorch 2.12 or 2.13.
 
 The default Pytorch installation is the GPU version, which the *skala* package in combination with PySCF doesn't leverage. To install only the much smaller CPU version of Pytorch, run the following before installing the *skala* package:

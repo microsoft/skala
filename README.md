@@ -35,7 +35,7 @@ For detailed documentation on using GauXC visit the [Skala integration guide](ht
 ## Getting started: PySCF (CPU)
 
 All information below relates to the Python package `skala`.
-Skala supports Linux and macOS with Python 3.11 through 3.13, the latest
+Skala supports Linux and macOS on Apple Silicon with Python 3.11 through 3.13, the latest
 PySCF release (2.14), and the two latest PyTorch release lines (2.12 and 2.13).
 
 `pip install skala` works out of the box and pulls every dependency from PyPI.
