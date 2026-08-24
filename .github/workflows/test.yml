@@ -123,6 +123,12 @@ jobs:
     env:
       OMP_NUM_THREADS: 4
     steps:
+    - run: |
+        nvidia-smi
+        nvidia-smi -q
+        nvidia-smi -L
+        lshw -short
+    
     - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
     - name: Print CPU diagnostics
