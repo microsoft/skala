@@ -133,6 +133,9 @@ jobs:
     - name: Run GPU tests
       run: >-
         pytest -v -m 'gpu and not profiling and not model_benchmark' tests/
+      env:
+        CUDA_LAUNCH_BLOCKING: 1
+
 
     - name: Run GPU doctests
       run: pytest -v --doctest-modules src/skala/gpu4pyscf/

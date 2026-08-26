@@ -53,3 +53,19 @@ def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool 
     return relative_path == Path(
         "src/skala/utils/torch_allocator.py"
     ) or relative_path.is_relative_to("src/skala/gpu4pyscf")
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_call(item: pytest.Item) -> Iterator[None]:
+    """Surface asynchronous CUDA failures at the test that launched them."""
+    try:
+        yield
+    finally:
+        if CUDA_AVAILABLE and item.get_closest_marker("gpu") is not None:
+            try:
+                torch.cuda.synchronize()
+            except RuntimeError as error:
+                pytest.fail(
+                    f"CUDA synchronization failed after {item.nodeid}: {error}",
+                    pytrace=True,
+                )
