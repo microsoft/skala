@@ -131,6 +131,7 @@ jobs:
         sudo dmesg -T | grep -iE 'nvrm|nvidia' || true
         nvidia-smi || true
         sudo nvidia-smi || true
+        df -hT
     
     - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
