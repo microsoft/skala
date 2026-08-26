@@ -22,8 +22,12 @@ This will install the *skala* packages and all its dependencies, including
   for running the exchange-correlation model
 * `pyscf <https://pyscf.org>`__
   for running the self-consistent field (SCF) calculations and evaluating the density features
-* `dftd3 <https://dftd3.readthedocs.io>`__
-  for computing the D3 dispersion correction to the total energy
+* `pyscf-dispersion <https://github.com/pyscf/dispersion>`__ on Linux or
+  `dftd3 <https://dftd3.readthedocs.io>`__ on macOS on Apple Silicon for computing
+  the D3 dispersion correction to the total energy
+
+Skala supports Linux and macOS on Apple Silicon with Python 3.11 through 3.13, PySCF 2.14,
+and PyTorch 2.12 or 2.13.
 
 The default Pytorch installation is the GPU version, which the *skala* package in combination with PySCF doesn't leverage. To install only the much smaller CPU version of Pytorch, run the following before installing the *skala* package:
 
@@ -32,89 +36,99 @@ The default Pytorch installation is the GPU version, which the *skala* package i
    pip install torch --index-url https://download.pytorch.org/whl/cpu
 
 
-Install from conda-forge
-------------------------
+Reproducible source environments
+--------------------------------
 
-.. image:: https://img.shields.io/conda/vn/conda-forge/skala
-   :alt: conda-forge
-   :target: https://github.com/conda-forge/skala-feedstock
-
-The *skala* package is available on conda-forge, to install it use
-
-.. code-block:: bash
-
-   mamba install -c conda-forge skala
-
-You can select between GPU and CPU version of pytorch by requesting the ``cuda*`` build or the ``cpu*`` build.
-For the CPU version use
-
-.. code-block:: bash
-
-   mamba install -c conda-forge skala "pytorch=*=cpu*"
-
-For the GPU version use (e.g. with Cuda 12)
-
-.. code-block:: bash
-
-   mamba install -c conda-forge skala "pytorch=*=cuda12*"
-
-
-Installing from source
-----------------------
-
-If you prefer to install Skala from the source code, you can clone the repository and install it in editable mode:
+Skala uses `Pixi <https://pixi.sh>`__ for source dependency management. The
+repository contains one ``pixi.toml`` and one committed ``pixi.lock`` covering
+all supported Python, PySCF, PyTorch, CUDA, documentation, release, and native
+build environments. Install Pixi 0.75, then clone the repository and install the
+default CPU environment:
 
 .. code-block:: bash
 
    git clone https://github.com/microsoft/skala
    cd skala
-   mamba env create -n skala -f environment-cpu.yml
-   mamba activate skala
-   pip install -e .
+   pixi install --locked -e default
 
-where ``environment-cpu.yml`` can be replaced with ``environment-gpu.yml`` for
-GPU support via `GPU4PySCF <https://github.com/pyscf/gpu4pyscf>`__. The GPU
-environment pins ``pytorch-gpu``, ``cuda-version 12``, ``cuda-nvrtc`` for CuPy
-kernel compilation, matching ``cuda-cudart-dev`` headers, and ``cutensor``. It installs
-``gpu4pyscf-cuda12x >=1.8,<1.9`` from PyPI as part of the environment file — no
-separate install step is required:
+The local Skala package is installed editable. Run commands through Pixi so they
+always use the selected environment:
 
 .. code-block:: bash
 
-   mamba env create -n skala -f environment-gpu.yml
-   mamba activate skala
-   pip install -e .
+   pixi run -e default python your_script.py
+   pixi run -e default pytest -v --doctest-modules \
+    --cov=skala --cov-report=xml --cov-report=term-missing --cov-report=html \
+    --durations=50 --durations-min=1.0 src/skala/ tests/
+   pixi run -e default pre-commit run --all-files
 
-If you are building inside a container without a GPU attached (for example CI,
-or a Docker image built on a CPU-only host), set ``CONDA_OVERRIDE_CUDA`` so the
-solver proceeds without a device:
+The generic ``pytest`` task sets ``OMP_NUM_THREADS=4`` and forwards all
+additional arguments.
+
+The locked compatibility environments are:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Environment
+     - Python
+     - PySCF
+     - PyTorch / CUDA
+   * - ``test-py311-pyscf214-torch213``
+     - 3.11
+     - 2.14
+     - 2.13 CPU
+   * - ``test-py312-pyscf214-torch212``
+     - 3.12
+     - 2.14
+     - 2.12 CPU
+   * - ``test-py312-pyscf214-torch213``
+     - 3.12
+     - 2.14
+     - 2.13 CPU
+   * - ``test-py313-pyscf214-torch213``
+     - 3.13
+     - 2.14
+     - 2.13 CPU
+   * - ``gpu-cuda12-torch212``
+     - 3.12
+     - 2.14
+     - 2.12 / CUDA 12
+   * - ``gpu-cuda12-torch213``
+     - 3.12
+     - 2.14
+     - 2.13 / CUDA 12
+   * - ``gpu-cuda13-torch213``
+     - 3.12
+     - 2.14
+     - 2.13 / CUDA 13
+
+For example, install and test the primary CUDA environment with:
 
 .. code-block:: bash
 
-   CONDA_OVERRIDE_CUDA=12.0 mamba env create -n skala -f environment-gpu.yml
+  pixi install --locked -e gpu-cuda12-torch213
+  pixi run -e gpu-cuda12-torch213 python tools/verify_gpu.py
+  pixi run -e gpu-cuda12-torch213 \
+    pytest -v -m 'gpu and not profiling and not model_benchmark' tests/
 
-For CUDA 11 or 13, adjust ``cuda-version``, ``cuda-nvrtc``,
-``cuda-cudart-dev``, and the ``gpu4pyscf-cuda{11,13}x`` pin in
-``environment-gpu.yml`` accordingly. Check your driver's maximum supported
-CUDA version with ``nvidia-smi``.
-
-To install the development dependencies, you can run:
-
-.. code-block:: bash
-
-    pip install -e .[dev]
+The CUDA platforms are encoded in the lockfile, so container builds do not need
+a CUDA override when no GPU is attached. Runtime GPU checks still require a
+compatible NVIDIA driver and device.
 
 For development purposes, please initialize the pre-commit hooks via:
 
 .. code-block:: bash
 
-   pre-commit install
+   pixi run -e default pre-commit install
 
 To test your installation, you can run the tests:
 
 .. code-block:: bash
 
-   pytest -v tests/
+  pixi run -e default pytest -v --doctest-modules \
+    --cov=skala --cov-report=xml --cov-report=term-missing --cov-report=html \
+    --durations=50 --durations-min=1.0 src/skala/ tests/
 
 
 Model checkpoints

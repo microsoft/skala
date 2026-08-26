@@ -27,13 +27,13 @@ Before configuring the project, make sure you have the following available:
 
 If you want to reproduce the sample ``He_def2-svp.h5`` input file from this guide, you also need the Python ``skala`` package installed.
 
-For a minimal OpenMP-capable environment for this guide, use the example environment file:
+Install the locked ``gauxc-openmp-fortran`` Pixi environment for an OpenMP
+build. For MPI, use ``gauxc-mpi-fortran`` so OpenMPI and the matching MPI HDF5
+variant are selected together:
 
-.. literalinclude:: ../../examples/fortran/gauxc_integration/environment-openmp.yml
-   :language: yaml
-   :caption: environment-openmp.yml
+.. code-block:: bash
 
-For MPI builds, switch to ``examples/fortran/gauxc_integration/environment-mpi.yml`` so that both MPI and the matching HDF5 variant are available.
+   pixi install --locked -e gauxc-openmp-fortran
 
 Setting up CMake
 ----------------

@@ -1,0 +1,471 @@
+[workspace]
+name = "skala"
+version = "2026.9"
+description = "Skala Exchange Correlation Functional"
+channels = ["conda-forge"]
+platforms = [
+  "linux-64",
+  "linux-aarch64",
+  "osx-arm64",
+  { name = "linux-64-cuda12", platform = "linux-64", cuda = "12" },
+  { name = "linux-64-cuda13", platform = "linux-64", cuda = "13" },
+]
+requires-pixi = ">=0.75,<0.76"
+preview = ["pixi-build"]
+
+[workspace.conda-pypi-map]
+conda-forge = { mapping-mode = "overlay", mapping = { dftd3-python = "dftd3", pytorch = "torch", pytorch-gpu = "torch" } }
+
+[feature.python-runtime.dependencies]
+ase = "*"
+e3nn = "*"
+h5py = "*"
+numpy = "<2.5"
+opt_einsum_fx = "*"
+skala = { path = "." }
+
+[feature.model-assets.dependencies]
+huggingface_hub = "*"
+
+[feature.python-311.dependencies]
+python = "3.11.*"
+
+[feature.python-312.dependencies]
+python = "3.12.*"
+
+[feature.python-313.dependencies]
+python = "3.13.*"
+
+[feature.pyscf-214.pypi-dependencies]
+pyscf = "==2.14.*"
+
+[feature.dispersion.target.linux.pypi-dependencies]
+pyscf-dispersion = ">=1.5"
+
+[feature.dispersion.target.osx.dependencies]
+dftd3-python = ">=1.5,<2"
+
+[feature.torch-213-cpu]
+platforms = ["linux-64", "linux-aarch64", "osx-arm64"]
+
+[feature.torch-213-cpu.dependencies]
+pytorch = { version = "2.13.*", build = "cpu_*" }
+
+[feature.torch-212-cpu]
+platforms = ["linux-64", "linux-aarch64", "osx-arm64"]
+
+[feature.torch-212-cpu.dependencies]
+pytorch = { version = "2.12.*", build = "cpu_*" }
+
+[feature.torch-213-gpu]
+platforms = ["linux-64-cuda12", "linux-64-cuda13"]
+
+[feature.torch-213-gpu.dependencies]
+pytorch-gpu = "2.13.*"
+
+[feature.torch-212-gpu]
+platforms = ["linux-64-cuda12", "linux-64-cuda13"]
+
+[feature.torch-212-gpu.dependencies]
+pytorch-gpu = "2.12.*"
+
+[feature.cuda-12]
+platforms = ["linux-64-cuda12"]
+
+[feature.cuda-12.dependencies]
+cuda-cudart-dev = ">=12,<13"
+cuda-nvrtc = ">=12,<13"
+cuda-version = ">=12,<13"
+cutensor = ">=2"
+
+[feature.cuda-12.pypi-dependencies]
+gpu4pyscf-cuda12x = "==1.8.1"
+
+[feature.cuda-13]
+platforms = ["linux-64-cuda13"]
+
+[feature.cuda-13.dependencies]
+cuda-cudart-dev = ">=13,<14"
+cuda-nvrtc = ">=13,<14"
+cuda-version = ">=13,<14"
+cutensor = ">=2"
+
+[feature.cuda-13.pypi-dependencies]
+gpu4pyscf-cuda13x = "==1.8.1"
+
+[feature.test.dependencies]
+pytest = "*"
+pytest-benchmark = "*"
+pytest-cov = "*"
+pytest-randomly = "*"
+pytest-timeout = "*"
+
+[feature.test.tasks]
+pytest = { cmd = "pytest", env = { OMP_NUM_THREADS = "4" } }
+
+[feature.lint.dependencies]
+mypy = ">=2"
+pre-commit = "*"
+ruff = "*"
+
+[feature.lint.pypi-dependencies]
+pandas-stubs = "*"
+pyarrow-stubs = ">=20,<21"
+scipy-stubs = "==1.17.1.5"
+types-PyYAML = "*"
+
+[feature.profiling.target.linux-64.dependencies]
+memray = "*"
+
+[feature.benchmark.dependencies]
+jinja2 = "*"
+markdown-it-py = "*"
+pandas = "*"
+pyarrow = "*"
+pyyaml = "*"
+scipy = "*"
+
+[feature.docs.dependencies]
+ipywidgets = "*"
+myst-nb = "*"
+sphinx = "*"
+sphinx-book-theme = "*"
+sphinx-design = "*"
+sphinx-fortran = "*"
+sphinxcontrib-bibtex = "*"
+sphinxcontrib-moderncmakedomain = "*"
+
+[feature.release.dependencies]
+python-build = "*"
+
+[feature.native-toolchain]
+platforms = ["linux-64", "linux-64-cuda12"]
+
+[feature.native-toolchain.dependencies]
+c-compiler = "*"
+cmake = ">=3.20,<4"
+cxx-compiler = "*"
+ninja = "*"
+nlohmann_json = ">=3.9"
+
+[feature.fortran]
+platforms = ["linux-64"]
+
+[feature.fortran.dependencies]
+fortran-compiler = "*"
+
+[feature.hdf5-serial]
+platforms = ["linux-64", "linux-64-cuda12"]
+
+[feature.hdf5-serial.dependencies]
+hdf5 = { version = "*", build = "nompi_*" }
+
+[feature.mpi]
+platforms = ["linux-64"]
+
+[feature.mpi.dependencies]
+hdf5 = { version = "*", build = "mpi_openmpi_*" }
+openmpi = "*"
+
+[feature.gauxc-core]
+platforms = ["linux-64", "linux-64-cuda12"]
+
+[feature.gauxc-core.dependencies]
+gau2grid = ">=2.0.6"
+integratorxx = ">=1.0"
+libblas = "*"
+
+[feature.gauxc-cpu]
+platforms = ["linux-64"]
+
+[feature.gauxc-cpu.dependencies]
+exchcxx = { version = ">=1.0", build = "cpu_*" }
+
+[feature.gauxc-cuda12]
+platforms = ["linux-64-cuda12"]
+
+[feature.gauxc-cuda12.dependencies]
+cuda-compiler = ">=12,<13"
+cuda-nvrtc-dev = ">=12,<13"
+cuda-version = ">=12,<13"
+exchcxx = { version = ">=1.0", build = "cuda*" }
+libcublas-dev = ">=12,<13"
+libcusparse-dev = ">=12,<13"
+libmagma-devel = ">=2.10,<2.11"
+
+[environments.default]
+features = [
+  "python-runtime",
+  "model-assets",
+  "python-312",
+  "pyscf-214",
+  "dispersion",
+  "torch-213-cpu",
+  "test",
+  "lint",
+  "profiling",
+  "benchmark",
+]
+no-default-feature = true
+platforms = ["linux-64", "linux-aarch64", "osx-arm64"]
+
+[environments.lint]
+features = [
+  "python-runtime",
+  "model-assets",
+  "python-312",
+  "pyscf-214",
+  "dispersion",
+  "torch-213-cpu",
+  "test",
+  "lint",
+  "profiling",
+  "benchmark",
+]
+no-default-feature = true
+platforms = ["linux-64"]
+
+[environments.test-py311-pyscf214-torch213]
+features = [
+  "python-runtime",
+  "model-assets",
+  "python-311",
+  "pyscf-214",
+  "dispersion",
+  "torch-213-cpu",
+  "test",
+  "benchmark",
+]
+no-default-feature = true
+platforms = ["linux-64"]
+
+[environments.test-py312-pyscf214-torch212]
+features = [
+  "python-runtime",
+  "model-assets",
+  "python-312",
+  "pyscf-214",
+  "dispersion",
+  "torch-212-cpu",
+  "test",
+  "profiling",
+  "benchmark",
+]
+no-default-feature = true
+platforms = ["linux-64", "linux-aarch64", "osx-arm64"]
+
+[environments.test-py312-pyscf214-torch213]
+features = [
+  "python-runtime",
+  "model-assets",
+  "python-312",
+  "pyscf-214",
+  "dispersion",
+  "torch-213-cpu",
+  "test",
+  "profiling",
+  "benchmark",
+]
+no-default-feature = true
+platforms = ["linux-64", "linux-aarch64", "osx-arm64"]
+
+[environments.test-py313-pyscf214-torch213]
+features = [
+  "python-runtime",
+  "model-assets",
+  "python-313",
+  "pyscf-214",
+  "dispersion",
+  "torch-213-cpu",
+  "test",
+  "benchmark",
+]
+no-default-feature = true
+platforms = ["linux-64"]
+
+[environments.gpu-cuda12-torch212]
+features = [
+  "python-runtime",
+  "model-assets",
+  "python-312",
+  "pyscf-214",
+  "dispersion",
+  "torch-212-gpu",
+  "cuda-12",
+  "test",
+  "benchmark",
+]
+no-default-feature = true
+platforms = ["linux-64-cuda12"]
+
+[environments.gpu-cuda12-torch213]
+features = [
+  "python-runtime",
+  "model-assets",
+  "python-312",
+  "pyscf-214",
+  "dispersion",
+  "torch-213-gpu",
+  "cuda-12",
+  "test",
+  "benchmark",
+]
+no-default-feature = true
+platforms = ["linux-64-cuda12"]
+
+[environments.gpu-cuda13-torch213]
+features = [
+  "python-runtime",
+  "model-assets",
+  "python-312",
+  "pyscf-214",
+  "dispersion",
+  "torch-213-gpu",
+  "cuda-13",
+  "test",
+  "benchmark",
+]
+no-default-feature = true
+platforms = ["linux-64-cuda13"]
+
+[environments.docs]
+features = [
+  "python-runtime",
+  "model-assets",
+  "python-312",
+  "pyscf-214",
+  "dispersion",
+  "torch-213-cpu",
+  "benchmark",
+  "docs",
+]
+no-default-feature = true
+platforms = ["linux-64"]
+
+[environments.assets]
+features = ["python-312", "model-assets"]
+no-default-feature = true
+platforms = ["linux-64"]
+
+[environments.release]
+features = ["python-312", "release"]
+no-default-feature = true
+platforms = ["linux-64"]
+
+[environments.cpp-integration]
+features = [
+  "python-runtime",
+  "model-assets",
+  "python-312",
+  "pyscf-214",
+  "dispersion",
+  "torch-213-cpu",
+  "native-toolchain",
+]
+no-default-feature = true
+platforms = ["linux-64"]
+
+[environments.gauxc-openmp]
+features = [
+  "python-312",
+  "torch-213-cpu",
+  "native-toolchain",
+  "gauxc-core",
+  "gauxc-cpu",
+  "hdf5-serial",
+]
+no-default-feature = true
+platforms = ["linux-64"]
+
+[environments.gauxc-openmp-fortran]
+features = [
+  "python-312",
+  "torch-213-cpu",
+  "native-toolchain",
+  "fortran",
+  "gauxc-core",
+  "gauxc-cpu",
+  "hdf5-serial",
+]
+no-default-feature = true
+platforms = ["linux-64"]
+
+[environments.gauxc-mpi]
+features = [
+  "python-312",
+  "torch-213-cpu",
+  "native-toolchain",
+  "gauxc-core",
+  "gauxc-cpu",
+  "mpi",
+]
+no-default-feature = true
+platforms = ["linux-64"]
+
+[environments.gauxc-mpi-fortran]
+features = [
+  "python-312",
+  "torch-213-cpu",
+  "native-toolchain",
+  "fortran",
+  "gauxc-core",
+  "gauxc-cpu",
+  "mpi",
+]
+no-default-feature = true
+platforms = ["linux-64"]
+
+[environments.gauxc-cuda12]
+features = [
+  "python-312",
+  "torch-213-gpu",
+  "native-toolchain",
+  "gauxc-core",
+  "gauxc-cuda12",
+  "hdf5-serial",
+]
+no-default-feature = true
+platforms = ["linux-64-cuda12"]
+
+[environments.ftorch]
+features = [
+  "python-312",
+  "model-assets",
+  "torch-213-cpu",
+  "native-toolchain",
+  "fortran",
+]
+no-default-feature = true
+platforms = ["linux-64"]
+
+[package]
+name = "skala"
+version = "2026.9"
+description = "Skala Exchange Correlation Functional"
+license-file = "LICENSE.txt"
+readme = "README.md"
+repository = "https://github.com/microsoft/skala"
+documentation = "https://microsoft.github.io/skala"
+publish = false
+
+[package.build]
+backend = { name = "pixi-build-python", version = "0.8.*", channels = ["https://prefix.dev/conda-forge"] }
+
+[package.build.config]
+ignore-pypi-mapping = true
+
+[package.host-dependencies]
+hatchling = "*"
+python = ">=3.11,<3.14"
+
+# PySCF and dispersion packages intentionally remain PyPI-only environment
+# dependencies because conda PySCF introduces an incompatible XCFun ABI.
+[package.run-dependencies]
+ase = "*"
+e3nn = "*"
+h5py = "*"
+huggingface_hub = "*"
+numpy = "*"
+opt_einsum_fx = "*"
+python = ">=3.11,<3.14"
+pytorch = ">=2.12,<2.14"

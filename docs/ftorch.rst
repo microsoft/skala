@@ -8,18 +8,30 @@ The example demonstrates how to load a Skala model, prepare input features, comp
 Setting up development environment
 ----------------------------------
 
-For this example, we will be using mamba to manage our environment and dependencies.
-
-.. literalinclude:: ../examples/fortran/ftorch_integration/environment.yml
-   :language: yaml
-   :caption: environment.yml
-
-Create the environment and install dependencies:
+The repository's locked ``ftorch`` Pixi environment provides Python 3.12,
+LibTorch, CMake, Ninja, and the C, C++, and Fortran toolchains. Install it from
+the repository root:
 
 .. code-block:: bash
 
-   mamba env create -n skala-dev -f environment.yml
-   mamba activate skala-dev
+   pixi install --locked -e ftorch
+
+Configure, build, and install the example with:
+
+.. code-block:: bash
+
+   pixi run -e ftorch bash -c \
+     'cmake -B build_example -S examples/fortran/ftorch_integration -G Ninja \
+       -DCMAKE_INSTALL_PREFIX="$CONDA_PREFIX"'
+   pixi run -e ftorch cmake --build build_example
+   pixi run -e ftorch cmake --install build_example
+
+After downloading the checkpoint and generating the input features, run the
+installed example directly:
+
+.. code-block:: bash
+
+   pixi run -e ftorch Skala ./skala-1.1-rev1.fun ./features
 
 
 Build system setup
@@ -32,7 +44,6 @@ We will use the following directory structure and files:
 
    skala/
    ├── CMakeLists.txt
-   ├── environment.yml
    ├── app/
    │   └── main.f90
    ├── cmake/

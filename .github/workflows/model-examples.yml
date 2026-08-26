@@ -5,9 +5,10 @@ on:
     branches: [main]
     paths: &model-example-paths
       - '.github/workflows/model-examples.yml'
-      - 'environment-cpu.yml'
       - 'examples/cpp/cpp_integration/**'
       - 'examples/fortran/ftorch_integration/**'
+      - 'pixi.lock'
+      - 'pixi.toml'
       - 'pyproject.toml'
       - 'src/skala/**'
   pull_request:
@@ -28,17 +29,18 @@ jobs:
     - name: Print CPU diagnostics
       uses: ./.github/actions/cpu-diagnostics
 
-    - name: Setup Python
-      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+    - name: Setup Pixi
+      uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
       with:
-        version: "3.x"
-
-    - name: Install huggingface_hub CLI
-      run: pip install huggingface_hub
+        pixi-version: v0.75.0
+        environments: assets
+        activate-environment: true
+        locked: true
+        cache: false
 
     - name: Download checkpoint
       run: >-
-         hf download microsoft/skala-1.1 skala-1.1-rev1.fun --local-dir .
+        hf download microsoft/skala-1.1 skala-1.1-rev1.fun --local-dir .
 
     - name: Upload checkpoint
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -54,24 +56,18 @@ jobs:
     - name: Print CPU diagnostics
       uses: ./.github/actions/cpu-diagnostics
 
-    - name: Setup micromamba
-      uses: mamba-org/setup-micromamba@f457c30a868e4760d3a6fcea5f25dc655b8edf39 # v3
+    - name: Setup Pixi
+      uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
       with:
-        environment-file: environment-cpu.yml
-        environment-name: skala-dev
-        # Recreate native environments per runner; restored environments caused SIGILL failures.
-        cache-environment: false
-        cache-downloads: true
-
-    - name: Install Skala
-      run: pip install -e .
-      shell: micromamba-shell {0}
+        pixi-version: v0.75.0
+        environments: default
+        activate-environment: true
+        locked: true
+        cache: false
 
     - name: Generate features
       run: >-
-        python examples/cpp/cpp_integration/prepare_inputs.py
-        --output-dir features
-      shell: micromamba-shell {0}
+        python examples/cpp/cpp_integration/prepare_inputs.py --output-dir features
 
     - name: Upload features
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -91,26 +87,19 @@ jobs:
     - name: Print CPU diagnostics
       uses: ./.github/actions/cpu-diagnostics
 
-    - name: Setup micromamba
-      uses: mamba-org/setup-micromamba@f457c30a868e4760d3a6fcea5f25dc655b8edf39 # v3
+    - name: Setup Pixi
+      uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
       with:
-        environment-file: examples/cpp/cpp_integration/environment.yml
-        environment-name: skala-cpp-integration
-        # Recreate native environments per runner; restored environments caused SIGILL failures.
-        cache-environment: false
-        cache-downloads: true
+        pixi-version: v0.75.0
+        environments: cpp-integration
+        activate-environment: true
+        locked: true
+        cache: false
 
-    - name: Configure project
-      run: >-
-        cmake
-        -B build_example
-        -S examples/cpp/cpp_integration
-        -G Ninja
-      shell: micromamba-shell {0}
-
-    - name: Build project
-      run: cmake --build build_example
-      shell: micromamba-shell {0}
+    - name: Configure and build project
+      run: |
+        cmake -B build_example -S examples/cpp/cpp_integration -G Ninja
+        cmake --build build_example
 
     - name: Download features
       uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
@@ -125,11 +114,9 @@ jobs:
         path: .
 
     - name: Run example
-      run: >-
-        ./build_example/skala_cpp_integration
-        ./skala-1.1-rev1.fun
-        ./features
-      shell: micromamba-shell {0}
+      run: |
+        ./build_example/skala_cpp_integration \
+          ./skala-1.1-rev1.fun ./features
 
   ftorch:
     runs-on: ubuntu-latest
@@ -143,31 +130,21 @@ jobs:
     - name: Print CPU diagnostics
       uses: ./.github/actions/cpu-diagnostics
 
-    - name: Setup micromamba
-      uses: mamba-org/setup-micromamba@f457c30a868e4760d3a6fcea5f25dc655b8edf39 # v3
+    - name: Setup Pixi
+      uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
       with:
-        environment-file: examples/fortran/ftorch_integration/environment.yml
-        environment-name: ftorch-dev
-        # Recreate native environments per runner; restored environments caused SIGILL failures.
-        cache-environment: false
-        cache-downloads: true
+        pixi-version: v0.75.0
+        environments: ftorch
+        activate-environment: true
+        locked: true
+        cache: false
 
-    - name: Configure project
-      run: >-
-        cmake
-        -B build_example
-        -S examples/fortran/ftorch_integration
-        -G Ninja
-        -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX
-      shell: micromamba-shell {0}
-
-    - name: Build project
-      run: cmake --build build_example
-      shell: micromamba-shell {0}
-
-    - name: Install project
-      run: cmake --install build_example
-      shell: micromamba-shell {0}
+    - name: Configure, build, and install project
+      run: |
+        cmake -B build_example -S examples/fortran/ftorch_integration -G Ninja \
+          -DCMAKE_INSTALL_PREFIX="$CONDA_PREFIX"
+        cmake --build build_example
+        cmake --install build_example
 
     - name: Download features
       uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
@@ -182,8 +159,4 @@ jobs:
         path: .
 
     - name: Run example
-      run: >-
-         Skala
-         ./skala-1.1-rev1.fun
-         ./features
-      shell: micromamba-shell {0}
+      run: Skala ./skala-1.1-rev1.fun ./features

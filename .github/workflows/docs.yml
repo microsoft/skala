@@ -26,38 +26,27 @@ jobs:
       - name: Print CPU diagnostics
         uses: ./.github/actions/cpu-diagnostics
 
-      - name: Setup micromamba
-        uses: mamba-org/setup-micromamba@f457c30a868e4760d3a6fcea5f25dc655b8edf39 # v3
+      - name: Setup Pixi
+        uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
         with:
-          environment-file: environment-cpu.yml
-          environment-name: skala
-          # Recreate native environments per runner to avoid restoring CPU-specific binaries.
-          cache-environment: false
-          cache-downloads: true
-          create-args: >-
-            python=3.12
-
-      - name: Install package
-        run: |
-          pip install -e '.[doc]'
-        shell: micromamba-shell {0}
+          pixi-version: v0.75.0
+          environments: docs
+          activate-environment: true
+          locked: true
+          cache: false
 
       - name: Check environment consistency
-        run: |
-          pip check
-        shell: micromamba-shell {0}
+        run: python -m pip check
 
       - name: Build documentation
         run: |
           sphinx-build -b html docs docs/_build/html
           touch docs/_build/html/.nojekyll
-        shell: micromamba-shell {0}
 
       - name: Check external links
-        run: |
-          # The HTML build above executes notebooks; linkcheck only needs their links.
-          sphinx-build -D nb_execution_mode=off -b linkcheck docs docs/_build/linkcheck
-        shell: micromamba-shell {0}
+        run: >-
+          sphinx-build -D nb_execution_mode=off -b linkcheck
+          docs docs/_build/linkcheck
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
