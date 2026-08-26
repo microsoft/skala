@@ -1,6 +1,7 @@
 [tool.mypy]
 strict = true
-no_namespace_packages = true
+explicit_package_bases = true
+mypy_path = ["skala/src", "model/src", "gauxc/src", "docs/benchmark/src", "skala", "."]
 python_version = "3.11"
 exclude = ["build/", "docs/site/_build/", "htmlcov/", "third_party/"]
 

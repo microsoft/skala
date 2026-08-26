@@ -18,8 +18,8 @@ repos:
 
   - repo: local
     hooks:
-      - id: mypy-skala
-        name: mypy (Skala runtime)
+      - id: mypy
+        name: mypy
         entry: mypy
         language: system
         args:
@@ -28,44 +28,8 @@ repos:
           - --num-workers
           - "4"
           - skala
-        pass_filenames: false
-        always_run: true
-
-      - id: mypy-model
-        name: mypy (model)
-        entry: mypy
-        language: system
-        args:
-          - --config-file
-          - pyproject.toml
-          - --num-workers
-          - "4"
           - model
-        pass_filenames: false
-        always_run: true
-
-      - id: mypy-gauxc
-        name: mypy (GauXC)
-        entry: mypy
-        language: system
-        args:
-          - --config-file
-          - pyproject.toml
-          - --num-workers
-          - "4"
           - gauxc
-        pass_filenames: false
-        always_run: true
-
-      - id: mypy-docs
-        name: mypy (documentation)
-        entry: mypy
-        language: system
-        args:
-          - --config-file
-          - pyproject.toml
-          - --num-workers
-          - "4"
           - docs
         pass_filenames: false
         always_run: true
