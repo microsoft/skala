@@ -27,11 +27,14 @@ skala = { path = "skala", editable = true }
 e3nn = "*"
 opt_einsum_fx = "*"
 
+[feature.model-definition.pypi-dependencies]
+skala-model = { path = "model", editable = true }
+
 [feature.gauxc-python.dependencies]
 h5py = "*"
 
 [feature.component-sources.activation.env]
-PYTHONPATH = "$PIXI_PROJECT_ROOT/model/src:$PIXI_PROJECT_ROOT/gauxc/src:$PIXI_PROJECT_ROOT/docs/benchmark/src"
+PYTHONPATH = "$PIXI_PROJECT_ROOT/gauxc/src"
 
 [feature.model-assets.dependencies]
 huggingface_hub = "*"
@@ -130,6 +133,9 @@ pandas = "*"
 pyarrow = "*"
 pyyaml = "*"
 scipy = "*"
+
+[feature.benchmark.pypi-dependencies]
+skala-benchmark = { path = "docs/benchmark", editable = true }
 
 [feature.docs.dependencies]
 ipywidgets = "*"

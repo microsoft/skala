@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "skala-benchmark"
+version = "2026.9"
+description = "Benchmark runner and report generator for Skala"
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "jinja2",
+    "markdown-it-py",
+    "markupsafe",
+    "numpy",
+    "pandas",
+    "pyarrow",
+    "pyscf>=2.14,<2.15",
+    "pyyaml",
+    "scipy",
+    "skala>=2026.9,<2027",
+    "torch>=2.12,<2.14",
+]
+
+[project.scripts]
+skala-benchmark = "skala_benchmark.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/skala_benchmark"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/README.md",
+    "/pyproject.toml",
+    "/src/skala_benchmark",
+]

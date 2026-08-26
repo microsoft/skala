@@ -52,7 +52,7 @@ line-length = 100
 [tool.pytest.ini_options]
 timeout = 300
 addopts = "-m 'not profiling and not benchmark and not model_benchmark'"
-pythonpath = [".", "skala/src", "model/src", "gauxc/src", "docs/benchmark/src"]
+pythonpath = [".", "skala/src", "gauxc/src"]
 testpaths = ["skala/tests", "model/tests", "gauxc/tests", "docs/benchmark/tests"]
 markers = [
     "benchmark: performance measurements collected by pytest-benchmark",
