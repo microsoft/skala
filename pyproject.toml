@@ -54,7 +54,7 @@ line-length = 100
 timeout = 300
 addopts = "-m 'not profiling and not benchmark and not model_benchmark'"
 pythonpath = [".", "skala/src", "gauxc/src"]
-testpaths = ["skala/tests", "model/tests", "gauxc/tests", "benchmark/tests"]
+testpaths = ["tests", "skala/tests", "model/tests", "gauxc/tests", "benchmark/tests"]
 markers = [
     "benchmark: performance measurements collected by pytest-benchmark",
     "gpu: requires a CUDA-capable GPU and GPU test dependencies",

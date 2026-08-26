@@ -106,6 +106,7 @@ cutensor = ">=2"
 gpu4pyscf-cuda13x = "==1.8.1"
 
 [feature.test.dependencies]
+packaging = "*"
 pytest = "*"
 pytest-benchmark = "*"
 pytest-cov = "*"
