@@ -3,7 +3,8 @@
 Installing GauXC
 ================
 
-In this section, we will provide instructions on how to install GauXC with Skala support based on the conda-forge ecosystem.
+In this section, we will install GauXC with Skala support using the locked Pixi
+environments in the Skala repository.
 As part of this tutorial we will be
 
 * installing dependencies for building GauXC
@@ -16,52 +17,49 @@ As part of this tutorial we will be
 Prerequisites
 -------------
 
-For this tutorial, we will use the `mamba <https://mamba.readthedocs.io/en/latest/>`__ package manager for setting up the environment and installing dependencies.
-If you do not have mamba installed, you can download the `miniforge <https://conda-forge.org/download/>`__ installer.
+Install `Pixi 0.75 <https://pixi.sh>`__ and clone Skala. The repository provides
+five native environments:
 
-First, we will create a new environment with all the required dependencies for building GauXC with Skala support.
-We provide three different configurations depending on whether you want to build GauXC with OpenMP, MPI, or CUDA support.
+.. list-table::
+   :header-rows: 1
+
+   * - Environment
+     - Backend
+     - Bindings
+   * - ``gauxc-openmp``
+     - OpenMP
+     - C/C++
+   * - ``gauxc-openmp-fortran``
+     - OpenMP
+     - C/C++/Fortran
+   * - ``gauxc-mpi``
+     - OpenMPI with MPI HDF5
+     - C/C++
+   * - ``gauxc-mpi-fortran``
+     - OpenMPI with MPI HDF5
+     - C/C++/Fortran
+   * - ``gauxc-cuda12``
+     - CUDA 12 with GPU LibTorch
+     - C/C++
 
 .. note::
 
    A full list of dependencies can be found at :ref:`gauxc-cmake-deps` in the CMake configuration documentation.
 
-For this, create a file named `environment.yml` with the following content:
+Install the environment for the backend you need, for example:
 
-.. tab-set::
-   :sync-group: config
+.. code-block:: bash
 
-   .. tab-item:: OpenMP
-
-      .. literalinclude:: ../../examples/cpp/gauxc_integration/environment-openmp.yml
-         :caption: environment.yml
-         :language: yaml
-
-   .. tab-item:: MPI
-
-      .. literalinclude:: ../../examples/cpp/gauxc_integration/environment-mpi.yml
-         :caption: environment.yml
-         :language: yaml
-
-   .. tab-item:: CUDA
-
-      .. literalinclude:: ../../examples/cpp/gauxc_integration/environment-cuda.yml
-         :caption: environment.yml
-         :language: yaml
-
-Create and activate the environment:
-
-.. code-block:: none
-
-   mamba env create -n gauxc-dev -f environment.yml
-   mamba activate gauxc-dev
+   git clone https://github.com/microsoft/skala
+   cd skala
+   pixi install --locked -e gauxc-openmp
 
 Verify that the toolchain is visible:
 
 .. code-block:: bash
 
-   cmake --version
-   python -c "import torch; print(torch.__version__)"
+   pixi run -e gauxc-openmp cmake --version
+   pixi run -e gauxc-openmp python -c "import torch; print(torch.__version__)"
 
 
 Obtain GauXC with Skala
@@ -83,14 +81,17 @@ Download the pre-packaged source bundle from the Skala release page:
       curl -L https://github.com/microsoft/skala/releases/download/v1.1.1/gauxc-skala-r2.tar.gz.sha256 | sha256sum -c
       tar xzvf gauxc-skala-r2.tar.gz
 
-The archive expands into a ``gauxc`` directory that already contains the Skala patches.
-One convenient layout is
+The archive expands into a ``gauxc`` directory that already contains the Skala
+patches. Place it beside the Skala checkout because the CMake commands below
+assume this layout:
 
 .. code-block:: text
 
    work/
+   ├── skala/
    ├── gauxc/
-   └── build/
+   ├── build_gauxc/
+   └── build_example/
 
 .. note::
 
@@ -104,43 +105,72 @@ One convenient layout is
 Configure and build
 -------------------
 
-Create an out-of-tree build directory and pick the configuration that matches your backend.
+From the Skala repository root, pick the environment and CMake options that
+match your backend. The following commands build the C++ API; enable
+:cmake:variable:`GAUXC_ENABLE_C` or :cmake:variable:`GAUXC_ENABLE_FORTRAN` when
+building the C or Fortran examples.
 
 .. tab-set::
    :sync-group: config
 
    .. tab-item:: OpenMP
 
-      .. code-block:: none
+         .. code-block:: bash
 
-         cmake -B build -S gauxc -G Ninja \
-           -DGAUXC_ENABLE_OPENMP=on \
-           -DGAUXC_ENABLE_MPI=off \
-           -DGAUXC_ENABLE_CUDA=off \
-           -DCMAKE_INSTALL_PREFIX=${CONDA_PREFIX}
-         cmake --build build
+             pixi run -e gauxc-openmp bash -c \
+                'cmake -B ../build_gauxc -S ../gauxc -G Ninja \
+                   -DGAUXC_ENABLE_OPENMP=ON \
+                   -DGAUXC_ENABLE_MPI=OFF \
+                   -DGAUXC_ENABLE_CUDA=OFF \
+                   -DGAUXC_ENABLE_ONEDFT=ON \
+                   -DGAUXC_ENABLE_C=OFF \
+                   -DGAUXC_ENABLE_FORTRAN=OFF \
+                   -DGAUXC_ENABLE_TESTS=OFF \
+                   -DBUILD_SHARED_LIBS=ON \
+                   -DCMAKE_INSTALL_PREFIX="$CONDA_PREFIX"'
+             pixi run -e gauxc-openmp cmake --build ../build_gauxc
+             pixi run -e gauxc-openmp cmake --install ../build_gauxc
 
    .. tab-item:: MPI
 
-      .. code-block:: none
+         .. code-block:: bash
 
-         cmake -B build -S gauxc -G Ninja \
-           -DGAUXC_ENABLE_OPENMP=on \
-           -DGAUXC_ENABLE_MPI=on \
-           -DGAUXC_ENABLE_CUDA=off \
-           -DCMAKE_INSTALL_PREFIX=${CONDA_PREFIX}
-         cmake --build build
+             pixi run -e gauxc-mpi bash -c \
+                'cmake -B ../build_gauxc -S ../gauxc -G Ninja \
+                   -DGAUXC_ENABLE_OPENMP=OFF \
+                   -DGAUXC_ENABLE_MPI=ON \
+                   -DGAUXC_ENABLE_CUDA=OFF \
+                   -DGAUXC_ENABLE_ONEDFT=ON \
+                   -DGAUXC_ENABLE_C=OFF \
+                   -DGAUXC_ENABLE_FORTRAN=OFF \
+                   -DGAUXC_ENABLE_TESTS=OFF \
+                   -DBUILD_SHARED_LIBS=ON \
+                   -DCMAKE_INSTALL_PREFIX="$CONDA_PREFIX"'
+             pixi run -e gauxc-mpi cmake --build ../build_gauxc
+             pixi run -e gauxc-mpi cmake --install ../build_gauxc
 
    .. tab-item:: CUDA
 
-      .. code-block:: none
+      .. code-block:: bash
 
-         cmake -B build -S gauxc -G Ninja \
-           -DGAUXC_ENABLE_OPENMP=on \
-           -DGAUXC_ENABLE_MPI=off \
-           -DGAUXC_ENABLE_CUDA=on \
-           -DCMAKE_INSTALL_PREFIX=${CONDA_PREFIX}
-         cmake --build build
+         pixi run -e gauxc-cuda12 bash -c \
+           'cmake -B ../build_gauxc -S ../gauxc -G Ninja \
+             -DGAUXC_ENABLE_OPENMP=ON \
+             -DGAUXC_ENABLE_MPI=OFF \
+             -DGAUXC_ENABLE_CUDA=ON \
+             -DCMAKE_CUDA_ARCHITECTURES="${CMAKE_CUDA_ARCHITECTURES:-60}" \
+             -DGAUXC_ENABLE_ONEDFT=ON \
+             -DGAUXC_ENABLE_C=OFF \
+             -DGAUXC_ENABLE_FORTRAN=OFF \
+             -DGAUXC_ENABLE_TESTS=OFF \
+             -DBUILD_SHARED_LIBS=ON \
+             -DCMAKE_INSTALL_PREFIX="$CONDA_PREFIX"'
+         pixi run -e gauxc-cuda12 cmake --build ../build_gauxc
+         pixi run -e gauxc-cuda12 cmake --install ../build_gauxc
+
+      This defaults to compute capability 6.0, GauXC's minimum for FP64
+      atomics. Set ``CMAKE_CUDA_ARCHITECTURES`` before the configure command for
+      the deployment GPU, for example ``CMAKE_CUDA_ARCHITECTURES=80``.
 
 .. note::
 
@@ -149,42 +179,20 @@ Create an out-of-tree build directory and pick the configuration that matches yo
 
 .. tip::
 
-   If CMake cannot find libtorch, the ``Torch_DIR`` variable can be set to help discover the package.
-   For conda-forge installed pytorch this should be set as ``-DTorch_DIR=${CONDA_PREFIX}/share/cmake/Torch``
-   and for pip installed pytorch the CMake config file will be in ``${CONDA_PREFIX}/lib/python3.11/site-packages/torch/share/cmake/Torch``
-   where the Python version should be adjusted accordingly to the environment.
-
-
-Quick verification
-------------------
-
-After the build finishes, run the bundled regression test to confirm that Skala-enabled functionals
-are working correctly. The Skala implementation can run different traditional functionals, like PBE and TPSS,
-which can be compared against other libraries.
-
-.. code-block:: bash
-
-   cd gauxc/tests/ref_data
-   ../../../build/tests/standalone_driver onedft_input.inp
-
-Expected output includes the total TPSS energy computed using a checkpoint compatible for the Skala implementation
-for the reference density matrix.
-
-.. tip::
-   
-   If the executable cannot locate libtorch or other shared libraries, double-check
-   that ``LD_LIBRARY_PATH`` includes ``${CONDA_PREFIX}/lib``
-   (activating the environment usually handles this).
+   Pixi exposes the selected environment as ``${CONDA_PREFIX}`` for compatibility
+   with conda build tools. If CMake cannot find LibTorch, pass
+   ``-DTorch_DIR=${CONDA_PREFIX}/share/cmake/Torch``.
 
 
 Install the library
 -------------------
 
-Install into the active conda environment so downstream projects can pick up the CMake config files.
+The CMake install command installs into the selected Pixi environment so
+downstream projects can discover its CMake config files.
 
 .. code-block:: bash
 
-   cmake --install build
+   pixi run -e gauxc-openmp cmake --install ../build_gauxc
 
 This installs headers, libraries, and CMake config.
 
@@ -192,6 +200,38 @@ This installs headers, libraries, and CMake config.
 
    For using GauXC in your own CMake project, check out :ref:`gauxc-cmake-integration` in the CMake configuration documentation.
    Alternatively, you can follow the instructions in the :ref:`gauxc-cpp-library` tutorial for a full standalone example.
+
+
+Quick verification
+------------------
+
+The installed GauXC library does not provide a ``Skala`` executable by itself; it is
+built by the standalone C++ example project described in :ref:`gauxc-cpp-library`, which
+now discovers the GauXC installation from the previous step. Configure and build the
+example to obtain the ``Skala`` command line driver:
+
+.. code-block:: bash
+
+   pixi run -e gauxc-openmp cmake -B ../build_example -S ../skala/examples/cpp/gauxc_integration -G Ninja
+   pixi run -e gauxc-openmp cmake --build ../build_example
+
+Then run the bundled regression test to confirm that Skala-enabled functionals
+are working correctly. The Skala implementation can run different traditional functionals, like PBE and TPSS,
+which can be compared against other libraries.
+
+.. code-block:: bash
+
+   pixi run -e gauxc-openmp ../build_example/Skala \
+     ../gauxc/tests/ref_data/onedft_he_def2qzvp_tpss_uks.hdf5 --model TPSS
+
+Expected output includes the total TPSS energy computed using a checkpoint compatible for the Skala implementation
+for the reference density matrix.
+
+.. tip::
+
+   If the executable cannot locate libtorch or other shared libraries, double-check
+   that ``LD_LIBRARY_PATH`` includes ``${CONDA_PREFIX}/lib``
+   (activating the environment usually handles this).
 
 
 Troubleshooting
@@ -202,12 +242,12 @@ Torch not found
   or export ``Torch_DIR`` before running CMake.
 
 CUDA mismatch
-  the CUDA toolkit selected by conda must match the version baked into the
-  ``pytorch`` build; reinstall ``pytorch`` if necessary (e.g., ``pytorch ==2.3.* cuda118*``).
+   use ``gauxc-cuda12`` as a unit. Its lock selects matching CUDA 12 compiler,
+   ExchCXX, and PyTorch builds.
 
 Linker errors for BLAS/MPI
-  verify that the conda environment stayed active during the build and that ``cmake`` picked
-  the toolchain from ``${CONDA_PREFIX}`` via ``CMAKE_PREFIX_PATH``.
+   run CMake through ``pixi run -e <environment>`` and verify that it picked the
+   toolchain from ``${CONDA_PREFIX}`` via ``CMAKE_PREFIX_PATH``.
 
 Standalone driver cannot find densities
   run it from ``gauxc/tests/ref_data`` since paths in density files are specified relative to the

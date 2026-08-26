@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: MIT
 
+from __future__ import annotations
+
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -69,26 +71,24 @@ else:
                 "Failed to configure CuPy to use the PyTorch allocator."
             ) from e
 
-        Array: TypeAlias = (
-            np.ndarray[_ShapeT_co, _DTypeT_co] | cupy.ndarray[_ShapeT_co, _DTypeT_co]
-        )
+        Array = np.ndarray | cupy.ndarray
         ArrayF64 = TypeVar(
             "ArrayF64",
             np.ndarray[Any, F64],
             cupy.ndarray[Any, F64],
         )
-        Grid: TypeAlias = dft.Grids | dft_gpu.Grids
-        KS: TypeAlias = dft.rks.RKS | dft.uks.UKS | dft_gpu.rks.RKS | dft_gpu.uks.UKS
+        Grid = dft.Grids | dft_gpu.Grids
+        KS = dft.rks.RKS | dft.uks.UKS | dft_gpu.rks.RKS | dft_gpu.uks.UKS
 
         GPU_EXCEPTION = None
     except ImportError as e:
         GPU_EXCEPTION = e
         dft_gpu = None
 
-        Array: TypeAlias = np.ndarray[_ShapeT_co, _DTypeT_co]
+        Array = np.ndarray
         ArrayF64 = TypeVar("ArrayF64", bound=np.ndarray[Any, F64])
-        Grid: TypeAlias = dft.Grids
-        KS: TypeAlias = dft.rks.RKS | dft.uks.UKS
+        Grid = dft.Grids
+        KS = dft.rks.RKS | dft.uks.UKS
 
 
 def check_gpu_imports_were_successful() -> None:
@@ -131,5 +131,5 @@ def to_numpy(x: Tensor) -> np.ndarray:
     return x.detach().cpu().numpy()
 
 
-def to_cupy(x: Tensor) -> "cupy.ndarray":
+def to_cupy(x: Tensor) -> cupy.ndarray:
     return cupy.from_dlpack(x.detach())

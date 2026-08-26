@@ -65,6 +65,7 @@ from skala.pyscf.gradients import SkalaRKSGradient, SkalaUKSGradient
 from skala.pyscf.grids import SkalaGrids
 from skala.pyscf.numint import SkalaNumInt
 from skala.pyscf.utils import pyscf_version_newer_than_2_10
+from skala.typing import F64
 
 
 class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
@@ -74,6 +75,8 @@ class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
 
     grids: SkalaGrids
     """Numerical integration grids."""
+
+    _numint: SkalaNumInt[np.ndarray[Any, F64]]
 
     with_dftd3: DFTD3Dispersion | None = None
     """DFT-D3 dispersion correction."""
@@ -164,6 +167,8 @@ class SkalaUKS(dft.uks.UKS):  # type: ignore[misc]
 
     grids: SkalaGrids
     """Numerical integration grids."""
+
+    _numint: SkalaNumInt[np.ndarray[Any, F64]]
 
     with_dftd3: DFTD3Dispersion | None = None
     """DFT-D3 dispersion correction."""

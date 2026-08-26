@@ -8,8 +8,8 @@ import skala
 # as part of the Skala runtime module.
 sys.path.insert(0, str(Path(__file__).parent / "_ext"))
 
-# Ensure CONDA_PREFIX is set so CuPy can locate the CUDA toolkit
-# when notebooks are executed during the Sphinx build.
+# Pixi exposes its active environment as CONDA_PREFIX; retain a fallback for plain Python
+# builds so CuPy can locate the CUDA toolkit when notebooks execute during the Sphinx build.
 os.environ.setdefault("CONDA_PREFIX", sys.prefix)
 
 project = "Skala"

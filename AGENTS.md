@@ -20,17 +20,15 @@ Skala is a neural network-based exchange-correlation (XC) functional for density
 
 ## Development environment
 
-1. **Python version**: 3.11–3.13 (target 3.11 for tooling).
-2. **Environment setup** (conda recommended):
+1. **Python version**: 3.11–3.13 (target 3.11 for compatibility tooling).
+2. **Environment setup** (Pixi 0.75):
    ```bash
-   mamba env create -f environment.yml
-   mamba activate skala
-   pip install -e .
+  pixi install --locked -e default
    ```
 3. **Pre-commit hooks** (required before committing):
    ```bash
-   pre-commit install
-   pre-commit run --all-files
+  pixi run -e default pre-commit install
+  pixi run -e default pre-commit run --all-files
    ```
 
 ## Code style & linting
@@ -52,8 +50,11 @@ When editing code:
 - Framework: pytest with pytest-cov.
 - Run tests:
   ```bash
-  pytest tests/ -v --cov=skala
+  pixi run -e default pytest -v --doctest-modules \
+    --cov=skala --cov-report=xml --cov-report=term-missing --cov-report=html \
+    --durations=50 --durations-min=1.0 src/skala/ tests/
   ```
+- The generic `pytest` task sets `OMP_NUM_THREADS=4` and forwards all additional arguments.
 - Keep test files in `tests/` with `test_` prefix.
 - Use fixtures for expensive setup (molecule construction, model loading).
 - Prefer fast unit tests; integration tests that run DFT should be marked or placed separately.
@@ -63,7 +64,7 @@ When editing code:
 - Engine: Sphinx with myst-nb (executes notebooks during build).
 - Build locally:
   ```bash
-  sphinx-build -b html docs docs/_build/html
+  pixi run -e docs sphinx-build -b html docs docs/_build/html
   ```
 - Notebooks in `docs/` should be executable with a 5-minute timeout.
 - Use reStructuredText for standalone pages; Jupyter notebooks for tutorials.
@@ -92,11 +93,11 @@ When editing code:
 
 | Task | Command |
 |------|---------|
-| Format code | `ruff format src/ tests/` |
-| Lint code | `ruff check --fix src/ tests/` |
-| Run tests | `pytest tests/ -v` |
-| Build docs | `sphinx-build -b html docs docs/_build/html` |
-| Type check | `mypy src/skala` |
+| Format code | `pixi run -e default ruff format src/ tests/` |
+| Lint code | `pixi run -e default pre-commit run --all-files` |
+| Run tests | `pixi run -e default pytest -v --doctest-modules --cov=skala --cov-report=xml --cov-report=term-missing --cov-report=html --durations=50 --durations-min=1.0 src/skala/ tests/` |
+| Build docs | `pixi run -e docs sphinx-build -b html docs docs/_build/html` |
+| Type check | `pixi run -e default mypy src/skala` |
 
 ## Contact
 

@@ -14,6 +14,31 @@ This project has adopted the [Microsoft Open Source Code of Conduct](https://ope
 For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/)
 or contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
 
+## Development setup
+
+Install Pixi 0.75, then create the default locked development environment from the repository root:
+
+```bash
+pixi install --locked -e default
+pixi run -e default pre-commit install
+```
+
+Run the standard checks in their Pixi environments:
+
+```bash
+pixi run -e default pytest -v --doctest-modules \
+	--cov=skala --cov-report=xml --cov-report=term-missing --cov-report=html \
+	--durations=50 --durations-min=1.0 src/skala/ tests/
+pixi run -e default pre-commit run --all-files
+pixi run -e docs sphinx-build -b html docs docs/_build/html
+```
+
+The generic `pytest` task sets `OMP_NUM_THREADS=4` and forwards all additional arguments.
+
+Named compatibility environments cover Python 3.11 through 3.13, PySCF 2.14,
+PyTorch 2.12 and 2.13, GPU4PySCF 1.8.1, and CUDA 12 and 13. Keep `pixi.lock`
+synchronized with changes to `pixi.toml` or `pyproject.toml`.
+
 
 ## Model development
 
@@ -37,21 +62,23 @@ outside this synthetic benchmark. The tests use 200,000 deterministic grid point
 neither molecular setup nor golden output data. Run the CPU cases with four threads:
 
 ```bash
-OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 python -m pytest tests/test_traced_model_comparison.py -m model_benchmark -k cpu -v
+MKL_NUM_THREADS=4 pixi run -e default \
+	pytest -v -m model_benchmark -k cpu tests/test_traced_model_comparison.py
 ```
 
 On a CUDA-capable runner, execute both CPU and GPU cases by omitting the CPU filter:
 
 ```bash
-OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 python -m pytest tests/test_traced_model_comparison.py -m model_benchmark -v
+MKL_NUM_THREADS=4 pixi run -e gpu-cuda12-torch213 \
+	pytest -v -m model_benchmark -k cuda tests/test_traced_model_comparison.py
 ```
 
 The same comparison can be run as a standalone report. It prints maximum accuracy differences,
 local and published runtime medians, and isolated peak allocations for forward and backward work:
 
 ```bash
-python tests/test_traced_model_comparison.py --device cpu
-python tests/test_traced_model_comparison.py --device cuda
+pixi run -e default python tests/test_traced_model_comparison.py --device cpu
+pixi run -e gpu-cuda12-torch213 python tests/test_traced_model_comparison.py --device cuda
 ```
 
 Despite that feel free to open issues and PRs proposing model improvements, we are very

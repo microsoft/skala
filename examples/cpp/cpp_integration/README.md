@@ -4,45 +4,41 @@ This example demonstrates how to use the Skala machine learning functional in C+
 
 ## Setup environment
 
-Set up the conda environment using the provided environment file:
+Install the locked Pixi environment from the repository root:
 
 ```bash
-cd examples/cpp/cpp_integration
-conda env create -n skala_cpp_integration -f environment.yml
-conda activate skala_cpp_integration
+pixi install --locked -e cpp-integration
 ```
 
 ## Build library
 
-The example can be built using CMake.
-The provided environment is configured for CMake to find the required dependencies.
+Configure and build the example with CMake and Ninja in the Pixi environment:
 
 ```bash
-cmake -S . -B _build -G Ninja
-cmake --build _build
+pixi run -e cpp-integration cmake -B build_example -S examples/cpp/cpp_integration -G Ninja
+pixi run -e cpp-integration cmake --build build_example
 ```
-
-For any changes to the code, rebuild using the last command.
 
 ## Run example
 
-Download the Skala model, as well as a reference LDA functional from HuggingFace
-using the provided download script:
+Download the Skala model from Hugging Face:
 
 ```bash
-./download_model.py
+pixi run -e cpp-integration hf download microsoft/skala-1.1 \
+	skala-1.1-rev1.fun --local-dir .
 ```
 
 Prepare the molecular features for a test molecule (H2) using the provided script:
 
 ```bash
-python ./prepare_inputs.py --output-dir H2
+pixi run -e default python examples/cpp/cpp_integration/prepare_inputs.py \
+	--output-dir features
 ```
 
 Finally, run $E_\text{xc}$ and (partial) $V_\text{xc}$ computations with the C++ example:
 
 ```bash
-./_build/skala_cpp_integration skala-1.1-rev1.fun H2
+pixi run -e cpp-integration ./build_example/skala_cpp_integration ./skala-1.1-rev1.fun ./features
 ```
 
 **Note:** You are expected to add D3 dispersion correction (using b3lyp settings) to the final energy of Skala.

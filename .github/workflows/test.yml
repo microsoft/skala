@@ -9,8 +9,8 @@ on:
       - 'benchmarks/reference/**'
       - 'conftest.py'
       - 'docs/_ext/**'
-      - 'environment-cpu.yml'
-      - 'environment-gpu.yml'
+      - 'pixi.lock'
+      - 'pixi.toml'
       - 'pyproject.toml'
       - 'src/skala/**'
       - 'tests/**'
@@ -33,24 +33,17 @@ jobs:
     - name: Print CPU diagnostics
       uses: ./.github/actions/cpu-diagnostics
 
-    - name: Setup micromamba
-      uses: mamba-org/setup-micromamba@f457c30a868e4760d3a6fcea5f25dc655b8edf39 # v3
+    - name: Setup Pixi
+      uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
       with:
-        environment-file: environment-cpu.yml
-        environment-name: skala
-        # Recreate native environments per runner to avoid restoring CPU-specific binaries.
-        cache-environment: false
-        cache-downloads: true
-
-    - name: Install package in development mode
-      run: |
-        pip install -e . --no-deps
-      shell: micromamba-shell {0}
+        pixi-version: v0.75.0
+        environments: lint
+        activate-environment: true
+        locked: true
+        cache: false
 
     - name: Run pre-commit hooks
-      run: |
-        pre-commit run --all-files
-      shell: micromamba-shell {0}
+      run: pre-commit run --all-files
 
   test:
     runs-on: ${{ matrix.runner }}
@@ -61,18 +54,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [ubuntu-latest]
-        python-version: ["3.11", "3.12", "3.13"]
-        pyscf-version: ["2.11", "2.14"]
         include:
+          - runner: ubuntu-latest
+            environment: test-py311-pyscf214-torch213
+          - runner: ubuntu-latest
+            environment: test-py312-pyscf214-torch212
+          - runner: ubuntu-latest
+            environment: test-py312-pyscf214-torch213
+          - runner: ubuntu-latest
+            environment: test-py313-pyscf214-torch213
           - runner: ubuntu-24.04-arm
-            python-version: "3.12"
-            pyscf-version: "2.11"
+            environment: test-py312-pyscf214-torch213
           - runner: macos-14
-            python-version: "3.12"
-            pyscf-version: "2.11"
+            environment: test-py312-pyscf214-torch213
 
-    name: "Python=${{ matrix.python-version }} & PySCF=${{ matrix.pyscf-version }} @ ${{ matrix.runner }}"
+    name: "${{ matrix.environment }} @ ${{ matrix.runner }}"
     steps:
     - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       with:
@@ -81,38 +77,20 @@ jobs:
     - name: Print CPU diagnostics
       uses: ./.github/actions/cpu-diagnostics
 
-    - name: Setup micromamba
-      uses: mamba-org/setup-micromamba@f457c30a868e4760d3a6fcea5f25dc655b8edf39 # v3
+    - name: Setup Pixi
+      uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
       with:
-        environment-file: environment-cpu.yml
-        environment-name: skala
-        # Recreate native environments per runner to avoid restoring CPU-specific binaries.
-        cache-environment: false
-        cache-downloads: true
-        create-args: >-
-          python=${{ matrix.python-version }}
-
-    # Keep PySCF on PyPI: its wheels bundle XCFun instead of introducing Conda's
-    # pybind11 ABI 4 requirement, which conflicts with PyTorch >=2.9's ABI 11.
-    - name: Install matrix PySCF version
-      run: python -m pip install "pyscf==${{ matrix.pyscf-version }}"
-      shell: micromamba-shell {0}
-
-    - name: Install package in development mode
-      run: |
-        pip install -e . --no-deps
-      shell: micromamba-shell {0}
+        pixi-version: v0.75.0
+        environments: ${{ matrix.environment }}
+        activate-environment: true
+        locked: true
+        cache: false
 
     - name: Run tests with coverage
       run: >-
-        pytest
-        -v
-        --doctest-modules
-        --cov=skala --cov-report=xml --cov-report=term-missing --cov-report=html
-        --durations=50 --durations-min=1.0
-        src/skala/
-        tests/
-      shell: micromamba-shell {0}
+        pytest -v --doctest-modules --cov=skala --cov-report=xml
+        --cov-report=term-missing --cov-report=html --durations=50
+        --durations-min=1.0 src/skala/ tests/
 
     - name: Print CPU diagnostics on failure
       if: ${{ failure() }}
@@ -124,48 +102,43 @@ jobs:
       - lint
     env:
       OMP_NUM_THREADS: 4
+    strategy:
+      fail-fast: false
+      matrix:
+        environment:
+          - gpu-cuda12-torch212
+          - gpu-cuda12-torch213
+          - gpu-cuda13-torch213
+    name: "${{ matrix.environment }}"
     steps:
     - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
     - name: Print CPU diagnostics
       uses: ./.github/actions/cpu-diagnostics
 
-    - name: Setup micromamba
-      uses: mamba-org/setup-micromamba@4b9113af4fba0e9e1124b252dd6497a419e7396d # v1
+    - name: Setup Pixi
+      uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
       with:
-        environment-file: environment-gpu.yml
-        environment-name: skala-gpu
-        cache-environment: false
-        cache-downloads: true
-
-    - name: Install package in development mode
-      run: |
-        pip install -e . --no-deps
-      shell: micromamba-shell {0}
+        pixi-version: v0.75.0
+        pixi-bin-path: ${{ runner.temp }}/bin/pixi
+        environments: ${{ matrix.environment }}
+        activate-environment: true
+        locked: true
+        cache: false
+        post-cleanup: true
 
     - name: Verify CUDA is available
-      run: |
-        python -c "import cupy, torch; assert torch.cuda.is_available(); cupy.linalg.norm(cupy.arange(3.0)).get()"
-      shell: micromamba-shell {0}
+      run: python tools/verify_gpu.py
 
     - name: Run GPU tests
       run: >-
-        pytest
-        -v
-        -m "gpu and not profiling and not model_benchmark"
-        tests/
-      shell: micromamba-shell {0}
+        pytest -v -m 'gpu and not profiling and not model_benchmark' tests/
 
     - name: Run GPU doctests
-      run: >-
-        pytest
-        -v
-        --doctest-modules
-        src/skala/gpu4pyscf/
-      shell: micromamba-shell {0}
+      run: pytest -v --doctest-modules src/skala/gpu4pyscf/
 
   profiling:
-    name: "Profiling (Python=3.12 & PySCF=2.13.1)"
+    name: "Profiling (Python=3.12 & PySCF=2.14 & PyTorch=2.13)"
     runs-on: ubuntu-latest
     needs:
       - lint
@@ -177,27 +150,14 @@ jobs:
     - name: Print CPU diagnostics
       uses: ./.github/actions/cpu-diagnostics
 
-    - name: Setup micromamba
-      uses: mamba-org/setup-micromamba@4b9113af4fba0e9e1124b252dd6497a419e7396d # v1
+    - name: Setup Pixi
+      uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
       with:
-        environment-file: environment-cpu.yml
-        environment-name: skala
-        # Recreate native environments per runner to avoid restoring CPU-specific binaries.
-        cache-environment: false
-        cache-downloads: true
-        create-args: >-
-          python=3.12
-
-    # Keep PySCF on PyPI for the same XCFun/pybind11 ABI reason as the test matrix.
-    - name: Install profiling PySCF version
-      run: python -m pip install "pyscf==2.13.1"
-      shell: micromamba-shell {0}
-
-    - name: Install package in development mode
-      run: |
-        pip install -e . --no-deps
-      shell: micromamba-shell {0}
+        pixi-version: v0.75.0
+        environments: test-py312-pyscf214-torch213
+        activate-environment: true
+        locked: true
+        cache: false
 
     - name: Run profiling tests
-      run: pytest -v -m profiling
-      shell: micromamba-shell {0}
+      run: pytest -v -m profiling tests/
