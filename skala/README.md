@@ -29,13 +29,6 @@ Repository resources include:
    - [Skala in C with GauXC](https://microsoft.github.io/skala/gauxc/c-library)
    - [Skala in Fortran with GauXC](https://microsoft.github.io/skala/gauxc/fortran-library)
 
-### GauXC development version for PyTorch-based functionals like Skala
-
-[GauXC](https://github.com/wavefunction91/GauXC) is a CPU/GPU C++ library for XC functionals.
-A development version with an add-on supporting PyTorch-based functionals like Skala is available in the [`skala` branch of the GauXC repository](https://github.com/wavefunction91/GauXC/tree/skala).
-GauXC can be used to integrate Skala into other third-party DFT codes.
-For detailed documentation on using GauXC visit the [Skala integration guide](https://microsoft.github.io/skala/gauxc).
-
 ## Getting started: PySCF (CPU)
 
 All information below relates to the Python package `skala`.

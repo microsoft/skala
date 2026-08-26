@@ -52,7 +52,7 @@ jobs:
 
   gpu:
     name: GPU model benchmark
-    runs-on: microsoft-skala-gpu-pool
+    runs-on: microsoft-skala-small-gpu-pool
     env:
       OMP_NUM_THREADS: 4
       MKL_NUM_THREADS: 4

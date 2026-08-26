@@ -125,7 +125,7 @@ jobs:
         gauxc/tests/ docs/benchmark/tests/
 
   gpu-test:
-    runs-on: microsoft-skala-gpu-pool
+    runs-on: ${{ matrix.runner }}
     needs:
       - lint
     env:
@@ -133,10 +133,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        environment:
-          - gpu-cuda12-torch212
-          - gpu-cuda12-torch213
-          - gpu-cuda13-torch213
+        include:
+          - environment: gpu-cuda12-torch212
+            runner: microsoft-skala-small-gpu-pool
+          - environment: gpu-cuda12-torch213
+            runner: microsoft-skala-small-gpu-pool
+          - environment: gpu-cuda13-torch213
+            runner: microsoft-skala-gpu-pool
     name: "${{ matrix.environment }}"
     steps:
     - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4

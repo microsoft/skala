@@ -1,3 +1,5 @@
+"""Validate built release artifacts for expected and forbidden package contents."""
+
 from __future__ import annotations
 
 import argparse
@@ -54,7 +56,9 @@ def assert_no_forbidden_paths(paths: Iterable[PurePosixPath], artifact: Path) ->
     forbidden = {
         path
         for path in paths
-        if FORBIDDEN_PARTS.intersection(path.parts) or path in FORBIDDEN_RUNTIME_PATHS
+        if FORBIDDEN_PARTS.intersection(path.parts)
+        or PurePosixPath(*path.parts[1:] if path.parts[:1] == ("src",) else path.parts)
+        in FORBIDDEN_RUNTIME_PATHS
     }
     if forbidden:
         members = "\n".join(f"  - {path}" for path in sorted(forbidden))
@@ -92,10 +96,11 @@ def validate_artifact(artifact: Path, package: str) -> None:
 def matching_artifacts(directory: Path, package: str) -> list[Path]:
     """Find the wheel and sdist produced for one distribution."""
     normalized = package.replace("-", "_")
+    prefixes = (f"{package}-", f"{normalized}-")
     artifacts = sorted(
         path
         for path in directory.iterdir()
-        if path.name.startswith((package, normalized))
+        if path.name.startswith(prefixes)
         and (path.suffix == ".whl" or path.name.endswith(".tar.gz"))
     )
     if not any(path.suffix == ".whl" for path in artifacts):
