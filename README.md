@@ -1,7 +1,7 @@
 # Skala: Accurate and scalable exchange-correlation with deep learning
 
 [![Documentation](https://img.shields.io/badge/docs-microsoft.github.io%2Fskala-blue?logo=read-the-docs&logoColor=white)](https://microsoft.github.io/skala)
-[![Tests](https://img.shields.io/github/actions/workflow/status/microsoft/skala/test.yml?branch=main&logo=github&label=build)](https://github.com/microsoft/skala/actions/workflows/test.yml)
+[![Tests](https://img.shields.io/github/actions/workflow/status/microsoft/skala/skala-test.yml?branch=main&logo=github&label=build)](https://github.com/microsoft/skala/actions/workflows/skala-test.yml)
 [![PyPI](https://img.shields.io/pypi/v/skala?logo=pypi&logoColor=white)](https://pypi.org/project/skala/)
 [![Paper](https://img.shields.io/badge/arXiv-2506.14665-b31b1b?logo=arxiv&logoColor=white)](https://arxiv.org/abs/2506.14665)
 

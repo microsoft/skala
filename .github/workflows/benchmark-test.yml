@@ -1,0 +1,45 @@
+name: Benchmark tests
+
+on:
+  push:
+    branches: [main]
+    paths: &benchmark-test-paths
+      - '.github/workflows/benchmark-test.yml'
+      - 'benchmark/**'
+      - 'docs/site/_ext/benchmark_report.py'
+      - 'pixi.lock'
+      - 'pixi.toml'
+      - 'pyproject.toml'
+      - 'skala/src/**'
+  pull_request:
+    branches: [main]
+    paths: *benchmark-test-paths
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      OMP_NUM_THREADS: 4
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      with:
+        lfs: true
+
+    - name: Print CPU diagnostics
+      uses: ./.github/actions/cpu-diagnostics
+
+    - name: Setup Pixi
+      uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
+      with:
+        pixi-version: v0.75.0
+        environments: default
+        activate-environment: true
+        locked: true
+        cache: false
+
+    - name: Run benchmark unit tests
+      run: pytest -v benchmark/tests/
