@@ -21,7 +21,7 @@ This repository contains five components:
 2. [`model/`](model) contains the trainable model definition, its tests, and compiled-model examples. This development code is not included in the `skala` wheel or source distribution.
 3. [`gauxc/`](gauxc) contains the GauXC exporter, native integration examples, tests, and source documentation.
 4. [`benchmark/`](benchmark) contains the benchmark runner, reference data, report tooling, and tests.
-5. [`docs/`](docs) contains the main Sphinx site.
+5. [`website/`](website) contains the main Sphinx site.
 
 Compiled-code examples include:
     - [Skala in C++ with libtorch](model/examples/cpp/cpp_integration)

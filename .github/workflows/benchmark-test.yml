@@ -6,7 +6,7 @@ on:
     paths: &benchmark-test-paths
       - '.github/workflows/benchmark-test.yml'
       - 'benchmark/**'
-      - 'docs/site/_ext/benchmark_report.py'
+      - 'website/_ext/benchmark_report.py'
       - 'pixi.lock'
       - 'pixi.toml'
       - 'pyproject.toml'

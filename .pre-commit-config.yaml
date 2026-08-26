@@ -31,6 +31,6 @@ repos:
           - model
           - gauxc
           - benchmark
-          - docs
+          - website
         pass_filenames: false
         always_run: true

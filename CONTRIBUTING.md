@@ -32,9 +32,9 @@ OMP_NUM_THREADS=4 pixi run -e default pytest -v --doctest-modules \
 OMP_NUM_THREADS=4 pixi run -e default pytest -v model/tests/test_model.py \
 	model/tests/test_utils.py gauxc/tests/ benchmark/tests/
 pixi run -e default pre-commit run --all-files
-pixi run -e docs sphinx-build -b html docs/site docs/site/_build/html
-pixi run -e docs sphinx-build -b html gauxc/docs docs/site/_build/html/gauxc
-touch docs/site/_build/html/.nojekyll
+pixi run -e docs sphinx-build -b html website website/_build/html
+pixi run -e docs sphinx-build -b html gauxc/docs website/_build/html/gauxc
+touch website/_build/html/.nojekyll
 ```
 
 Set `OMP_NUM_THREADS=4` when running tests locally to match CI.

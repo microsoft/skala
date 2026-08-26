@@ -196,7 +196,7 @@ License
 
 .. dropdown:: MIT License
 
-  .. literalinclude:: ../../../LICENSE.txt
+  .. literalinclude:: ../../LICENSE.txt
       :lines: 3-
 
 Citation

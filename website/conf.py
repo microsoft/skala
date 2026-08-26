@@ -42,7 +42,7 @@ html_favicon = "_static/img/density.png"
 html_theme_options = {
     "repository_url": "https://github.com/microsoft/skala",
     "repository_branch": "main",
-    "path_to_docs": "docs/site",
+    "path_to_docs": "website",
     "use_repository_button": True,
 }
 master_doc = "index"

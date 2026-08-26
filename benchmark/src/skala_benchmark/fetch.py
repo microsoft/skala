@@ -5,7 +5,7 @@
 The set combines five published datasets. Their structures are not
 redistributed here; they are downloaded from the upstream repositories, each
 pinned to a commit, and assembled into the file the benchmark reads. See
-``docs/site/benchmarks.rst`` for the datasets and the citations they require.
+``website/benchmarks.rst`` for the datasets and the citations they require.
 
 Every structure is checked against :mod:`skala_benchmark.dataset`'s manifest --
 atom count, element formula, charge and multiplicity -- so a source that has

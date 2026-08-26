@@ -15,7 +15,7 @@ Skala is a neural network-based exchange-correlation (XC) functional for density
 | `model/` | Trainable model definition, tests, and LibTorch/FTorch examples |
 | `gauxc/` | GauXC exporter, native examples, tests, and documentation |
 | `benchmark/` | Benchmark runner, reference data, report tooling, and tests |
-| `docs/` | Main Sphinx site |
+| `website/` | Main Sphinx site |
 | `.github/workflows/` | CI workflows (test, docs) |
 
 ## Development environment
@@ -63,11 +63,11 @@ When editing code:
 - Engine: Sphinx with myst-nb (executes notebooks during build).
 - Build locally:
   ```bash
-  pixi run -e docs sphinx-build -b html docs/site docs/site/_build/html
-  pixi run -e docs sphinx-build -b html gauxc/docs docs/site/_build/html/gauxc
-  touch docs/site/_build/html/.nojekyll
+  pixi run -e docs sphinx-build -b html website website/_build/html
+  pixi run -e docs sphinx-build -b html gauxc/docs website/_build/html/gauxc
+  touch website/_build/html/.nojekyll
   ```
-- Notebooks in `docs/site/` should be executable with a 5-minute timeout.
+- Notebooks in `website/` should be executable with a 5-minute timeout.
 - Use reStructuredText for standalone pages; Jupyter notebooks for tutorials.
 
 ## Pull request guidelines
@@ -99,7 +99,7 @@ When editing code:
 | Lint code | `pixi run -e default pre-commit run --all-files` |
 | Run runtime tests | `OMP_NUM_THREADS=4 pixi run -e default pytest -v --doctest-modules --cov=skala --cov-report=xml --cov-report=term-missing --cov-report=html --durations=50 --durations-min=1.0 skala/src/skala/ skala/tests/` |
 | Run component tests | `OMP_NUM_THREADS=4 pixi run -e default pytest -v model/tests/test_model.py model/tests/test_utils.py gauxc/tests/ benchmark/tests/` |
-| Build docs | `pixi run -e docs sphinx-build -b html docs/site docs/site/_build/html && pixi run -e docs sphinx-build -b html gauxc/docs docs/site/_build/html/gauxc && touch docs/site/_build/html/.nojekyll` |
+| Build docs | `pixi run -e docs sphinx-build -b html website website/_build/html && pixi run -e docs sphinx-build -b html gauxc/docs website/_build/html/gauxc && touch website/_build/html/.nojekyll` |
 | Type check | `pixi run -e default mypy skala/src model/src gauxc/src benchmark/src` |
 
 ## Contact

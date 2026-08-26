@@ -55,19 +55,19 @@ We will use the following directory structure and files:
 
 For the main ``CMakeLists.txt`` file, we will set up the project and include the necessary CMake modules for Skala and FTorch:
 
-.. literalinclude:: ../../model/examples/fortran/ftorch_integration/CMakeLists.txt
+.. literalinclude:: ../model/examples/fortran/ftorch_integration/CMakeLists.txt
    :language: cmake
    :caption: CMakeLists.txt
 
 To ensure that we have the correct versions of our dependencies, we will include a CMake module that specifies the versions of Skala and FTorch:
 
-.. literalinclude:: ../../model/examples/fortran/ftorch_integration/cmake/skala-dep-versions.cmake
+.. literalinclude:: ../model/examples/fortran/ftorch_integration/cmake/skala-dep-versions.cmake
    :language: cmake
    :caption: cmake/skala-dep-versions.cmake
 
 Next, we will include the CMake modules for Skala and FTorch, which will handle finding the libraries and setting up the necessary include directories and link targets:
 
-.. literalinclude:: ../../model/examples/fortran/ftorch_integration/cmake/skala-ftorch.cmake
+.. literalinclude:: ../model/examples/fortran/ftorch_integration/cmake/skala-ftorch.cmake
    :language: cmake
    :caption: cmake/skala-ftorch.cmake
 
@@ -83,11 +83,11 @@ However, we will not go into the details of these files here, as they are primar
    The files ``skala_ftorch.cxx`` and ``skala_ftorch.f90`` contain the C++ and Fortran code, respectively, that define the bindings between Skala and FTorch.
    These files include functions for loading Skala models, preparing input features, and computing exchange-correlation energies and potentials.
 
-   .. literalinclude:: ../../model/examples/fortran/ftorch_integration/src/skala_ftorch.cxx
+   .. literalinclude:: ../model/examples/fortran/ftorch_integration/src/skala_ftorch.cxx
       :language: c++
       :caption: src/skala_ftorch.cxx
 
-   .. literalinclude:: ../../model/examples/fortran/ftorch_integration/src/skala_ftorch.f90
+   .. literalinclude:: ../model/examples/fortran/ftorch_integration/src/skala_ftorch.f90
       :language: fortran
       :caption: src/skala_ftorch.f90
 
@@ -98,35 +98,35 @@ Fortran application
 Finally, we have the Fortran application itself, which demonstrates how to use the Skala bindings to compute exchange-correlation energies and potentials.
 We start the main program with the necessary module imports and variable declarations:
 
-.. literalinclude:: ../../model/examples/fortran/ftorch_integration/app/main.f90
+.. literalinclude:: ../model/examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
    :lines: 1-18
 
 First, we obtain the command line arguments for the model path and feature directory, and check that they are provided:
 
-.. literalinclude:: ../../model/examples/fortran/ftorch_integration/app/main.f90
+.. literalinclude:: ../model/examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
    :lines: 20-30
 
 We define a small contained helper procedure to read the command line arguments:
 
-.. literalinclude:: ../../model/examples/fortran/ftorch_integration/app/main.f90
+.. literalinclude:: ../model/examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
    :lines: 227-248
 
 The main types provided by the Skala bindings are the ``skala_model`` type, which extends the ``torch_model`` provided by FTorch and has a custom ``skala_model_load`` procedure for loading the Skala model and its meta data.
 
-.. literalinclude:: ../../model/examples/fortran/ftorch_integration/app/main.f90
+.. literalinclude:: ../model/examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
    :lines: 32-34
 
 The input to the Skala model is passed via a dictionary of tensors, which we prepare by loading the necessary features from disk and converting them to the appropriate format.
 
-.. literalinclude:: ../../model/examples/fortran/ftorch_integration/app/main.f90
+.. literalinclude:: ../model/examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
    :lines: 36-70
@@ -135,7 +135,7 @@ The input to the Skala model is passed via a dictionary of tensors, which we pre
 
    To export the features from Python, you can use the provided ``prepare_inputs.py`` script.
 
-   .. literalinclude:: ../../model/examples/cpp/cpp_integration/prepare_inputs.py
+   .. literalinclude:: ../model/examples/cpp/cpp_integration/prepare_inputs.py
       :language: python
       :caption: prepare_inputs.py
 
@@ -145,7 +145,7 @@ The input to the Skala model is passed via a dictionary of tensors, which we pre
 
 To place the features in the correct format for Skala, we add them to the input dictionary with the appropriate keys.
 
-.. literalinclude:: ../../model/examples/fortran/ftorch_integration/app/main.f90
+.. literalinclude:: ../model/examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
    :lines: 72-92
@@ -165,14 +165,14 @@ To place the features in the correct format for Skala, we add them to the input 
 
 With this we can now compute the exchange-correlation energy and potential by calling the Skala model with the prepared inputs.
 
-.. literalinclude:: ../../model/examples/fortran/ftorch_integration/app/main.f90
+.. literalinclude:: ../model/examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
    :lines: 94-96
 
 To get the exchange-correlation energy, we need to weight the exc values by the grid weights and sum over the grid points, which we can do using the provided tensor operations.
 
-.. literalinclude:: ../../model/examples/fortran/ftorch_integration/app/main.f90
+.. literalinclude:: ../model/examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
    :lines: 98-105
@@ -240,21 +240,21 @@ The output for the H2 molecule with the def2-QZVP basis set should look like thi
 The ``get_exc_vxc`` procedure computes the exchange-correlation energy and potential, which we can then access from the returned dictionary.
 The potential terms are stored under the same keys as the input features and can be extracted as tensors.
 
-.. literalinclude:: ../../model/examples/fortran/ftorch_integration/app/main.f90
+.. literalinclude:: ../model/examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
    :lines: 107-119
 
 We can use those tensors for further processing in our application, for example to compute the norm of the potential
 
-.. literalinclude:: ../../model/examples/fortran/ftorch_integration/app/main.f90
+.. literalinclude:: ../model/examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
    :lines: 121-155
 
 Or by converting them to Fortran arrays and using the built-in array operations.
 
-.. literalinclude:: ../../model/examples/fortran/ftorch_integration/app/main.f90
+.. literalinclude:: ../model/examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
    :lines: 162-225
