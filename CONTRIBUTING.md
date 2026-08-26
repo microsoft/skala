@@ -30,7 +30,7 @@ OMP_NUM_THREADS=4 pixi run -e default pytest -v --doctest-modules \
 	--cov=skala --cov-report=xml --cov-report=term-missing --cov-report=html \
 	--durations=50 --durations-min=1.0 skala/src/skala/ skala/tests/
 OMP_NUM_THREADS=4 pixi run -e default pytest -v model/tests/test_model.py \
-	model/tests/test_utils.py gauxc/tests/ docs/benchmark/tests/
+	model/tests/test_utils.py gauxc/tests/ benchmark/tests/
 pixi run -e default pre-commit run --all-files
 pixi run -e docs sphinx-build -b html docs/site docs/site/_build/html
 pixi run -e docs sphinx-build -b html gauxc/docs docs/site/_build/html/gauxc

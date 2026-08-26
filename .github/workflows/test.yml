@@ -6,7 +6,7 @@ on:
     paths: &test-paths
       - '.github/workflows/test.yml'
       - '.pre-commit-config.yaml'
-      - 'docs/benchmark/**'
+      - 'benchmark/**'
       - 'gauxc/**/*.py'
       - 'model/**/*.py'
       - 'pixi.lock'
@@ -122,7 +122,7 @@ jobs:
     - name: Run component unit tests
       run: >-
         pytest -v model/tests/test_model.py model/tests/test_utils.py
-        gauxc/tests/ docs/benchmark/tests/
+        gauxc/tests/ benchmark/tests/
 
   gpu-test:
     runs-on: ${{ matrix.runner }}

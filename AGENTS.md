@@ -14,7 +14,8 @@ Skala is a neural network-based exchange-correlation (XC) functional for density
 | `skala/` | Published ASE, PySCF, and GPU4PySCF runtime plus tests |
 | `model/` | Trainable model definition, tests, and LibTorch/FTorch examples |
 | `gauxc/` | GauXC exporter, native examples, tests, and documentation |
-| `docs/` | Main Sphinx site and benchmark/report tooling |
+| `benchmark/` | Benchmark runner, reference data, report tooling, and tests |
+| `docs/` | Main Sphinx site |
 | `.github/workflows/` | CI workflows (test, docs) |
 
 ## Development environment
@@ -94,12 +95,12 @@ When editing code:
 
 | Task | Command |
 |------|---------|
-| Format code | `pixi run -e default ruff format skala/ model/ gauxc/ docs/benchmark/` |
+| Format code | `pixi run -e default ruff format skala/ model/ gauxc/ benchmark/ docs/` |
 | Lint code | `pixi run -e default pre-commit run --all-files` |
 | Run runtime tests | `OMP_NUM_THREADS=4 pixi run -e default pytest -v --doctest-modules --cov=skala --cov-report=xml --cov-report=term-missing --cov-report=html --durations=50 --durations-min=1.0 skala/src/skala/ skala/tests/` |
-| Run component tests | `OMP_NUM_THREADS=4 pixi run -e default pytest -v model/tests/test_model.py model/tests/test_utils.py gauxc/tests/ docs/benchmark/tests/` |
+| Run component tests | `OMP_NUM_THREADS=4 pixi run -e default pytest -v model/tests/test_model.py model/tests/test_utils.py gauxc/tests/ benchmark/tests/` |
 | Build docs | `pixi run -e docs sphinx-build -b html docs/site docs/site/_build/html && pixi run -e docs sphinx-build -b html gauxc/docs docs/site/_build/html/gauxc && touch docs/site/_build/html/.nojekyll` |
-| Type check | `pixi run -e default mypy skala/src model/src gauxc/src docs/benchmark/src` |
+| Type check | `pixi run -e default mypy skala/src model/src gauxc/src benchmark/src` |
 
 ## Contact
 

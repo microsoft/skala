@@ -81,7 +81,7 @@ Compare a local implementation or machine
 -----------------------------------------
 
 Use the same benchmark protocol on your own hardware or software stack, then compare your timings
-against our fixed reference measurements in ``docs/benchmark/reference``. This is the expected workflow
+against our fixed reference measurements in ``benchmark/reference``. This is the expected workflow
 for users who want to validate an implementation, check a new machine, or confirm that a local build
 matches our published performance envelope.
 
@@ -140,7 +140,7 @@ location and point every shard at it, so the compute nodes need no network acces
 
    # Create a report with both our reference timings and your local timings.
    python -m skala_benchmark report local-report \
-     docs/benchmark/reference \
+    benchmark/reference \
      benchmark-output/collected
 
 The collected JSON is written to ``benchmark-output/collected`` by default. The local report uses

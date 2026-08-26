@@ -1,7 +1,7 @@
 [tool.mypy]
 strict = true
 explicit_package_bases = true
-mypy_path = ["skala/src", "model/src", "gauxc/src", "docs/benchmark/src", "skala", "."]
+mypy_path = ["skala/src", "model/src", "gauxc/src", "benchmark/src", "skala", "."]
 python_version = "3.11"
 exclude = ["build/", "docs/site/_build/", "htmlcov/", "third_party/"]
 
@@ -25,7 +25,7 @@ ignore_missing_imports = true
 
 [tool.ruff]
 target-version = "py311"
-src = ["skala/", "model/", "gauxc/", "docs/"]
+src = ["skala/", "model/", "gauxc/", "benchmark/", "docs/"]
 exclude = ["build", "docs/site/_build", "third_party"]
 
 [tool.ruff.lint]
@@ -54,7 +54,7 @@ line-length = 100
 timeout = 300
 addopts = "-m 'not profiling and not benchmark and not model_benchmark'"
 pythonpath = [".", "skala/src", "gauxc/src"]
-testpaths = ["skala/tests", "model/tests", "gauxc/tests", "docs/benchmark/tests"]
+testpaths = ["skala/tests", "model/tests", "gauxc/tests", "benchmark/tests"]
 markers = [
     "benchmark: performance measurements collected by pytest-benchmark",
     "gpu: requires a CUDA-capable GPU and GPU test dependencies",

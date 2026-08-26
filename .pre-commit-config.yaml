@@ -30,6 +30,7 @@ repos:
           - skala
           - model
           - gauxc
+          - benchmark
           - docs
         pass_filenames: false
         always_run: true

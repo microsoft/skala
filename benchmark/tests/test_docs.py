@@ -11,7 +11,7 @@ from typing import Any
 
 
 def _load_extension() -> Any:
-    path = Path(__file__).parents[2] / "site" / "_ext" / "benchmark_report.py"
+    path = Path(__file__).parents[2] / "docs" / "site" / "_ext" / "benchmark_report.py"
     spec = importlib.util.spec_from_file_location("benchmark_report_test", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

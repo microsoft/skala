@@ -15,12 +15,13 @@ Learn more about Skala in our [ArXiv paper](https://arxiv.org/abs/2506.14665).
 
 ## What's in here
 
-This repository contains four components:
+This repository contains five components:
 
 1. [`skala/`](skala) is the only published Python package. It contains the runtime needed to load released checkpoints and use Skala through [PySCF](https://pyscf.org/), [GPU4PySCF](https://pyscf.org/user/gpu.html), and [ASE](https://ase-lib.org/).
 2. [`model/`](model) contains the trainable model definition, its tests, and compiled-model examples. This development code is not included in the `skala` wheel or source distribution.
 3. [`gauxc/`](gauxc) contains the GauXC exporter, native integration examples, tests, and source documentation.
-4. [`docs/`](docs) contains the main Sphinx site and benchmark runner/report tooling.
+4. [`benchmark/`](benchmark) contains the benchmark runner, reference data, report tooling, and tests.
+5. [`docs/`](docs) contains the main Sphinx site.
 
 Compiled-code examples include:
     - [Skala in C++ with libtorch](model/examples/cpp/cpp_integration)

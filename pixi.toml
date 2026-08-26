@@ -135,7 +135,7 @@ pyyaml = "*"
 scipy = "*"
 
 [feature.benchmark.pypi-dependencies]
-skala-benchmark = { path = "docs/benchmark", editable = true }
+skala-benchmark = { path = "benchmark", editable = true }
 
 [feature.docs.dependencies]
 ipywidgets = "*"

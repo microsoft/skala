@@ -66,7 +66,7 @@ def test_report_routes_dry_and_interpreted_reports(
             (output, inputs, prose_path)
         ),
     )
-    reference = "docs/benchmark/reference"
+    reference = "benchmark/reference"
     local = str(tmp_path / "benchmark-output" / "collected")
 
     main(["report", str(tmp_path / "local-report"), reference, local])
@@ -76,7 +76,7 @@ def test_report_routes_dry_and_interpreted_reports(
             str(tmp_path / "official-report"),
             reference,
             "--prose",
-            "docs/benchmark/reference/prose.yaml",
+            "benchmark/reference/prose.yaml",
         ]
     )
 
@@ -89,6 +89,6 @@ def test_report_routes_dry_and_interpreted_reports(
         (
             str(tmp_path / "official-report"),
             [reference],
-            "docs/benchmark/reference/prose.yaml",
+            "benchmark/reference/prose.yaml",
         ),
     ]

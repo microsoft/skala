@@ -10,8 +10,8 @@ from typing import Any
 
 from skala_benchmark.report import generate
 
-_DOCS_ROOT = Path(__file__).resolve().parents[2]
-_REFERENCE_DIR = _DOCS_ROOT / "benchmark" / "reference"
+_REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+_REFERENCE_DIR = _REPOSITORY_ROOT / "benchmark" / "reference"
 _SOURCE_FILES = (
     "environments.json",
     "measurements.json",
