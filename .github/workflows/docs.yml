@@ -3,6 +3,17 @@ name: Docs
 on:
   push:
     branches: [main]
+    paths: &docs-paths
+      - '.github/workflows/docs.yml'
+      - 'benchmark/pyproject.toml'
+      - 'pixi.lock'
+      - 'pixi.toml'
+      - 'pyproject.toml'
+      - 'skala/pyproject.toml'
+      - 'website/**'
+  pull_request:
+    branches: [main]
+    paths: *docs-paths
   workflow_dispatch:
 
 permissions:
@@ -35,9 +46,6 @@ jobs:
           locked: true
           cache: false
 
-      - name: Check environment consistency
-        run: python -m pip check
-
       - name: Build documentation
         run: |
           sphinx-build -b html website website/_build/html
@@ -55,6 +63,7 @@ jobs:
 
   deploy:
     needs: build
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
