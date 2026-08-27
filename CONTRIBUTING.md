@@ -26,23 +26,27 @@ pixi run -e default pre-commit install
 Run the standard checks in their Pixi environments:
 
 ```bash
-pixi run -e default pytest -v --doctest-modules \
+OMP_NUM_THREADS=4 pixi run -e default pytest -v --doctest-modules \
 	--cov=skala --cov-report=xml --cov-report=term-missing --cov-report=html \
-	--durations=50 --durations-min=1.0 src/skala/ tests/
+	--durations=50 --durations-min=1.0 skala/src/skala/ skala/tests/
+OMP_NUM_THREADS=4 pixi run -e default pytest -v model/tests/test_model.py \
+	model/tests/test_utils.py gauxc/tests/ benchmark/tests/
 pixi run -e default pre-commit run --all-files
-pixi run -e docs sphinx-build -b html docs docs/_build/html
+pixi run -e docs sphinx-build -b html website website/_build/html
+pixi run -e docs sphinx-build -b html gauxc/docs website/_build/html/gauxc
+touch website/_build/html/.nojekyll
 ```
 
-The generic `pytest` task sets `OMP_NUM_THREADS=4` and forwards all additional arguments.
+Set `OMP_NUM_THREADS=4` when running tests locally to match CI.
 
 Named compatibility environments cover Python 3.11 through 3.13, PySCF 2.14,
 PyTorch 2.12 and 2.13, GPU4PySCF 1.8.1, and CUDA 12 and 13. Keep `pixi.lock`
-synchronized with changes to `pixi.toml` or `pyproject.toml`.
+synchronized with changes to `pixi.toml` or any component `pyproject.toml`.
 
 
 ## Model development
 
-The torch model in the `src/skala/functional` folder serves as a representation of what our
+The torch model in `model/src/skala_model` serves as a representation of what our
 model does. The real model is inside the respective `.fun` files on [hugging face](https://huggingface.co/microsoft/skala-1.1), which contains a fully
 traced model. So the model folder is not production code, but more an explanation in code, which we
 will try to keep in line with our traced models.
@@ -62,23 +66,23 @@ outside this synthetic benchmark. The tests use 200,000 deterministic grid point
 neither molecular setup nor golden output data. Run the CPU cases with four threads:
 
 ```bash
-MKL_NUM_THREADS=4 pixi run -e default \
-	pytest -v -m model_benchmark -k cpu tests/test_traced_model_comparison.py
+OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 pixi run -e default \
+	pytest -v -m model_benchmark -k cpu model/tests/test_traced_model_comparison.py
 ```
 
 On a CUDA-capable runner, execute both CPU and GPU cases by omitting the CPU filter:
 
 ```bash
-MKL_NUM_THREADS=4 pixi run -e gpu-cuda12-torch213 \
-	pytest -v -m model_benchmark -k cuda tests/test_traced_model_comparison.py
+OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 pixi run -e gpu-cuda12-torch213 \
+	pytest -v -m model_benchmark -k cuda model/tests/test_traced_model_comparison.py
 ```
 
 The same comparison can be run as a standalone report. It prints maximum accuracy differences,
 local and published runtime medians, and isolated peak allocations for forward and backward work:
 
 ```bash
-pixi run -e default python tests/test_traced_model_comparison.py --device cpu
-pixi run -e gpu-cuda12-torch213 python tests/test_traced_model_comparison.py --device cuda
+pixi run -e default python model/tests/test_traced_model_comparison.py --device cpu
+pixi run -e gpu-cuda12-torch213 python model/tests/test_traced_model_comparison.py --device cuda
 ```
 
 Despite that feel free to open issues and PRs proposing model improvements, we are very

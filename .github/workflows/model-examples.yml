@@ -5,12 +5,11 @@ on:
     branches: [main]
     paths: &model-example-paths
       - '.github/workflows/model-examples.yml'
-      - 'examples/cpp/cpp_integration/**'
-      - 'examples/fortran/ftorch_integration/**'
+      - 'model/examples/**'
+      - 'model/src/**'
       - 'pixi.lock'
       - 'pixi.toml'
-      - 'pyproject.toml'
-      - 'src/skala/**'
+      - 'skala/src/skala/**'
   pull_request:
     branches: [main]
     paths: *model-example-paths
@@ -67,7 +66,8 @@ jobs:
 
     - name: Generate features
       run: >-
-        python examples/cpp/cpp_integration/prepare_inputs.py --output-dir features
+        python model/examples/cpp/cpp_integration/prepare_inputs.py
+        --output-dir features
 
     - name: Upload features
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -98,7 +98,7 @@ jobs:
 
     - name: Configure and build project
       run: |
-        cmake -B build_example -S examples/cpp/cpp_integration -G Ninja
+        cmake -B build_example -S model/examples/cpp/cpp_integration -G Ninja
         cmake --build build_example
 
     - name: Download features
@@ -141,7 +141,7 @@ jobs:
 
     - name: Configure, build, and install project
       run: |
-        cmake -B build_example -S examples/fortran/ftorch_integration -G Ninja \
+        cmake -B build_example -S model/examples/fortran/ftorch_integration -G Ninja \
           -DCMAKE_INSTALL_PREFIX="$CONDA_PREFIX"
         cmake --build build_example
         cmake --install build_example

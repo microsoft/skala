@@ -332,9 +332,13 @@ paket-files/
 __pycache__/
 *.pyc
 *.egg-info/
+.pytest_cache/
+.benchmarks/
+htmlcov/
 .pixi/
 jupyter_execute/
 /build/
+**/_build/
 /build_example/
 /dist/
 /dist-conda/
@@ -411,9 +415,6 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
-
-# Sphinx documentation build output
-docs/_build/
 
 # Checkpoint files
 *.fun

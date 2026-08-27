@@ -22,6 +22,15 @@ repos:
         name: mypy
         entry: mypy
         language: system
-        args: [--config-file, pyproject.toml, --num-workers, "4", .]
+        args:
+          - --config-file
+          - pyproject.toml
+          - --num-workers
+          - "4"
+          - skala
+          - model
+          - gauxc
+          - benchmark
+          - website
         pass_filenames: false
         always_run: true

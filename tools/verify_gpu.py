@@ -22,6 +22,17 @@ def main() -> None:
         ) from error
 
     gpu4pyscf_version = version(distribution)
+    device = torch.cuda.current_device()
+    properties = torch.cuda.get_device_properties(device)
+    free_memory, total_memory = torch.cuda.mem_get_info(device)
+    print(
+        "gpu",
+        properties.name,
+        "capability",
+        f"{properties.major}.{properties.minor}",
+        "memory",
+        f"{free_memory / 1024**3:.2f}/{total_memory / 1024**3:.2f} GiB free",
+    )
     print("torch", torch.__version__, "cuda", torch.version.cuda)
     print(
         "cupy",

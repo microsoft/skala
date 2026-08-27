@@ -40,18 +40,18 @@ jobs:
 
       - name: Build documentation
         run: |
-          sphinx-build -b html docs docs/_build/html
-          touch docs/_build/html/.nojekyll
+          sphinx-build -b html website website/_build/html
+          touch website/_build/html/.nojekyll
 
       - name: Check external links
         run: >-
           sphinx-build -D nb_execution_mode=off -b linkcheck
-          docs docs/_build/linkcheck
+          website website/_build/linkcheck
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         with:
-          path: docs/_build/html
+          path: website/_build/html
 
   deploy:
     needs: build

@@ -9,11 +9,10 @@ on:
       - 'pixi.lock'
       - 'pixi.toml'
       - 'pyproject.toml'
-      - 'src/skala/__init__.py'
-      - 'src/skala/features.py'
-      - 'src/skala/functional/**'
-      - 'tests/test_traced_model_comparison.py'
-      - 'tools/verify_gpu.py'
+      - 'model/**'
+      - 'skala/src/skala/__init__.py'
+      - 'skala/src/skala/features.py'
+      - 'skala/src/skala/functional/**'
   pull_request:
     branches: [main]
     paths: *model-benchmark-paths
@@ -49,11 +48,11 @@ jobs:
     - name: Run CPU model benchmarks
       run: >-
         pytest -v -m model_benchmark -k cpu
-        tests/test_traced_model_comparison.py
+        model/tests/test_traced_model_comparison.py
 
   gpu:
     name: GPU model benchmark
-    runs-on: microsoft-skala-gpu-pool
+    runs-on: microsoft-skala-small-gpu-pool
     env:
       OMP_NUM_THREADS: 4
       MKL_NUM_THREADS: 4
@@ -80,4 +79,4 @@ jobs:
     - name: Run GPU model benchmarks
       run: >-
         pytest -v -m model_benchmark -k cuda
-        tests/test_traced_model_comparison.py
+        model/tests/test_traced_model_comparison.py
