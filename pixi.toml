@@ -10,7 +10,7 @@ platforms = [
   { name = "linux-64-cuda12", platform = "linux-64", cuda = "12" },
   { name = "linux-64-cuda13", platform = "linux-64", cuda = "13" },
 ]
-requires-pixi = ">=0.75,<0.76"
+requires-pixi = ">=0.78,<0.79"
 preview = ["pixi-build"]
 
 [workspace.conda-pypi-map]
