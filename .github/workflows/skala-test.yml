@@ -50,7 +50,7 @@ jobs:
     - name: Setup Pixi
       uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
       with:
-        pixi-version: v0.75.0
+        pixi-version: v0.78.0
         environments: ${{ matrix.environment }}
         activate-environment: true
         locked: true
@@ -90,7 +90,7 @@ jobs:
     - name: Setup Pixi
       uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
       with:
-        pixi-version: v0.75.0
+        pixi-version: v0.78.0
         pixi-bin-path: ${{ runner.temp }}/bin/pixi
         environments: ${{ matrix.environment }}
         activate-environment: true
@@ -124,7 +124,7 @@ jobs:
     - name: Setup Pixi
       uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
       with:
-        pixi-version: v0.75.0
+        pixi-version: v0.78.0
         environments: test-py312-pyscf214-torch213
         activate-environment: true
         locked: true
