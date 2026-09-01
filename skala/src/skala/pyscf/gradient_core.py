@@ -2,30 +2,69 @@
 
 """Backend-independent PyTorch operations for PySCF nuclear gradients."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator, Sequence
+from enum import IntEnum
 
 import torch
 
 from skala.features import Feature, FeatureMap
 
-# PySCF packs AO derivatives as value, x, y, z, xx, xy, xz, yy, yz, zz.
-# Each row below selects the Hessian components for one nuclear displacement
-# direction, with columns ordered by the x, y, and z density responses.
-_HESSIAN_COMPONENTS = ((4, 5, 6), (5, 7, 8), (6, 8, 9))
+
+class _AOComponent(IntEnum):
+    """Indices in PySCF's packed AO derivative dimension."""
+
+    VALUE = 0
+    X = 1
+    Y = 2
+    Z = 3
+    XX = 4
+    XY = 5
+    XZ = 6
+    YY = 7
+    YZ = 8
+    ZZ = 9
+
+
+class _Direction(IntEnum):
+    """Cartesian direction indices used by feature and potential tensors."""
+
+    X = 0
+    Y = 1
+    Z = 2
+
+
+_AO_GRADIENT = slice(_AOComponent.X, _AOComponent.XX)
+_GRADIENT_COMPONENTS = (_AOComponent.X, _AOComponent.Y, _AOComponent.Z)
+_HESSIAN_COMPONENTS = (
+    (_AOComponent.XX, _AOComponent.XY, _AOComponent.XZ),
+    (_AOComponent.XY, _AOComponent.YY, _AOComponent.YZ),
+    (_AOComponent.XZ, _AOComponent.YZ, _AOComponent.ZZ),
+)
+
+
+def _hessian_components() -> Iterator[tuple[_Direction, _Direction, _AOComponent]]:
+    """Yield force direction, response direction, and packed AO component."""
+    for force_direction in _Direction:
+        for response_direction in _Direction:
+            yield (
+                force_direction,
+                response_direction,
+                _HESSIAN_COMPONENTS[force_direction][response_direction],
+            )
+
 
 # Grid metadata is laid out with one row per point: coordinates have shape
 # (npoints, 3), while weights have shape (npoints,).
-_POINT_FIRST_FEATURES = {Feature.GRID_COORDS, Feature.GRID_WEIGHTS}
+_POINT_FIRST_FEATURES = (Feature.GRID_COORDS, Feature.GRID_WEIGHTS)
 
 # Electronic features keep spin and, for GRAD, Cartesian components before the
 # grid dimension: DENSITY and KIN have shape (2, npoints), and GRAD has shape
 # (2, 3, npoints).
-_POINT_LAST_FEATURES = {Feature.DENSITY, Feature.GRAD, Feature.KIN}
+_POINT_LAST_FEATURES = (Feature.DENSITY, Feature.GRAD, Feature.KIN)
 
 
 def feature_derivatives(
-    exc_func: Callable[..., torch.Tensor],
-    feature_tensors: list[torch.Tensor],
+    exc_func: Callable[..., torch.Tensor], feature_tensors: Sequence[torch.Tensor]
 ) -> tuple[torch.Tensor, ...]:
     """Differentiate a scalar XC energy with respect to molecular features.
 
@@ -53,7 +92,7 @@ def feature_derivatives(
 
     gradients = torch.autograd.grad(
         exc,
-        tuple(differentiable_features),
+        differentiable_features,
         create_graph=False,
         retain_graph=False,
         allow_unused=True,
@@ -96,10 +135,7 @@ def grid_derivative_block(
     return block
 
 
-def contract_veff_block(
-    ao: torch.Tensor,
-    derivatives: FeatureMap,
-) -> torch.Tensor:
+def contract_veff_block(ao: torch.Tensor, derivatives: FeatureMap) -> torch.Tensor:
     """Contract one atom's AO values with XC feature derivatives.
 
     Args:
@@ -123,35 +159,35 @@ def contract_veff_block(
         veff += torch.einsum(
             "si, xip, iq -> sxpq",
             derivatives[Feature.DENSITY],
-            ao[1:4],
-            ao[0],
+            ao[_AO_GRADIENT],
+            ao[_AOComponent.VALUE],
         )
 
     if Feature.GRAD in derivatives:
         exc_dgrad = derivatives[Feature.GRAD]
-        veff += torch.einsum("syi, xip, yiq -> sxpq", exc_dgrad, ao[1:4], ao[1:4])
-        for force_direction, components in enumerate(_HESSIAN_COMPONENTS):
-            for response_direction, component in enumerate(components):
-                veff[:, force_direction] += torch.einsum(
-                    "si, ip, iq -> spq",
-                    exc_dgrad[:, response_direction],
-                    ao[component],
-                    ao[0],
-                )
+        ao_gradient = ao[_AO_GRADIENT]
+        veff += torch.einsum(
+            "syi, xip, yiq -> sxpq", exc_dgrad, ao_gradient, ao_gradient
+        )
+        for force_direction, response_direction, component in _hessian_components():
+            veff[:, force_direction] += torch.einsum(
+                "si, ip, iq -> spq",
+                exc_dgrad[:, response_direction],
+                ao[component],
+                ao[_AOComponent.VALUE],
+            )
 
     if Feature.KIN in derivatives:
         exc_dkin = derivatives[Feature.KIN]
-        for force_direction, components in enumerate(_HESSIAN_COMPONENTS):
-            for response_direction, component in enumerate(components):
-                veff[:, force_direction] += (
-                    torch.einsum(
-                        "si, ip, iq -> spq",
-                        exc_dkin,
-                        ao[component],
-                        # AO components 1, 2, and 3 are the x, y, and z derivatives.
-                        ao[response_direction + 1],
-                    )
-                    / 2
+        for force_direction, response_direction, component in _hessian_components():
+            veff[:, force_direction] += (
+                torch.einsum(
+                    "si, ip, iq -> spq",
+                    exc_dkin,
+                    ao[component],
+                    ao[_GRADIENT_COMPONENTS[response_direction]],
                 )
+                / 2
+            )
 
     return veff
