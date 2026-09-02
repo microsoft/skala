@@ -20,13 +20,11 @@ from skala.pyscf.ao_evaluation import (
     _resolve_ao_block_size,
     evaluate_ao_features_blockwise,
 )
-from skala.pyscf.backend import Grid
 from skala.pyscf.evaluation import FeatureSpec
 from skala.pyscf.feature_math import MGGAFeatureFunction
 from skala.pyscf.grids import SkalaGrids
 from skala.pyscf.model_chunking import (
     ModelFeatureChunk,
-    ModelFeatureChunker,
     ModelFeaturePlan,
 )
 from skala.pyscf.numint import SkalaNumInt
@@ -253,7 +251,7 @@ def test_active_cpu_ao_indices(carbon: gto.Mole) -> None:
     assert empty.size == 0
 
 
-def test_dense_ao_evaluation_uses_model_chunking(
+def test_dense_model_evaluation_uses_model_chunks(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Keep model chunking independent from the AO screening decision."""
@@ -265,40 +263,24 @@ def test_dense_ao_evaluation_uses_model_chunking(
         "estimate_max_model_atoms_per_chunk",
         lambda *args, **kwargs: {atom_grid_size: 1},
     )
-    original_chunker = model_chunking_module.ModelFeatureChunker
-    chunker_calls = 0
 
-    def counting_chunker(
-        mol: gto.Mole,
-        dm: torch.Tensor,
-        grids: Grid,
-        atom_major_raw_features: torch.Tensor,
-        feature_plan: ModelFeaturePlan,
-        deriv_order: int,
-        max_memory_in_mb: int | None = None,
-        safety_fraction: float = 0.8,
-    ) -> ModelFeatureChunker:
-        nonlocal chunker_calls
-        chunker_calls += 1
-        return original_chunker(
-            mol,
-            dm,
-            grids,
-            atom_major_raw_features,
-            feature_plan,
-            deriv_order,
-            max_memory_in_mb,
-            safety_fraction,
-        )
+    class CountingFunctional(QuadraticFunctional):
+        def __init__(self) -> None:
+            super().__init__()
+            self.calls = 0
 
-    monkeypatch.setattr(xc_integrator_module, "ModelFeatureChunker", counting_chunker)
-    integrator = XCIntegrator(QuadraticFunctional())
+        def get_exc(self, mol: FeatureMap) -> torch.Tensor:
+            self.calls += 1
+            return super().get_exc(mol)
+
+    functional = CountingFunctional()
+    integrator = XCIntegrator(functional)
     dm = torch.as_tensor(dft.RKS(mol).get_init_guess())
 
     with force_ao_screening(False):
         integrator(mol, grids, dm)
 
-    assert chunker_calls == 1
+    assert functional.calls == mol.natm
 
 
 def test_resolve_ao_block_size_modes(carbon: gto.Mole) -> None:
