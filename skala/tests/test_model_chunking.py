@@ -83,6 +83,35 @@ def test_model_feature_chunker_sorts_complete_atomic_grids(
     assert torch.equal(chunks[2].grid_indices, torch.tensor([0, 1, 2]))
 
 
+def test_model_feature_chunker_builds_bound_shape_from_internal_grid_sizes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    atomic_grid_sizes = torch.tensor([3, 1, 2, 1])
+
+    monkeypatch.setattr(
+        model_chunking,
+        "get_grid_features",
+        lambda *args, **kwargs: {Feature.ATOMIC_GRID_SIZES: atomic_grid_sizes},
+    )
+
+    raw_feature_spec = FeatureSpec({Feature.DENSITY, Feature.ATOMIC_GRID_SIZES})
+    chunker = model_chunking.ModelFeatureChunker(
+        mol=cast(gto.Mole, type("FakeMole", (), {"natm": 4})()),
+        dm=torch.eye(1, dtype=torch.float64),
+        grids=cast(Grid, object()),
+        atom_major_raw_features=torch.arange(7, dtype=torch.float64).reshape(1, -1),
+        feature_plan=model_chunking.ModelFeaturePlan(
+            raw_feature_function=MGGAFeatureFunction(raw_feature_spec),
+            model_feature_spec=FeatureSpec({Feature.ATOMIC_GRID_SIZE_BOUND_SHAPE}),
+        ),
+        deriv_order=1,
+    )
+
+    (chunk,) = tuple(chunker)
+    assert set(chunk.model_features) == {Feature.ATOMIC_GRID_SIZE_BOUND_SHAPE}
+    assert chunk.model_features[Feature.ATOMIC_GRID_SIZE_BOUND_SHAPE].shape == (3, 0)
+
+
 def test_chunked_feature_gradients_match_unchunked(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -138,6 +167,51 @@ def test_chunked_feature_gradients_match_unchunked(
     ):
         torch.testing.assert_close(actual[feature_name], reference_gradient)
     assert functional.calls == 4
+
+
+@pytest.mark.parametrize("supports_spatial_decomposition", [False, True])
+@pytest.mark.parametrize("constant_energy", [False, True])
+def test_feature_gradients_preserve_zero_gradient_contract(
+    monkeypatch: pytest.MonkeyPatch,
+    supports_spatial_decomposition: bool,
+    constant_energy: bool,
+) -> None:
+    density = torch.tensor([[2.0, 3.0]], dtype=torch.float64)
+    grid_weights = torch.tensor([4.0, 5.0], dtype=torch.float64)
+    model_features: FeatureMap = {
+        Feature.DENSITY: density,
+        Feature.GRID_WEIGHTS: grid_weights,
+        Feature.ATOMIC_GRID_SIZES: torch.tensor([2]),
+    }
+
+    class TestFunctional(ExcFunctionalBase):
+        features = [Feature.DENSITY, Feature.GRID_WEIGHTS]
+        if supports_spatial_decomposition:
+            features.append(Feature.ATOMIC_GRID_SIZES)
+
+        def get_exc(self, mol: FeatureMap) -> torch.Tensor:
+            if constant_energy:
+                return mol[Feature.DENSITY].new_tensor(1.0)
+            return mol[Feature.DENSITY].square().sum()
+
+    monkeypatch.setattr(
+        model_chunking,
+        "estimate_max_model_atoms_per_chunk",
+        lambda **kwargs: {2: 1},
+    )
+
+    actual = model_chunking.evaluate_chunked_feature_gradients(
+        TestFunctional(),
+        dm=torch.eye(1, dtype=torch.float64),
+        model_features=model_features,
+        differentiable_features={Feature.DENSITY, Feature.GRID_WEIGHTS},
+    )
+
+    expected_density = torch.zeros_like(density) if constant_energy else 2 * density
+    torch.testing.assert_close(actual[Feature.DENSITY], expected_density)
+    torch.testing.assert_close(
+        actual[Feature.GRID_WEIGHTS], torch.zeros_like(grid_weights)
+    )
 
 
 def test_atom_grid_chunks_pack_equal_sizes_up_to_cap() -> None:

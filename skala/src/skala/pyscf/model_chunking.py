@@ -21,6 +21,7 @@ from skala.pyscf import ao_evaluation, feature_math
 from skala.pyscf.backend import Grid
 from skala.pyscf.evaluation import FeatureSpec
 from skala.pyscf.features import get_grid_features
+from skala.pyscf.gradient_core import feature_derivatives
 from skala.pyscf.memory_estimators import (
     estimate_max_model_atoms_per_chunk,
 )
@@ -312,7 +313,12 @@ class ModelFeatureChunker:
                     ].index_select(0, atom_indices)
 
             if feature_spec.requests(Feature.ATOMIC_GRID_SIZE_BOUND_SHAPE):
-                max_size = int(model_features[Feature.ATOMIC_GRID_SIZES].max().item())
+                max_size = int(
+                    self._grid_features[Feature.ATOMIC_GRID_SIZES]
+                    .index_select(0, atom_indices)
+                    .max()
+                    .item()
+                )
                 model_features[Feature.ATOMIC_GRID_SIZE_BOUND_SHAPE] = torch.zeros(
                     max_size,
                     0,
@@ -334,6 +340,27 @@ class ModelFeatureChunker:
             )
 
 
+def _evaluate_feature_gradients(
+    functional: ExcFunctionalBase,
+    model_features: FeatureMap,
+    differentiable_features: set[Feature],
+) -> FeatureMap:
+    inputs = {
+        feature_name: model_features[feature_name]
+        for feature_name in differentiable_features
+    }
+    if not inputs:
+        return {}
+
+    def evaluate(*input_values: Tensor) -> Tensor:
+        return functional.get_exc(
+            model_features | dict(zip(inputs, input_values, strict=True))
+        )
+
+    gradients = feature_derivatives(evaluate, tuple(inputs.values()))
+    return dict(zip(inputs, gradients, strict=True))
+
+
 def evaluate_chunked_feature_gradients(
     functional: ExcFunctionalBase,
     dm: Tensor,
@@ -346,24 +373,18 @@ def evaluate_chunked_feature_gradients(
     atomic_grid_sizes = model_features[Feature.ATOMIC_GRID_SIZES]
     feature_spec = FeatureSpec(functional.features)
     if not feature_spec.supports_spatial_decomposition:
-        full_inputs = {
-            feature_name: model_features[feature_name].detach().requires_grad_()
-            for feature_name in differentiable_features
-        }
-        if not full_inputs:
-            return {}
         full_features = {
             feature_name: feature_value
             for feature_name, feature_value in model_features.items()
             if feature_spec.requests(feature_name)
-        } | full_inputs
-        local_gradients = torch.autograd.grad(
-            functional.get_exc(full_features), tuple(full_inputs.values())
-        )
-        return {
-            feature_name: gradient.detach()
-            for feature_name, gradient in zip(full_inputs, local_gradients, strict=True)
         }
+        full_features |= {
+            feature_name: model_features[feature_name]
+            for feature_name in differentiable_features
+        }
+        return _evaluate_feature_gradients(
+            functional, full_features, differentiable_features
+        )
 
     chunk_indices = _make_model_chunk_indices(
         dm,
@@ -410,17 +431,10 @@ def evaluate_chunked_feature_gradients(
             else:
                 raise ValueError(f"Unsupported model feature: {feature_name}")
 
-        chunk_inputs = []
-        for feature_name in differentiable_features:
-            local_input = chunk_features[feature_name].detach().requires_grad_()
-            chunk_features[feature_name] = local_input
-            chunk_inputs.append(local_input)
-
-        energy_chunk = functional.get_exc(chunk_features)
-        local_gradients = torch.autograd.grad(energy_chunk, tuple(chunk_inputs))
-        for feature_name, local_gradient in zip(
-            differentiable_features, local_gradients, strict=True
-        ):
+        local_gradients = _evaluate_feature_gradients(
+            functional, chunk_features, differentiable_features
+        )
+        for feature_name, local_gradient in local_gradients.items():
             if feature_name in _AO_DERIVED_FEATURES:
                 gradients[feature_name].index_copy_(
                     -1, indices.grid_indices, local_gradient.detach()
