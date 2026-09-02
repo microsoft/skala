@@ -47,6 +47,20 @@ class FeatureSpec:
         """Return whether a feature is requested."""
         return feature in self.names
 
+    def __or__(
+        self, other: "FeatureSpec | set[Feature] | frozenset[Feature]"
+    ) -> "FeatureSpec":
+        """Return the union with another specification or feature set.
+
+        Args:
+            other: Feature specification or set to combine with this one.
+
+        Returns:
+            A normalized feature specification containing both operands.
+        """
+        other_names = other.names if isinstance(other, FeatureSpec) else other
+        return FeatureSpec(self.names | other_names)
+
     @property
     def with_density(self) -> bool:
         """Return whether density is requested."""

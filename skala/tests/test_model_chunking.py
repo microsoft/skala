@@ -5,6 +5,7 @@ from typing import cast
 import pytest
 import torch
 from skala.features import Feature, FeatureMap
+from skala.functional.base import ExcFunctionalBase
 from skala.pyscf import model_chunking
 from skala.pyscf.backend import Grid
 from skala.pyscf.evaluation import FeatureSpec
@@ -60,7 +61,10 @@ def test_model_feature_chunker_sorts_complete_atomic_grids(
         dm=torch.eye(1, dtype=torch.float64),
         grids=cast(Grid, object()),
         atom_major_raw_features=raw_features,
-        feature_function=MGGAFeatureFunction(feature_spec),
+        feature_plan=model_chunking.ModelFeaturePlan(
+            raw_feature_function=MGGAFeatureFunction(feature_spec),
+            model_feature_spec=feature_spec,
+        ),
         deriv_order=1,
     )
 
@@ -77,6 +81,63 @@ def test_model_feature_chunker_sorts_complete_atomic_grids(
     )
     assert torch.equal(chunks[1].grid_indices, torch.tensor([4, 5]))
     assert torch.equal(chunks[2].grid_indices, torch.tensor([0, 1, 2]))
+
+
+def test_chunked_feature_gradients_match_unchunked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    atomic_grid_sizes = torch.tensor([3, 1, 2, 1])
+    point_ids = torch.arange(7, dtype=torch.float64)
+    atom_ids = torch.arange(4, dtype=torch.float64)
+    differentiable_features: FeatureMap = {
+        Feature.DENSITY: point_ids.reshape(1, -1).requires_grad_(),
+        Feature.GRID_WEIGHTS: (point_ids + 10).requires_grad_(),
+        Feature.COARSE_0_ATOMIC_COORDS: atom_ids[:, None]
+        .expand(-1, 3)
+        .clone()
+        .requires_grad_(),
+    }
+    model_features: FeatureMap = {
+        **differentiable_features,
+        Feature.ATOMIC_GRID_SIZES: atomic_grid_sizes,
+    }
+
+    class TestFunctional(ExcFunctionalBase):
+        features = list(model_features)
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.calls = 0
+
+        def get_exc(self, mol: FeatureMap) -> torch.Tensor:
+            self.calls += 1
+            return (
+                mol[Feature.DENSITY].square() * mol[Feature.GRID_WEIGHTS]
+            ).sum() + mol[Feature.COARSE_0_ATOMIC_COORDS].square().sum()
+
+    monkeypatch.setattr(
+        model_chunking,
+        "estimate_max_model_atoms_per_chunk",
+        lambda **kwargs: {1: 2, 2: 1, 3: 1},
+    )
+    functional = TestFunctional()
+    reference = torch.autograd.grad(
+        functional.get_exc(model_features), tuple(differentiable_features.values())
+    )
+
+    actual = model_chunking.evaluate_chunked_feature_gradients(
+        functional,
+        dm=torch.eye(1, dtype=torch.float64),
+        model_features=model_features,
+        differentiable_features=set(differentiable_features),
+        max_memory_in_mb=100,
+    )
+
+    for feature_name, reference_gradient in zip(
+        differentiable_features, reference, strict=True
+    ):
+        torch.testing.assert_close(actual[feature_name], reference_gradient)
+    assert functional.calls == 4
 
 
 def test_atom_grid_chunks_pack_equal_sizes_up_to_cap() -> None:

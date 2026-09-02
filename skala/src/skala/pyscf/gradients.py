@@ -12,15 +12,18 @@ from pyscf.grad.rks import grids_noresponse_cc, grids_response_cc
 from pyscf.grad.uks import Gradients as UHFGradient
 from pyscf.scf.hf import SCF
 
-import skala.pyscf.features as feature
 from pyscf import dft, gto
 from skala.dispersion import DFTD3Dispersion
-from skala.features import Feature, FeatureMap
+from skala.features import Feature
 from skala.functional.base import ExcFunctionalBase
+from skala.pyscf.evaluation import FeatureSpec
 from skala.pyscf.gradient_core import (
     contract_ao_derivative_block,
-    feature_derivatives,
     grid_derivative_block,
+)
+from skala.pyscf.model_chunking import (
+    evaluate_chunked_feature_gradients,
+    evaluate_model_features,
 )
 
 LOG = logging.getLogger(__name__)
@@ -83,25 +86,27 @@ def veff_and_expl_nuc_grad(
     grid_ = grid.copy()
     grid_.coords = np.concatenate(coord_list)
     grid_.weights = np.concatenate(weight_list)
-    mol_feats = feature.generate_features(mol, rdm1, grid_, set(functional.features))
+    mol_feats = evaluate_model_features(
+        mol,
+        rdm1,
+        grid_,
+        FeatureSpec(functional.features) | {Feature.ATOMIC_GRID_SIZES},
+    )
 
     # Discard atomic_grid_weights from VJP features: d(atomic_grid_weights)/dR = 0
     # because they are raw quadrature weights that depend only on the radial/angular
     # grid rule, not on nuclear positions. They still pass through as other_feats.
     nuc_grad_feats.discard(Feature.ATOMIC_GRID_WEIGHTS)
 
-    # Get required derivatives
-    nuc_feats = {feat: mol_feats[feat] for feat in nuc_grad_feats}
-    other_feats = {
-        feat: mol_feats[feat] for feat in mol_feats if feat not in nuc_grad_feats
-    }
+    dExc = evaluate_chunked_feature_gradients(
+        functional,
+        rdm1,
+        mol_feats,
+        nuc_grad_feats,
+        max_memory_in_mb=2000,
+    )
 
-    def exc_feat_func(differentiable_features: FeatureMap) -> torch.Tensor:
-        return functional.get_exc(differentiable_features | other_feats)
-
-    dExc = feature_derivatives(exc_feat_func, nuc_feats)
-
-    LOG.debug("autograd gradients for nuclear features done")
+    LOG.debug("chunked autograd gradients for nuclear features done")
 
     nao = rdm1.shape[-1]
     veff = torch.zeros((2, 3, nao, nao), dtype=rdm1.dtype)

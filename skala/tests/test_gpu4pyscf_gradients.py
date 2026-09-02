@@ -23,8 +23,9 @@ from skala.gpu4pyscf.gradients import (  # noqa: E402
     veff_and_expl_nuc_grad,
 )
 from skala.pyscf import SkalaKS as CpuSkalaKS  # noqa: E402
-from skala.pyscf.features import generate_features  # noqa: E402
+from skala.pyscf.evaluation import FeatureSpec  # noqa: E402
 from skala.pyscf.gradients import SkalaRKSGradient as CpuSkalaRKSGradient  # noqa: E402
+from skala.pyscf.model_chunking import evaluate_model_features  # noqa: E402
 from skala.utils import torch_allocator  # noqa: E402
 
 from pyscf import gto  # noqa: E402
@@ -220,8 +221,8 @@ def test_grid_weights_gradient(mol_name: str) -> None:
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Calculates the gradient in Exc w.r.t. nuclear coordinates numerically"""
         # mol_.verbose = 2
-        mol_feats = generate_features(
-            mol, rdm1, minimal_grid(mol), set(weight_sum.features), gpu=True
+        mol_feats = evaluate_model_features(
+            mol, rdm1, minimal_grid(mol), FeatureSpec(weight_sum.features)
         )
 
         def weight_sum_as_nuc_coords_func(nuc_coords: torch.Tensor) -> torch.Tensor:
@@ -278,8 +279,8 @@ def test_density_veff(mol_name: str) -> None:
         def dens_sum_as_nuc_coords_func(nuc_coords: torch.Tensor) -> torch.Tensor:
             """Exc wrapper for the finite difference"""
             mol_.set_geom_(nuc_coords.cpu().numpy(), "bohr", symmetry=None)
-            mol_feats = generate_features(
-                mol_, rdm1, grid, set(dens_sum.features), gpu=True
+            mol_feats = evaluate_model_features(
+                mol_, rdm1, grid, FeatureSpec(dens_sum.features)
             )
 
             return dens_sum.get_exc(mol_feats)
@@ -339,8 +340,8 @@ def test_grad_veff(mol_name: str) -> None:
         def grad_func_as_nuc_coords_func(nuc_coords: torch.Tensor) -> torch.Tensor:
             """Exc wrapper for the finite difference"""
             mol_.set_geom_(nuc_coords.cpu().numpy(), "bohr", symmetry=None)
-            mol_feats = generate_features(
-                mol_, rdm1, grid, set(grad_func.features), gpu=True
+            mol_feats = evaluate_model_features(
+                mol_, rdm1, grid, FeatureSpec(grad_func.features)
             )
 
             return grad_func.get_exc(mol_feats)
@@ -396,8 +397,8 @@ def test_kin_veff(mol_name: str) -> None:
         def kin_func_as_nuc_coords_func(nuc_coords: torch.Tensor) -> torch.Tensor:
             """Exc wrapper for the finite difference"""
             mol_.set_geom_(nuc_coords.cpu().numpy(), "bohr", symmetry=None)
-            mol_feats = generate_features(
-                mol_, rdm1, grid, set(kin_func.features), gpu=True
+            mol_feats = evaluate_model_features(
+                mol_, rdm1, grid, FeatureSpec(kin_func.features)
             )
 
             return kin_func.get_exc(mol_feats)

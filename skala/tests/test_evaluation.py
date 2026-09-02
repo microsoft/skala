@@ -59,6 +59,21 @@ def test_feature_spec_derives_atomic_layout_requirements(
     assert spec.supports_spatial_decomposition is supports_screened_evaluation
 
 
+def test_feature_spec_union_returns_extended_spec() -> None:
+    spec = FeatureSpec([Feature.DENSITY])
+
+    extended = spec | {Feature.GRAD, Feature.DENSITY}
+
+    assert spec.names == frozenset({Feature.DENSITY})
+    assert extended.names == frozenset({Feature.DENSITY, Feature.GRAD})
+
+
+def test_feature_spec_union_combines_specs() -> None:
+    combined = FeatureSpec([Feature.DENSITY]) | FeatureSpec([Feature.GRAD])
+
+    assert combined.names == frozenset({Feature.DENSITY, Feature.GRAD})
+
+
 def test_evaluation_policy_defaults_and_is_immutable() -> None:
     policy = EvaluationPolicy()
 

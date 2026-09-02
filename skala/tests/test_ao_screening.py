@@ -20,10 +20,15 @@ from skala.pyscf.ao_evaluation import (
     _resolve_ao_block_size,
     evaluate_ao_features_blockwise,
 )
+from skala.pyscf.backend import Grid
 from skala.pyscf.evaluation import FeatureSpec
 from skala.pyscf.feature_math import MGGAFeatureFunction
 from skala.pyscf.grids import SkalaGrids
-from skala.pyscf.model_chunking import ModelFeatureChunk
+from skala.pyscf.model_chunking import (
+    ModelFeatureChunk,
+    ModelFeatureChunker,
+    ModelFeaturePlan,
+)
 from skala.pyscf.numint import SkalaNumInt
 from skala.pyscf.spatial_grid_layout import (
     SpatialGridLayout,
@@ -248,6 +253,54 @@ def test_active_cpu_ao_indices(carbon: gto.Mole) -> None:
     assert empty.size == 0
 
 
+def test_dense_ao_evaluation_uses_model_chunking(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Keep model chunking independent from the AO screening decision."""
+    mol = gto.M(atom="H 0 0 0; H 0 0 0.74", basis="sto-3g", verbose=0)
+    grids = _minimal_atom_grid(mol)
+    atom_grid_size = grids.weights.size // mol.natm
+    monkeypatch.setattr(
+        model_chunking_module,
+        "estimate_max_model_atoms_per_chunk",
+        lambda *args, **kwargs: {atom_grid_size: 1},
+    )
+    original_chunker = model_chunking_module.ModelFeatureChunker
+    chunker_calls = 0
+
+    def counting_chunker(
+        mol: gto.Mole,
+        dm: torch.Tensor,
+        grids: Grid,
+        atom_major_raw_features: torch.Tensor,
+        feature_plan: ModelFeaturePlan,
+        deriv_order: int,
+        max_memory_in_mb: int | None = None,
+        safety_fraction: float = 0.8,
+    ) -> ModelFeatureChunker:
+        nonlocal chunker_calls
+        chunker_calls += 1
+        return original_chunker(
+            mol,
+            dm,
+            grids,
+            atom_major_raw_features,
+            feature_plan,
+            deriv_order,
+            max_memory_in_mb,
+            safety_fraction,
+        )
+
+    monkeypatch.setattr(xc_integrator_module, "ModelFeatureChunker", counting_chunker)
+    integrator = XCIntegrator(QuadraticFunctional())
+    dm = torch.as_tensor(dft.RKS(mol).get_init_guess())
+
+    with force_ao_screening(False):
+        integrator(mol, grids, dm)
+
+    assert chunker_calls == 1
+
+
 def test_resolve_ao_block_size_modes(carbon: gto.Mole) -> None:
     """Resolve aligned CPU block sizes and reject explicit GPU block sizing."""
     feature_function = MGGAFeatureFunction(FeatureSpec([Feature.DENSITY]))
@@ -450,7 +503,9 @@ def test_grid_reuses_spatial_grid_layout_across_numints(
         "prepare_spatial_grid_layout",
         fake_prepare_spatial_grid_layout,
     )
-    numint: _NumPyNumInt = SkalaNumInt(QuadraticFunctional())
+    functional = QuadraticFunctional([Feature.DENSITY, Feature.GRID_WEIGHTS])
+    assert not FeatureSpec(functional.features).supports_spatial_decomposition
+    numint: _NumPyNumInt = SkalaNumInt(functional)
     other_numint: _NumPyNumInt = SkalaNumInt(QuadraticFunctional())
 
     layout = numint.integrator._get_spatial_grid_layout(carbon, grids)
@@ -518,20 +573,13 @@ def test_first_and_second_order_use_same_screening_decision(
     routes: list[str] = []
     safety_fractions: list[float] = []
 
-    def fake_generate_features(
-        mol: gto.Mole,
+    def fake_evaluate_raw_features_auto_chunk(
         dm: torch.Tensor,
-        grids: object,
-        features: set[Feature] | None = None,
+        *args: object,
         **kwargs: object,
-    ) -> FeatureMap:
+    ) -> torch.Tensor:
         routes.append("dense")
-        density = dm.square().sum().reshape(1).expand(2, 1) / 2
-        return {
-            Feature.ATOMIC_GRID_SIZES: torch.tensor([1]),
-            Feature.DENSITY: density,
-            Feature.GRID_WEIGHTS: torch.ones(1, dtype=dm.dtype),
-        }
+        return dm.sum().reshape(1, 1)
 
     class FakeSpatialGridLayout:
         block_size = 1
@@ -577,17 +625,20 @@ def test_first_and_second_order_use_same_screening_decision(
         dm: torch.Tensor,
         grids: object,
         atom_major_raw_features: torch.Tensor,
-        feature_function: MGGAFeatureFunction,
+        feature_plan: ModelFeaturePlan,
         deriv_order: int,
         **kwargs: object,
     ) -> FakeModelFeatureChunks:
+        assert isinstance(feature_plan.raw_feature_function, MGGAFeatureFunction)
         safety_fraction = kwargs["safety_fraction"]
         assert isinstance(safety_fraction, float)
         safety_fractions.append(safety_fraction)
         return FakeModelFeatureChunks(atom_major_raw_features)
 
     monkeypatch.setattr(
-        xc_integrator_module, "generate_features", fake_generate_features
+        ao_evaluation_module,
+        "evaluate_raw_features_auto_chunk",
+        fake_evaluate_raw_features_auto_chunk,
     )
     monkeypatch.setattr(
         grids_module,
@@ -628,15 +679,11 @@ def test_first_and_second_order_use_same_screening_decision(
 
     assert result.shape == (carbon.nao_nr(), carbon.nao_nr())
     expected_route = "screened" if expected else "dense"
-    expected_route_count = 3 if expected else 2
-    assert routes == [expected_route] * expected_route_count
-    if expected:
-        assert safety_fractions == [
-            0.8,
-            0.8 if response_safety_fraction is None else response_safety_fraction,
-        ]
-    else:
-        assert safety_fractions == []
+    assert routes == [expected_route] * 3
+    assert safety_fractions == [
+        0.8,
+        0.8 if response_safety_fraction is None else response_safety_fraction,
+    ]
 
 
 def test_feature_block_helper_localizes_derivative_vectors() -> None:
@@ -1034,6 +1081,21 @@ def test_cpu_quadratic_dense_screened_equivalence_heteronuclear() -> None:
             rtol=1e-10,
             atol=1e-11,
         )
+
+
+def test_cpu_density_dense_screened_equivalence() -> None:
+    """Match dense and screened density in the original atom-major grid order."""
+    mol = gto.M(atom="H 0 0 0; F 0 0 0.92", basis="sto-3g", spin=0, verbose=0)
+    grids = _minimal_atom_grid(mol)
+    integrator = XCIntegrator(QuadraticFunctional())
+    dm = torch.as_tensor(dft.RKS(mol).get_init_guess())
+
+    with force_ao_screening(False):
+        dense = integrator.density(mol, dm, grids)
+    with force_ao_screening(True):
+        screened = integrator.density(mol, dm, grids)
+
+    torch.testing.assert_close(screened, dense, rtol=1e-10, atol=1e-11)
 
 
 @pytest.mark.parametrize(

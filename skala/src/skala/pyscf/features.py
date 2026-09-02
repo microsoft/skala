@@ -10,83 +10,8 @@ from torch import Tensor
 
 from pyscf import gto
 from skala.features import Feature, FeatureMap
-from skala.pyscf import ao_evaluation, feature_math
 from skala.pyscf.backend import Grid, from_numpy_or_cupy
-from skala.pyscf.evaluation import EvaluationPolicy, FeatureSpec
-
-DEFAULT_FEATURES = [
-    Feature.DENSITY,
-    Feature.KIN,
-    Feature.GRAD,
-    Feature.GRID_COORDS,
-    Feature.GRID_WEIGHTS,
-]
-DEFAULT_FEATURES_SET = set(DEFAULT_FEATURES)
-
-
-def generate_features(
-    mol: gto.Mole,
-    dm: Tensor,
-    grids: Grid,
-    features: set[Feature] | None = None,
-    chunk_size: int | None = None,
-    max_memory: int = 2000,
-    gpu: bool = False,
-) -> FeatureMap:
-    """Generate density features for a given molecule. The density features are stored in a dictionary
-    with the keys matching the requested features.
-
-    Parameters
-    ----------
-    mol: gto.Mole
-      the molecule
-    dm: Tensor
-      the density matrix
-    grids: Grid
-      the grid
-    features: set[str] | None
-      the requested features
-    chunk_size: int | None
-        a manually specified chunk size for processing the grids, if None the chunk size is determined automatically
-    max_memory: int
-      the maximum memory to use for calculating the features
-    gpu: bool
-        whether to use the GPU(4pyscf) for calculations
-
-    Returns
-    -------
-    dict[str, Tensor]
-        A dictionary containing the requested features. The keys are the feature names,
-        and the values are the corresponding tensors.
-    """
-    feature_spec = FeatureSpec(DEFAULT_FEATURES_SET if features is None else features)
-    evaluation_policy = EvaluationPolicy(ao_block_size=chunk_size)
-
-    # if dm is a 3D tensor, then we have a spin-polarized system
-    is_spin_polarized = len(dm.shape) == 3
-
-    if gpu and dm.device.type != "cuda":
-        raise ValueError("Density matrix must be on the GPU when gpu=True.")
-
-    mol_features = get_grid_features(mol, dm, grids, feature_spec)
-
-    if feature_spec.requires_ao_evaluation:
-        mgga_features = ao_evaluation.auto_chunk(
-            dm,
-            mol,
-            grids,
-            feature_math.MGGAFeatureFunction(feature_spec),
-            block_size=evaluation_policy.ao_block_size,
-            max_memory=max_memory,
-            gpu=gpu,
-        )
-
-        for feature in mgga_features:
-            mol_features[feature] = feature_math.maybe_expand_and_divide(
-                mgga_features[feature], not is_spin_polarized, 2
-            )
-
-    return mol_features
+from skala.pyscf.evaluation import FeatureSpec
 
 
 def get_grid_features(
