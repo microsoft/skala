@@ -3,15 +3,14 @@
 """Names of built-in molecular features."""
 
 from collections.abc import Iterable
-from enum import Enum
-from typing import TYPE_CHECKING, TypeAlias
+from enum import StrEnum
+from typing import TypeAlias
 
-if TYPE_CHECKING:
-    from torch import Tensor
+from torch import Tensor
 
 
-class Feature(str, Enum):  # noqa: UP042 - Python 3.10-compatible StrEnum
-    """String-compatible names of features understood by Skala."""
+class Feature(StrEnum):
+    """features understood by Skala."""
 
     DENSITY = "density"
     GRAD = "grad"
@@ -23,8 +22,6 @@ class Feature(str, Enum):  # noqa: UP042 - Python 3.10-compatible StrEnum
     ATOMIC_GRID_SIZES = "atomic_grid_sizes"
     ATOMIC_GRID_SIZE_BOUND_SHAPE = "atomic_grid_size_bound_shape"
     COARSE_0_ATOMIC_COORDS = "coarse_0_atomic_coords"
-
-    __str__ = str.__str__
 
 
 AO_FEATURES = frozenset(
@@ -54,4 +51,4 @@ def ao_derivative_order(features: Iterable[Feature]) -> int:
     return 0
 
 
-FeatureMap: TypeAlias = dict[Feature, "Tensor"]
+FeatureMap: TypeAlias = dict[Feature, Tensor]

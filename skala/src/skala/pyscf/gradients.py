@@ -22,12 +22,14 @@ from skala.pyscf.gradient_core import (
 )
 
 
-def veff_and_expl_nuc_grad(
+def _veff_and_expl_nuc_grad(
     functional: ExcFunctionalBase,
     mol: gto.Mole,
     grid: dft.Grids,
     rdm1: torch.Tensor,
     nuc_grad_feats: set[Feature] | None = None,
+    *,
+    max_memory_in_mb: int,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """
     returns:
@@ -50,7 +52,7 @@ def veff_and_expl_nuc_grad(
         grid_,
         rdm1,
         nuc_grad_feats,
-        max_memory_in_mb=2000,
+        max_memory_in_mb=max_memory_in_mb,
     )
 
     def atom_grid_blocks() -> Iterator[tuple[torch.Tensor, int, torch.Tensor]]:
@@ -101,12 +103,13 @@ class SkalaRKSGradient(RHFGradient):  # type: ignore[misc]
         if dm is None:
             dm = self.base.make_rdm1()
 
-        veff, self.veff_nuc_grad_ = veff_and_expl_nuc_grad(
+        veff, self.veff_nuc_grad_ = _veff_and_expl_nuc_grad(
             self.functional,
             mol=mol,
             grid=self.grids,
             rdm1=torch.from_numpy(dm),
             nuc_grad_feats=self.nuc_grad_feats,
+            max_memory_in_mb=int(self.base.max_memory),
         )
         self.veff_nuc_grad_.detach_()
         result = veff.detach_().numpy() + self.get_j(mol, dm)
@@ -184,12 +187,13 @@ class SkalaUKSGradient(UHFGradient):  # type: ignore[misc]
         if dm is None:
             dm = self.base.make_rdm1()
 
-        veff, self.veff_nuc_grad_ = veff_and_expl_nuc_grad(
+        veff, self.veff_nuc_grad_ = _veff_and_expl_nuc_grad(
             self.functional,
             mol=mol,
             grid=self.grids,
             rdm1=torch.from_numpy(dm),
             nuc_grad_feats=self.nuc_grad_feats,
+            max_memory_in_mb=int(self.base.max_memory),
         )
         result = veff.detach_().numpy() + self.get_j(mol, dm).sum(0)
         assert isinstance(result, np.ndarray)

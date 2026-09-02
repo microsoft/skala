@@ -173,7 +173,8 @@ def evaluate_nuclear_feature_derivatives(
     grid: Grid,
     rdm1: Tensor,
     features: set[Feature] | None = None,
-    max_memory_in_mb: int | None = None,
+    *,
+    max_memory_in_mb: int,
 ) -> tuple[int, FeatureMap]:
     """Evaluate model derivatives needed for a nuclear gradient.
 
@@ -183,7 +184,7 @@ def evaluate_nuclear_feature_derivatives(
         grid: Atom-major integration grid used for feature evaluation.
         rdm1: One-particle density matrix.
         features: Features to differentiate, defaulting to the functional inputs.
-        max_memory_in_mb: Optional memory limit for model-gradient chunking.
+        max_memory_in_mb: Memory limit for AO evaluation and model-gradient chunking.
 
     Returns:
         Required AO derivative order and XC derivatives by feature.
@@ -210,6 +211,7 @@ def evaluate_nuclear_feature_derivatives(
         rdm1,
         grid,
         FeatureSpec((*functional.features, Feature.ATOMIC_GRID_SIZES)),
+        max_memory_in_mb=max_memory_in_mb,
     )
     derivatives = evaluate_chunked_feature_gradients(
         functional,

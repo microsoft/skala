@@ -10,7 +10,7 @@ from skala.pyscf.evaluation import FeatureSpec
 from skala.pyscf.gradients import (
     SkalaRKSGradient,
     SkalaUKSGradient,
-    veff_and_expl_nuc_grad,
+    _veff_and_expl_nuc_grad,
 )
 from skala.pyscf.model_chunking import evaluate_model_features
 
@@ -58,6 +58,23 @@ def get_grid_and_rdm1(mol: gto.Mole) -> tuple[dft.Grids, torch.Tensor]:
     return mf.grids, rdm1  # maybe_expand_and_divide(rdm1, len(rdm1.shape) == 2, 2)
 
 
+def _evaluate_nuclear_gradient(
+    functional: ExcFunctionalBase,
+    mol: gto.Mole,
+    grid: dft.Grids,
+    rdm1: torch.Tensor,
+    nuc_grad_feats: set[Feature] | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    return _veff_and_expl_nuc_grad(
+        functional,
+        mol,
+        grid,
+        rdm1,
+        nuc_grad_feats,
+        max_memory_in_mb=int(mol.max_memory),
+    )
+
+
 def test_grid_coords_gradient(mol_name: str) -> None:
     class TestFunc(ExcFunctionalBase):
         def __init__(self) -> None:
@@ -71,7 +88,7 @@ def test_grid_coords_gradient(mol_name: str) -> None:
     mol = get_mol(mol_name)
     grid, rdm1 = get_grid_and_rdm1(mol)
     exc_test = TestFunc()
-    ana_grad = veff_and_expl_nuc_grad(exc_test, mol, grid, rdm1)[1]
+    ana_grad = _evaluate_nuclear_gradient(exc_test, mol, grid, rdm1)[1]
 
     # calculate exact result
     atom_grids_tab = grid.gen_atomic_grids(
@@ -98,7 +115,7 @@ def test_coarse_0_atomic_coords_gradient(mol_name: str) -> None:
     mol = get_mol(mol_name)
     grid, rdm1 = get_grid_and_rdm1(mol)
     exc_test = TestFunc()
-    ana_grad = veff_and_expl_nuc_grad(exc_test, mol, grid, rdm1)[1]
+    ana_grad = _evaluate_nuclear_gradient(exc_test, mol, grid, rdm1)[1]
 
     # calculate exact result
     exact_grad = torch.ones_like(ana_grad)
@@ -141,7 +158,7 @@ def test_grid_weights_gradient(mol_name: str) -> None:
 
     grid, rdm1 = get_grid_and_rdm1(mol)
     exc_test = TestFunc()
-    ana_grad = veff_and_expl_nuc_grad(exc_test, mol, grid, rdm1)[1]
+    ana_grad = _evaluate_nuclear_gradient(exc_test, mol, grid, rdm1)[1]
 
     # calculate numerical derivative as accurate as possible
     num_grad, num_err = finite_difference_nuc_grad(exc_test, mol, rdm1)
@@ -210,7 +227,7 @@ def test_density_veff(mol_name: str) -> None:
     num_grad, num_err = finite_difference_nuc_grad(exc_test, mol, rdm1)
 
     # calculate analytic result
-    veff = veff_and_expl_nuc_grad(
+    veff = _evaluate_nuclear_gradient(
         exc_test, mol, grid, rdm1, nuc_grad_feats={Feature.DENSITY}
     )[0]
     ana_grad = nuc_grad_from_veff(mol, veff, rdm1)
@@ -268,7 +285,7 @@ def test_grad_veff(mol_name: str) -> None:
     num_grad, num_err = finite_difference_nuc_grad(exc_test, mol, rdm1)
 
     # calculate analytic result
-    veff = veff_and_expl_nuc_grad(
+    veff = _evaluate_nuclear_gradient(
         exc_test, mol, grid, rdm1, nuc_grad_feats={Feature.GRAD}
     )[0]
     ana_grad = nuc_grad_from_veff(mol, veff, rdm1)
@@ -333,7 +350,7 @@ def test_kin_veff(mol_name: str) -> None:
     num_grad, num_err = finite_difference_nuc_grad(exc_test, mol, rdm1)
 
     # calculate analytic result
-    veff = veff_and_expl_nuc_grad(
+    veff = _evaluate_nuclear_gradient(
         exc_test, mol, grid, rdm1, nuc_grad_feats={Feature.KIN}
     )[0]
     ana_grad = nuc_grad_from_veff(mol, veff, rdm1)
@@ -433,7 +450,7 @@ def test_atomic_grid_weights_gradient(mol_name: str) -> None:
     grid = minimal_grid(mol, sort_grids=False)
 
     exc_test = TestFunc()
-    _, nuc_grad = veff_and_expl_nuc_grad(exc_test, mol, grid, rdm1)
+    _, nuc_grad = _evaluate_nuclear_gradient(exc_test, mol, grid, rdm1)
 
     assert torch.allclose(nuc_grad, torch.zeros_like(nuc_grad), atol=1e-15), (
         f"atomic_grid_weights gradient should be zero, got {nuc_grad}"
@@ -471,7 +488,7 @@ def test_atomic_grid_features_passthrough(mol_name: str) -> None:
 
     exc_test = TestFunc()
     # This should not raise NotImplementedError
-    veff, nuc_grad = veff_and_expl_nuc_grad(exc_test, mol, grid, rdm1)
+    veff, nuc_grad = _evaluate_nuclear_gradient(exc_test, mol, grid, rdm1)
 
     if mol.spin == 0:
         assert veff.shape == (3, mol.nao, mol.nao)
@@ -503,7 +520,7 @@ def test_explicit_nuc_grad_feats_with_integer_features(mol_name: str) -> None:
 
     exc_test = TestFunc()
     # Explicitly pass all features including integer ones — should auto-discard them
-    _vexc, nuc_grad = veff_and_expl_nuc_grad(
+    _vexc, nuc_grad = _evaluate_nuclear_gradient(
         exc_test, mol, grid, rdm1, nuc_grad_feats=set(exc_test.features)
     )
     assert nuc_grad.shape == (mol.natm, 3)

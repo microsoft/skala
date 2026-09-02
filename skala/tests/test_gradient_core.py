@@ -2,14 +2,76 @@
 
 """Tests for backend-independent nuclear-gradient operations."""
 
+from typing import cast
+
 import pytest
 import torch
-from skala.features import Feature
+from skala.features import Feature, FeatureMap
+from skala.functional.base import ExcFunctionalBase
+from skala.pyscf import gradient_core
+from skala.pyscf.backend import Grid
 from skala.pyscf.gradient_core import (
     contract_ao_derivative_block,
     feature_derivatives,
     grid_derivative_block,
 )
+
+from pyscf import gto
+
+
+def test_nuclear_feature_derivatives_propagate_memory_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed_budgets: list[int | None] = []
+    density = torch.ones(1, dtype=torch.float64)
+
+    class TestFunctional(ExcFunctionalBase):
+        features = [Feature.DENSITY]
+
+        def get_exc(self, mol: FeatureMap) -> torch.Tensor:
+            return mol[Feature.DENSITY].sum()
+
+    def fake_evaluate_model_features(
+        mol: gto.Mole,
+        dm: torch.Tensor,
+        grid: Grid,
+        feature_spec: object,
+        max_memory_in_mb: int = 2000,
+    ) -> FeatureMap:
+        observed_budgets.append(max_memory_in_mb)
+        return {
+            Feature.DENSITY: density,
+            Feature.ATOMIC_GRID_SIZES: torch.ones(1, dtype=torch.long),
+        }
+
+    def fake_evaluate_chunked_feature_gradients(
+        functional: ExcFunctionalBase,
+        dm: torch.Tensor,
+        model_features: FeatureMap,
+        differentiable_features: set[Feature],
+        max_memory_in_mb: int | None = None,
+    ) -> FeatureMap:
+        observed_budgets.append(max_memory_in_mb)
+        return {Feature.DENSITY: density}
+
+    monkeypatch.setattr(
+        gradient_core, "evaluate_model_features", fake_evaluate_model_features
+    )
+    monkeypatch.setattr(
+        gradient_core,
+        "evaluate_chunked_feature_gradients",
+        fake_evaluate_chunked_feature_gradients,
+    )
+
+    gradient_core.evaluate_nuclear_feature_derivatives(
+        TestFunctional(),
+        cast(gto.Mole, object()),
+        cast(Grid, object()),
+        torch.eye(1, dtype=torch.float64),
+        max_memory_in_mb=321,
+    )
+
+    assert observed_budgets == [321, 321]
 
 
 def test_feature_derivatives() -> None:

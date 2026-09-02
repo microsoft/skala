@@ -25,12 +25,14 @@ from skala.pyscf.gradient_core import (
 )
 
 
-def veff_and_expl_nuc_grad(
+def _veff_and_expl_nuc_grad(
     functional: ExcFunctionalBase,
     mol: gto.Mole,
     grid: dft.Grids,
     rdm1: torch.Tensor,
     nuc_grad_feats: set[Feature] | None = None,
+    *,
+    max_memory_in_mb: int,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """
     returns:
@@ -53,6 +55,7 @@ def veff_and_expl_nuc_grad(
         grid_,
         rdm1,
         nuc_grad_feats,
+        max_memory_in_mb=max_memory_in_mb,
     )
 
     def atom_grid_blocks() -> Iterator[tuple[torch.Tensor, int, torch.Tensor]]:
@@ -120,12 +123,13 @@ class SkalaRKSGradient(RHFGradient):  # type: ignore[misc]
         if dm is None:
             dm = self.base.make_rdm1()
 
-        veff, self.veff_nuc_grad_ = veff_and_expl_nuc_grad(
+        veff, self.veff_nuc_grad_ = _veff_and_expl_nuc_grad(
             self.functional,
             mol=mol,
             grid=self.grids,
             rdm1=from_dlpack(dm),
             nuc_grad_feats=self.nuc_grad_feats,
+            max_memory_in_mb=int(self.base.max_memory),
         )
         veff_grad = (
             2 * nuc_grad_from_veff(mol, veff, from_dlpack(dm)).detach().cpu().numpy()
@@ -152,12 +156,13 @@ class SkalaRKSGradient(RHFGradient):  # type: ignore[misc]
 
         if self.veff_nuc_grad_ is None:
             dm = self.base.make_rdm1()
-            _, self.veff_nuc_grad_ = veff_and_expl_nuc_grad(
+            _, self.veff_nuc_grad_ = _veff_and_expl_nuc_grad(
                 self.functional,
                 mol=self.mol,
                 grid=self.grids,
                 rdm1=from_dlpack(dm),
                 nuc_grad_feats=self.nuc_grad_feats,
+                max_memory_in_mb=int(self.base.max_memory),
             )
         veff_nuc_grad = self.veff_nuc_grad_
         if veff_nuc_grad is None:
@@ -226,12 +231,13 @@ class SkalaUKSGradient(UHFGradient):  # type: ignore[misc]
         if dm is None:
             dm = self.base.make_rdm1()
 
-        veff, self.veff_nuc_grad_ = veff_and_expl_nuc_grad(
+        veff, self.veff_nuc_grad_ = _veff_and_expl_nuc_grad(
             self.functional,
             mol=mol,
             grid=self.grids,
             rdm1=from_dlpack(dm),
             nuc_grad_feats=self.nuc_grad_feats,
+            max_memory_in_mb=int(self.base.max_memory),
         )
         veff_grad = (
             2 * nuc_grad_from_veff(mol, veff, from_dlpack(dm)).detach().cpu().numpy()
@@ -258,12 +264,13 @@ class SkalaUKSGradient(UHFGradient):  # type: ignore[misc]
 
         if self.veff_nuc_grad_ is None:
             dm = self.base.make_rdm1()
-            _, self.veff_nuc_grad_ = veff_and_expl_nuc_grad(
+            _, self.veff_nuc_grad_ = _veff_and_expl_nuc_grad(
                 self.functional,
                 mol=self.mol,
                 grid=self.grids,
                 rdm1=from_dlpack(dm),
                 nuc_grad_feats=self.nuc_grad_feats,
+                max_memory_in_mb=int(self.base.max_memory),
             )
         veff_nuc_grad = self.veff_nuc_grad_
         if veff_nuc_grad is None:
