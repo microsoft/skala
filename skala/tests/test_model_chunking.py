@@ -9,9 +9,44 @@ from skala.functional.base import ExcFunctionalBase
 from skala.pyscf import model_chunking
 from skala.pyscf.backend import Grid
 from skala.pyscf.evaluation import FeatureSpec
-from skala.pyscf.feature_math import MGGAFeatureFunction
 
 from pyscf import gto
+
+
+def test_feature_derivatives() -> None:
+    density = torch.tensor([1.0, 2.0], dtype=torch.float64)
+    weights = torch.tensor([3.0, 4.0], dtype=torch.float64)
+
+    derivatives = model_chunking.feature_derivatives(
+        lambda rho, grid_weights: (rho.square() * grid_weights).sum(),
+        [density, weights],
+    )
+
+    torch.testing.assert_close(derivatives[0], 2 * density * weights)
+    torch.testing.assert_close(derivatives[1], density.square())
+    assert model_chunking.feature_derivatives(lambda: torch.tensor(0.0), []) == ()
+
+
+def test_feature_derivatives_returns_zero_for_disconnected_feature() -> None:
+    used = torch.tensor(2.0)
+    unused = torch.tensor(3.0)
+
+    derivatives = model_chunking.feature_derivatives(
+        lambda value, _: value.square(), [used, unused]
+    )
+
+    torch.testing.assert_close(derivatives[0], 2 * used)
+    torch.testing.assert_close(derivatives[1], torch.zeros_like(unused))
+
+
+def test_feature_derivatives_returns_zero_for_constant_energy() -> None:
+    feature = torch.tensor(2.0)
+
+    (derivative,) = model_chunking.feature_derivatives(
+        lambda _: torch.tensor(1.0), [feature]
+    )
+
+    torch.testing.assert_close(derivative, torch.zeros_like(feature))
 
 
 def test_model_feature_chunker_sorts_complete_atomic_grids(
@@ -44,17 +79,17 @@ def test_model_feature_chunker_sorts_complete_atomic_grids(
         fake_estimate_max_model_atoms_per_chunk,
     )
 
-    feature_spec = FeatureSpec(
-        {
-            Feature.DENSITY,
-            Feature.GRID_COORDS,
-            Feature.GRID_WEIGHTS,
-            Feature.ATOMIC_GRID_WEIGHTS,
-            Feature.COARSE_0_ATOMIC_COORDS,
-            Feature.ATOMIC_GRID_SIZES,
-            Feature.ATOMIC_GRID_SIZE_BOUND_SHAPE,
-        }
-    )
+    features = {
+        Feature.DENSITY,
+        Feature.GRID_COORDS,
+        Feature.GRID_WEIGHTS,
+        Feature.ATOMIC_GRID_WEIGHTS,
+        Feature.COARSE_0_ATOMIC_COORDS,
+        Feature.ATOMIC_GRID_SIZES,
+        Feature.ATOMIC_GRID_SIZE_BOUND_SHAPE,
+    }
+    evaluation_feature_spec = FeatureSpec(features)
+    feature_spec = FeatureSpec(features)
     raw_features = point_ids.reshape(1, -1)
     chunker = model_chunking.ModelFeatureChunker(
         mol=cast(gto.Mole, object()),
@@ -62,7 +97,7 @@ def test_model_feature_chunker_sorts_complete_atomic_grids(
         grids=cast(Grid, object()),
         atom_major_raw_features=raw_features,
         feature_plan=model_chunking.ModelFeaturePlan(
-            raw_feature_function=MGGAFeatureFunction(feature_spec),
+            evaluation_feature_spec=evaluation_feature_spec,
             model_feature_spec=feature_spec,
         ),
         deriv_order=1,
@@ -94,14 +129,20 @@ def test_model_feature_chunker_builds_bound_shape_from_internal_grid_sizes(
         lambda *args, **kwargs: {Feature.ATOMIC_GRID_SIZES: atomic_grid_sizes},
     )
 
-    raw_feature_spec = FeatureSpec({Feature.DENSITY, Feature.ATOMIC_GRID_SIZES})
+    evaluation_feature_spec = FeatureSpec(
+        {
+            Feature.DENSITY,
+            Feature.ATOMIC_GRID_SIZES,
+            Feature.ATOMIC_GRID_SIZE_BOUND_SHAPE,
+        }
+    )
     chunker = model_chunking.ModelFeatureChunker(
         mol=cast(gto.Mole, type("FakeMole", (), {"natm": 4})()),
         dm=torch.eye(1, dtype=torch.float64),
         grids=cast(Grid, object()),
         atom_major_raw_features=torch.arange(7, dtype=torch.float64).reshape(1, -1),
         feature_plan=model_chunking.ModelFeaturePlan(
-            raw_feature_function=MGGAFeatureFunction(raw_feature_spec),
+            evaluation_feature_spec=evaluation_feature_spec,
             model_feature_spec=FeatureSpec({Feature.ATOMIC_GRID_SIZE_BOUND_SHAPE}),
         ),
         deriv_order=1,

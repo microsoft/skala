@@ -25,7 +25,6 @@ from skala.pyscf.ao_evaluation import (  # noqa: E402
     evaluate_full_grid,
 )
 from skala.pyscf.backend import Array, dft_gpu  # noqa: E402
-from skala.pyscf.evaluation import FeatureSpec  # noqa: E402
 from skala.pyscf.feature_math import MGGAFeatureFunction  # noqa: E402
 from skala.pyscf.grids import SkalaGrids as PySCFSkalaGrids  # noqa: E402
 from skala.pyscf.numint import SkalaNumInt  # noqa: E402
@@ -347,9 +346,7 @@ def test_gpu_empty_ao_block_matches_dense_reference() -> None:
     assert active_ao_counts[1] > 0
     grids._non0ao_idx = None
 
-    feature_function = MGGAFeatureFunction(
-        FeatureSpec([Feature.DENSITY, Feature.GRAD, Feature.KIN])
-    )
+    feature_function = MGGAFeatureFunction([Feature.DENSITY, Feature.GRAD, Feature.KIN])
     dm = torch.eye(mol.nao_nr(), dtype=torch.float64, device="cuda", requires_grad=True)
     screened = evaluate_ao_features_blockwise(
         dm, mol, grids, feature_function, block_size, False
@@ -402,7 +399,7 @@ def test_gpu_sparse_mask_sorts_scatters_and_unsorts(
 
     monkeypatch.setattr(dft_gpu.numint, "NumInt", FakeGpuNumInt)
 
-    feature_function = MGGAFeatureFunction(FeatureSpec([Feature.DENSITY]))
+    feature_function = MGGAFeatureFunction([Feature.DENSITY])
     dm = torch.diag(
         torch.arange(1, mol.nao_nr() + 1, dtype=torch.float64, device="cuda")
     ).requires_grad_()

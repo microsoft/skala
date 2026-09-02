@@ -88,9 +88,7 @@ class XCIntegrator:
         """Evaluate the total density on each grid point."""
         self._validate_device(dm)
         _assert_skala_grid(grids, self.device)
-        feature_function = feature_math.MGGAFeatureFunction(
-            FeatureSpec({Feature.DENSITY})
-        )
+        feature_function = feature_math.MGGAFeatureFunction({Feature.DENSITY})
         evaluate_raw_features = self._raw_feature_evaluator(
             mol,
             grids,
@@ -116,13 +114,21 @@ class XCIntegrator:
         dm_eval = dm.double()
         electron_count = torch.zeros(2, device=self.device, dtype=dm_eval.dtype)
         energy = torch.tensor(0.0, device=self.device, dtype=dm_eval.dtype)
-        feature_function = feature_math.MGGAFeatureFunction(
+        evaluation_feature_spec = FeatureSpec(
             self.feature_spec
             | {
                 Feature.DENSITY,
                 Feature.GRID_WEIGHTS,
                 Feature.ATOMIC_GRID_SIZES,
             }
+        )
+        model_feature_spec = self.feature_spec | {
+            Feature.DENSITY,
+            Feature.GRID_WEIGHTS,
+        }
+        feature_plan = ModelFeaturePlan(evaluation_feature_spec, model_feature_spec)
+        feature_function = feature_math.MGGAFeatureFunction(
+            evaluation_feature_spec.ao_features
         )
         evaluate_raw_features = self._raw_feature_evaluator(
             mol,
@@ -137,10 +143,7 @@ class XCIntegrator:
             dm,
             grids,
             atom_major_raw_features=raw_features,
-            feature_plan=ModelFeaturePlan(
-                feature_function,
-                self.feature_spec | {Feature.DENSITY, Feature.GRID_WEIGHTS},
-            ),
+            feature_plan=feature_plan,
             deriv_order=1,
             max_memory_in_mb=max_memory if dm.device.type == "cpu" else None,
             safety_fraction=self.evaluation_policy.safety_fraction,
@@ -184,8 +187,10 @@ class XCIntegrator:
             else safety_fraction
         )
         dm0 = dm0.requires_grad_()
+        evaluation_feature_spec = self.feature_spec | {Feature.ATOMIC_GRID_SIZES}
+        feature_plan = ModelFeaturePlan(evaluation_feature_spec, self.feature_spec)
         feature_function = feature_math.MGGAFeatureFunction(
-            self.feature_spec | {Feature.ATOMIC_GRID_SIZES}
+            evaluation_feature_spec.ao_features
         )
         evaluate_raw_features = self._raw_feature_evaluator(
             mol,
@@ -200,7 +205,7 @@ class XCIntegrator:
             dm0,
             grids,
             atom_major_raw_features=raw_features,
-            feature_plan=ModelFeaturePlan(feature_function, self.feature_spec),
+            feature_plan=feature_plan,
             deriv_order=2,
             max_memory_in_mb=max_memory if dm0.device.type == "cpu" else None,
             safety_fraction=response_safety_fraction,

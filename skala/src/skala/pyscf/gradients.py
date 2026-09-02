@@ -2,7 +2,7 @@
 
 """Modification of PySCF nuclear gradient object to work with Skala functional."""
 
-import logging
+from collections.abc import Iterator
 from typing import Any
 
 import numpy as np
@@ -16,17 +16,10 @@ from pyscf import dft, gto
 from skala.dispersion import DFTD3Dispersion
 from skala.features import Feature
 from skala.functional.base import ExcFunctionalBase
-from skala.pyscf.evaluation import FeatureSpec
 from skala.pyscf.gradient_core import (
-    contract_ao_derivative_block,
-    grid_derivative_block,
+    assemble_nuclear_gradient,
+    evaluate_nuclear_feature_derivatives,
 )
-from skala.pyscf.model_chunking import (
-    evaluate_chunked_feature_gradients,
-    evaluate_model_features,
-)
-
-LOG = logging.getLogger(__name__)
 
 
 def veff_and_expl_nuc_grad(
@@ -42,41 +35,6 @@ def veff_and_expl_nuc_grad(
     - 2nd tuple argument: explicit contributions to the nuclear gradient
     """
 
-    SUPPORTED_FEATS = {
-        Feature.DENSITY,
-        Feature.GRAD,
-        Feature.KIN,
-        Feature.GRID_COORDS,
-        Feature.GRID_WEIGHTS,
-        Feature.ATOMIC_GRID_WEIGHTS,
-        Feature.COARSE_0_ATOMIC_COORDS,
-    }
-
-    if nuc_grad_feats is None:  # generate feature list from functional features
-        nuc_grad_feats = set(functional.features)
-
-    # Integer-valued features have no nuclear gradient — always discard them
-    nuc_grad_feats.discard(Feature.ATOMIC_GRID_SIZES)
-    nuc_grad_feats.discard(Feature.ATOMIC_GRID_SIZE_BOUND_SHAPE)
-
-    # check for unsupported features
-    unsupported_feats = {feat for feat in nuc_grad_feats if feat not in SUPPORTED_FEATS}
-    if unsupported_feats != set():
-        raise NotImplementedError(
-            f"Not supported features for nuclear gradient: {unsupported_feats}"
-        )
-
-    LOG.debug("nuc_grad_feats = %s", nuc_grad_feats)
-
-    # determine the maximum ao derivative needed
-    if Feature.GRAD in nuc_grad_feats or Feature.KIN in nuc_grad_feats:
-        ao_deriv = 2
-    elif Feature.DENSITY in nuc_grad_feats:
-        ao_deriv = 1
-    else:
-        ao_deriv = 0
-
-    # Get the derivatives of the weights per atom and make sure the grid is blocked per atom, no padding, etc.
     coord_list = []
     weight_list = []
     for coords, weight in grids_noresponse_cc(grid):
@@ -86,76 +44,28 @@ def veff_and_expl_nuc_grad(
     grid_ = grid.copy()
     grid_.coords = np.concatenate(coord_list)
     grid_.weights = np.concatenate(weight_list)
-    mol_feats = evaluate_model_features(
-        mol,
-        rdm1,
-        grid_,
-        FeatureSpec(functional.features) | {Feature.ATOMIC_GRID_SIZES},
-    )
-
-    # Discard atomic_grid_weights from VJP features: d(atomic_grid_weights)/dR = 0
-    # because they are raw quadrature weights that depend only on the radial/angular
-    # grid rule, not on nuclear positions. They still pass through as other_feats.
-    nuc_grad_feats.discard(Feature.ATOMIC_GRID_WEIGHTS)
-
-    dExc = evaluate_chunked_feature_gradients(
+    ao_deriv, derivatives = evaluate_nuclear_feature_derivatives(
         functional,
+        mol,
+        grid_,
         rdm1,
-        mol_feats,
         nuc_grad_feats,
         max_memory_in_mb=2000,
     )
 
-    LOG.debug("chunked autograd gradients for nuclear features done")
-
-    nao = rdm1.shape[-1]
-    veff = torch.zeros((2, 3, nao, nao), dtype=rdm1.dtype)
-    nuc_grad = torch.zeros((mol.natm, 3), dtype=rdm1.dtype)
-
-    atm_start = 0
-    for atm_id, (coords, weight, weight1) in enumerate(grids_response_cc(grid)):
-        mask = dft.gen_grid.make_mask(mol, coords)
-        ao = torch.from_numpy(
-            dft.numint.eval_ao(
-                mol, coords, deriv=ao_deriv, non0tab=mask, cutoff=grid.cutoff
+    def atom_grid_blocks() -> Iterator[tuple[torch.Tensor, int, torch.Tensor]]:
+        for coords, weight, weight1 in grids_response_cc(grid):
+            mask = dft.gen_grid.make_mask(mol, coords)
+            ao = torch.from_numpy(
+                dft.numint.eval_ao(
+                    mol, coords, deriv=ao_deriv, non0tab=mask, cutoff=grid.cutoff
+                )
             )
-        )
-        if ao_deriv == 0:
-            ao = ao[None, ...]
-        atm_end = atm_start + weight.shape[0]
-        dExc_atm = grid_derivative_block(dExc, atm_start, atm_end)
+            if ao_deriv == 0:
+                ao = ao[None, ...]
+            yield ao, weight.shape[0], torch.from_numpy(weight1)
 
-        # Calculate the contribution to veff for this atomic grid
-        veff_atm = contract_ao_derivative_block(ao, dExc_atm)
-
-        if Feature.GRID_COORDS in dExc_atm:
-            # also add the explicit grid coordinate dependence
-            nuc_grad[atm_id] += dExc_atm[Feature.GRID_COORDS].sum(dim=0)
-
-        if Feature.GRID_WEIGHTS in dExc_atm:
-            Exc_dgw = dExc_atm[Feature.GRID_WEIGHTS]
-            nuc_grad += torch.from_numpy(weight1) @ Exc_dgw
-            # add the grid coordinate dependence via the density-like quantities to the nuclear gradient
-            # we get those from the veff block. This tends to largely cancel with the grid_weights derivative,
-            # so that's why we include it here.
-            if len(rdm1.shape) == 2:
-                nuc_grad[atm_id] += torch.einsum("sxpq,qp->x", veff_atm, rdm1)
-            else:
-                nuc_grad[atm_id] += torch.einsum("sxpq,sqp->x", veff_atm, rdm1) * 2
-
-        veff += veff_atm
-        atm_start = atm_end
-
-    if Feature.COARSE_0_ATOMIC_COORDS in nuc_grad_feats:
-        nuc_grad += dExc[Feature.COARSE_0_ATOMIC_COORDS]
-
-    # finalize
-    if len(rdm1.shape) == 2:
-        veff = veff.sum(0) / 2
-
-    LOG.debug("veff and explicit components for nuclear gradient calculated")
-
-    return (-veff, nuc_grad)
+    return assemble_nuclear_gradient(derivatives, rdm1, mol.natm, atom_grid_blocks())
 
 
 class SkalaRKSGradient(RHFGradient):  # type: ignore[misc]

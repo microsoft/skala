@@ -1,44 +1,21 @@
 from dataclasses import FrozenInstanceError
 
 import pytest
-from skala.features import Feature
+from skala.features import Feature, ao_derivative_order
 from skala.pyscf.evaluation import EvaluationPolicy, FeatureSpec
+from skala.pyscf.feature_math import MGGAFeatureFunction
 
 
 def test_feature_name_parses_model_metadata_string() -> None:
     assert Feature("density") is Feature.DENSITY
 
 
-@pytest.mark.parametrize(
-    ("features", "expected_order"),
-    [
-        ([], 0),
-        ([Feature.DENSITY], 0),
-        ([Feature.GRAD], 1),
-        ([Feature.KIN], 1),
-        ([Feature.LAPL], 2),
-        (
-            [
-                Feature.DENSITY,
-                Feature.GRAD,
-                Feature.KIN,
-                Feature.LAPL,
-            ],
-            2,
-        ),
-    ],
-)
-def test_feature_spec_derives_mgga_requirements(
-    features: list[Feature], expected_order: int
-) -> None:
-    spec = FeatureSpec(features)
+def test_feature_spec_normalizes_model_contract() -> None:
+    spec = FeatureSpec([Feature.DENSITY, Feature.DENSITY])
 
-    assert spec.requires_ao_evaluation is bool(features)
-    assert spec.ao_derivative_order == expected_order
-    assert spec.with_density is (Feature.DENSITY in features)
-    assert spec.with_grad is (Feature.GRAD in features)
-    assert spec.with_kin is (Feature.KIN in features)
-    assert spec.with_lapl is (Feature.LAPL in features)
+    assert set(spec) == {Feature.DENSITY}
+    assert spec.requests(Feature.DENSITY)
+    assert not spec.requests(Feature.GRAD)
 
 
 @pytest.mark.parametrize(
@@ -49,29 +26,64 @@ def test_feature_spec_derives_mgga_requirements(
         (Feature.ATOMIC_GRID_SIZE_BOUND_SHAPE, False),
     ],
 )
-def test_feature_spec_derives_atomic_layout_requirements(
+def test_feature_spec_derives_spatial_decomposition_support(
     feature: Feature, supports_screened_evaluation: bool
 ) -> None:
     spec = FeatureSpec([feature, feature])
 
-    assert spec.names == frozenset({feature})
-    assert spec.requires_atomic_layout
+    assert set(spec) == {feature}
     assert spec.supports_spatial_decomposition is supports_screened_evaluation
 
 
-def test_feature_spec_union_returns_extended_spec() -> None:
-    spec = FeatureSpec([Feature.DENSITY])
+def test_feature_spec_derives_evaluation_needs() -> None:
+    feature_spec = FeatureSpec(
+        [Feature.DENSITY, Feature.DENSITY, Feature.ATOMIC_GRID_WEIGHTS]
+    )
 
-    extended = spec | {Feature.GRAD, Feature.DENSITY}
+    assert set(feature_spec) == {Feature.DENSITY, Feature.ATOMIC_GRID_WEIGHTS}
+    assert feature_spec.ao_features == frozenset({Feature.DENSITY})
+    assert feature_spec.requires_ao_evaluation
+    assert feature_spec.requires_atomic_layout
 
-    assert spec.names == frozenset({Feature.DENSITY})
-    assert extended.names == frozenset({Feature.DENSITY, Feature.GRAD})
+
+@pytest.mark.parametrize(
+    ("features", "expected"),
+    [
+        ([], 0),
+        ([Feature.DENSITY], 0),
+        ([Feature.GRAD], 1),
+        ([Feature.KIN], 1),
+        ([Feature.LAPL], 2),
+    ],
+)
+def test_ao_derivative_order(features: list[Feature], expected: int) -> None:
+    assert ao_derivative_order(features) == expected
 
 
-def test_feature_spec_union_combines_specs() -> None:
-    combined = FeatureSpec([Feature.DENSITY]) | FeatureSpec([Feature.GRAD])
+@pytest.mark.parametrize(
+    ("features", "expected_derivative_order", "expected_feature_count"),
+    [
+        ([Feature.DENSITY], 0, 1),
+        ([Feature.GRAD], 1, 3),
+        ([Feature.KIN], 1, 1),
+        ([Feature.LAPL], 2, 1),
+        ([Feature.DENSITY, Feature.GRAD, Feature.KIN, Feature.LAPL], 2, 6),
+    ],
+)
+def test_mgga_feature_function_derives_channel_requirements(
+    features: list[Feature],
+    expected_derivative_order: int,
+    expected_feature_count: int,
+) -> None:
+    feature_function = MGGAFeatureFunction(features)
 
-    assert combined.names == frozenset({Feature.DENSITY, Feature.GRAD})
+    assert feature_function.deriv == expected_derivative_order
+    assert feature_function.nfeats == expected_feature_count
+
+
+def test_mgga_feature_function_rejects_grid_features() -> None:
+    with pytest.raises(ValueError, match="grid_weights"):
+        MGGAFeatureFunction([Feature.DENSITY, Feature.GRID_WEIGHTS])
 
 
 def test_evaluation_policy_defaults_and_is_immutable() -> None:

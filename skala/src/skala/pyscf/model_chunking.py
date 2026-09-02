@@ -8,7 +8,7 @@ atom-local shapes and coordinates.
 """
 
 import logging
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 
 import torch
@@ -21,7 +21,6 @@ from skala.pyscf import ao_evaluation, feature_math
 from skala.pyscf.backend import Grid
 from skala.pyscf.evaluation import FeatureSpec
 from skala.pyscf.features import get_grid_features
-from skala.pyscf.gradient_core import feature_derivatives
 from skala.pyscf.memory_estimators import (
     estimate_max_model_atoms_per_chunk,
 )
@@ -57,7 +56,7 @@ def evaluate_model_features(
     if not feature_spec.requires_ao_evaluation:
         return model_features
 
-    feature_function = feature_math.MGGAFeatureFunction(feature_spec)
+    feature_function = feature_math.MGGAFeatureFunction(feature_spec.ao_features)
     raw_features = ao_evaluation.evaluate_raw_features_auto_chunk(
         dm,
         mol,
@@ -212,33 +211,31 @@ class ModelFeatureChunk:
 
 @dataclass(frozen=True)
 class ModelFeaturePlan:
-    """Describe how packed AO features become functional model inputs.
+    """Describe feature evaluation and model inputs for model chunking.
 
-    The raw feature function defines the channel layout of the packed tensor
-    produced by AO evaluation and decodes those channels into named features.
-    The model feature specification defines the smaller public feature surface
-    passed to the functional. These specifications may differ because integration
-    can request bookkeeping features, such as atomic grid sizes for chunk layout,
-    that the functional itself must not receive.
+    The evaluation specification contains every feature needed by the calculation,
+    including runtime bookkeeping. The model specification defines the smaller
+    feature set exposed to each functional invocation.
 
     Attributes:
-        raw_feature_function: Decoder matching the packed AO feature tensor.
+        evaluation_feature_spec: Complete feature set evaluated for the calculation.
         model_feature_spec: Features exposed to each functional invocation.
     """
 
-    raw_feature_function: feature_math.MGGAFeatureFunction
+    evaluation_feature_spec: FeatureSpec
     model_feature_spec: FeatureSpec
 
 
 class ModelFeatureChunker:
     """Prepare atom-aligned model inputs from globally evaluated AO features.
 
-    ``atom_major_raw_features`` must use the packed channel layout described by
-    ``feature_plan.raw_feature_function`` and must arrange complete atomic grids
-    contiguously in molecular atom order. The chunker groups equal-sized atomic
-    grids, chooses a memory-limited number of atoms per model invocation, decodes
-    each packed slice, and exposes only ``feature_plan.model_feature_spec`` to the
-    functional. Atomic grids are never split.
+    ``atom_major_raw_features`` must use the packed channel layout derived from
+    ``feature_plan.evaluation_feature_spec.ao_features`` and must arrange complete
+    atomic grids contiguously in molecular atom order. The chunker groups
+    equal-sized atomic grids, chooses a memory-limited number of atoms per model
+    invocation, decodes each packed slice, and exposes only
+    ``feature_plan.model_feature_spec`` to the functional. Atomic grids are never
+    split.
 
     Iteration yields detached chunk-local raw tensors requiring gradients so model
     cotangents can be assembled and propagated through the global AO evaluation.
@@ -259,9 +256,11 @@ class ModelFeatureChunker:
         max_memory_in_mb: int | None = None,
         safety_fraction: float = 0.8,
     ) -> None:
-        feature_function = feature_plan.raw_feature_function
-        feature_spec = feature_function.feature_spec
-        grid_features = get_grid_features(mol, dm, grids, feature_spec)
+        evaluation_feature_spec = feature_plan.evaluation_feature_spec
+        feature_function = feature_math.MGGAFeatureFunction(
+            evaluation_feature_spec.ao_features
+        )
+        grid_features = get_grid_features(mol, dm, grids, evaluation_feature_spec)
         atomic_grid_sizes = grid_features[Feature.ATOMIC_GRID_SIZES]
         if feature_plan.model_feature_spec.supports_spatial_decomposition:
             self._chunk_indices = _make_model_chunk_indices(
@@ -290,7 +289,6 @@ class ModelFeatureChunker:
 
     def __iter__(self) -> Iterator[ModelFeatureChunk]:
         """Yield detached raw features paired with atom-aligned model inputs."""
-        feature_spec = self._model_feature_spec
         for chunk_indices in self._chunk_indices:
             atom_indices = chunk_indices.atom_indices
             grid_indices = chunk_indices.grid_indices
@@ -299,45 +297,70 @@ class ModelFeatureChunker:
                 .detach()
                 .requires_grad_()
             )
+            decoded_features = {
+                feature: feature_math.maybe_expand_and_divide(
+                    value, not self._is_spin_polarized, 2
+                )
+                for feature, value in self._feature_function.to_dict(
+                    raw_features
+                ).items()
+            }
             model_features: FeatureMap = {}
-            for feature_name in _GRID_POINT_FEATURES:
-                if feature_spec.requests(feature_name):
-                    model_features[feature_name] = self._grid_features[
-                        feature_name
-                    ].index_select(0, grid_indices)
-
-            for feature_name in _ATOM_FEATURES:
-                if feature_spec.requests(feature_name):
-                    model_features[feature_name] = self._grid_features[
-                        feature_name
-                    ].index_select(0, atom_indices)
-
-            if feature_spec.requests(Feature.ATOMIC_GRID_SIZE_BOUND_SHAPE):
-                max_size = int(
-                    self._grid_features[Feature.ATOMIC_GRID_SIZES]
-                    .index_select(0, atom_indices)
-                    .max()
-                    .item()
-                )
-                model_features[Feature.ATOMIC_GRID_SIZE_BOUND_SHAPE] = torch.zeros(
-                    max_size,
-                    0,
-                    dtype=torch.long,
-                    device=raw_features.device,
-                )
-
-            for feature_name, feature in self._feature_function.to_dict(
-                raw_features
-            ).items():
-                if feature_spec.requests(feature_name):
-                    model_features[feature_name] = feature_math.maybe_expand_and_divide(
-                        feature, not self._is_spin_polarized, 2
+            for feature in self._model_feature_spec:
+                if feature in _AO_DERIVED_FEATURES:
+                    model_features[feature] = decoded_features[feature]
+                elif feature in _GRID_POINT_FEATURES:
+                    model_features[feature] = self._grid_features[feature].index_select(
+                        0, grid_indices
                     )
+                elif feature in _ATOM_FEATURES:
+                    model_features[feature] = self._grid_features[feature].index_select(
+                        0, atom_indices
+                    )
+                elif feature is Feature.ATOMIC_GRID_SIZE_BOUND_SHAPE:
+                    atomic_grid_sizes = self._grid_features[
+                        Feature.ATOMIC_GRID_SIZES
+                    ].index_select(0, atom_indices)
+                    model_features[feature] = torch.zeros(
+                        int(atomic_grid_sizes.max().item()),
+                        0,
+                        dtype=torch.long,
+                        device=raw_features.device,
+                    )
+                else:
+                    raise ValueError(f"Unsupported model feature: {feature}")
             yield ModelFeatureChunk(
                 grid_indices=grid_indices,
                 raw_features=raw_features,
                 model_features=model_features,
             )
+
+
+def feature_derivatives(
+    exc_func: Callable[..., Tensor], feature_tensors: Sequence[Tensor]
+) -> tuple[Tensor, ...]:
+    """Differentiate a scalar XC energy with respect to molecular features."""
+    if not feature_tensors:
+        return ()
+
+    differentiable_features = tuple(
+        tensor.detach().requires_grad_(True) for tensor in feature_tensors
+    )
+    exc = exc_func(*differentiable_features)
+    if not exc.requires_grad:
+        return tuple(torch.zeros_like(feature) for feature in differentiable_features)
+
+    gradients = torch.autograd.grad(
+        exc,
+        differentiable_features,
+        create_graph=False,
+        retain_graph=False,
+        allow_unused=True,
+    )
+    return tuple(
+        torch.zeros_like(feature) if gradient is None else gradient.detach()
+        for feature, gradient in zip(differentiable_features, gradients, strict=True)
+    )
 
 
 def _evaluate_feature_gradients(
@@ -386,10 +409,14 @@ def evaluate_chunked_feature_gradients(
             functional, full_features, differentiable_features
         )
 
+    ao_features = feature_spec.ao_features
+    nfeatures = (
+        feature_math.MGGAFeatureFunction(ao_features).nfeats if ao_features else 0
+    )
     chunk_indices = _make_model_chunk_indices(
         dm,
         atomic_grid_sizes,
-        nfeatures=feature_spec.mgga_feature_count,
+        nfeatures=nfeatures,
         deriv_order=1,
         max_memory_in_mb=max_memory_in_mb,
         safety_fraction=safety_fraction,

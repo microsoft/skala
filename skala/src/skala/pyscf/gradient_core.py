@@ -9,8 +9,29 @@ from types import EllipsisType
 from typing import ClassVar, TypeAlias
 
 import torch
+from torch import Tensor
 
-from skala.features import Feature, FeatureMap
+from pyscf import gto
+from skala.features import AO_FEATURES, Feature, FeatureMap, ao_derivative_order
+from skala.functional.base import ExcFunctionalBase
+from skala.pyscf.backend import Grid
+from skala.pyscf.evaluation import FeatureSpec
+from skala.pyscf.model_chunking import (
+    evaluate_chunked_feature_gradients,
+    evaluate_model_features,
+)
+
+SUPPORTED_NUCLEAR_GRADIENT_FEATURES = frozenset(
+    {
+        Feature.DENSITY,
+        Feature.GRAD,
+        Feature.KIN,
+        Feature.GRID_COORDS,
+        Feature.GRID_WEIGHTS,
+        Feature.ATOMIC_GRID_WEIGHTS,
+        Feature.COARSE_0_ATOMIC_COORDS,
+    }
+)
 
 
 class _Direction(IntEnum):
@@ -144,6 +165,113 @@ def grid_derivative_block(
         for feature, derivative in derivatives.items()
         if (feature_slice := feature_slices.get(feature)) is not None
     }
+
+
+def evaluate_nuclear_feature_derivatives(
+    functional: ExcFunctionalBase,
+    mol: gto.Mole,
+    grid: Grid,
+    rdm1: Tensor,
+    features: set[Feature] | None = None,
+    max_memory_in_mb: int | None = None,
+) -> tuple[int, FeatureMap]:
+    """Evaluate model derivatives needed for a nuclear gradient.
+
+    Args:
+        functional: XC functional whose energy is differentiated.
+        mol: Molecule associated with the density matrix and grid.
+        grid: Atom-major integration grid used for feature evaluation.
+        rdm1: One-particle density matrix.
+        features: Features to differentiate, defaulting to the functional inputs.
+        max_memory_in_mb: Optional memory limit for model-gradient chunking.
+
+    Returns:
+        Required AO derivative order and XC derivatives by feature.
+
+    Raises:
+        NotImplementedError: If a requested feature has no nuclear-gradient rule.
+    """
+    differentiable_features = set(functional.features if features is None else features)
+    differentiable_features -= {
+        Feature.ATOMIC_GRID_SIZES,
+        Feature.ATOMIC_GRID_SIZE_BOUND_SHAPE,
+    }
+    unsupported = differentiable_features - SUPPORTED_NUCLEAR_GRADIENT_FEATURES
+    if unsupported:
+        raise NotImplementedError(
+            f"Not supported features for nuclear gradient: {unsupported}"
+        )
+
+    ao_features = differentiable_features & AO_FEATURES
+    ao_deriv = ao_derivative_order(ao_features) + int(bool(ao_features))
+    differentiable_features.discard(Feature.ATOMIC_GRID_WEIGHTS)
+    model_features = evaluate_model_features(
+        mol,
+        rdm1,
+        grid,
+        FeatureSpec((*functional.features, Feature.ATOMIC_GRID_SIZES)),
+    )
+    derivatives = evaluate_chunked_feature_gradients(
+        functional,
+        rdm1,
+        model_features,
+        differentiable_features,
+        max_memory_in_mb=max_memory_in_mb,
+    )
+    return ao_deriv, derivatives
+
+
+def assemble_nuclear_gradient(
+    derivatives: FeatureMap,
+    rdm1: Tensor,
+    natm: int,
+    atom_grid_blocks: Iterable[tuple[Tensor, int, Tensor]],
+) -> tuple[Tensor, Tensor]:
+    """Assemble effective-potential and explicit nuclear-gradient contributions.
+
+    Args:
+        derivatives: XC energy derivatives keyed by molecular feature.
+        rdm1: One-particle density matrix.
+        natm: Number of atoms in the molecule.
+        atom_grid_blocks: Tuples containing AO values, grid-point count, and
+            grid-weight derivatives for each atom.
+
+    Returns:
+        Negative effective potential and explicit nuclear gradient.
+    """
+    nao = rdm1.shape[-1]
+    veff = rdm1.new_zeros((2, 3, nao, nao))
+    nuclear_gradient = rdm1.new_zeros((natm, 3))
+
+    grid_start = 0
+    for atom, (ao, grid_size, weight_derivatives) in enumerate(atom_grid_blocks):
+        grid_end = grid_start + grid_size
+        atom_derivatives = grid_derivative_block(derivatives, grid_start, grid_end)
+        atom_veff = contract_ao_derivative_block(ao, atom_derivatives)
+
+        if Feature.GRID_COORDS in atom_derivatives:
+            nuclear_gradient[atom] += atom_derivatives[Feature.GRID_COORDS].sum(dim=0)
+
+        if Feature.GRID_WEIGHTS in atom_derivatives:
+            grid_weight_derivative = atom_derivatives[Feature.GRID_WEIGHTS]
+            nuclear_gradient += weight_derivatives @ grid_weight_derivative
+            if rdm1.ndim == 2:
+                nuclear_gradient[atom] += torch.einsum("sxpq,qp->x", atom_veff, rdm1)
+            else:
+                nuclear_gradient[atom] += (
+                    torch.einsum("sxpq,sqp->x", atom_veff, rdm1) * 2
+                )
+
+        veff += atom_veff
+        grid_start = grid_end
+
+    if Feature.COARSE_0_ATOMIC_COORDS in derivatives:
+        nuclear_gradient += derivatives[Feature.COARSE_0_ATOMIC_COORDS]
+
+    if rdm1.ndim == 2:
+        veff = veff.sum(0) / 2
+
+    return -veff, nuclear_gradient
 
 
 def contract_ao_derivative_block(
