@@ -33,6 +33,8 @@ SkalaXC's bundled model selectors are `LDA`, `PBE`, and `TPSS`, or an explicit `
    ```bash
   pixi install --locked -e default
    ```
+  On Linux x86_64 with a CUDA 12-compatible driver, use `pixi install --locked -e dev`
+  for the GPU-enabled superset with profiling, IPython, notebook, and plotting tools.
 3. **Pre-commit hooks** (required before committing):
    ```bash
   pixi run -e default pre-commit install

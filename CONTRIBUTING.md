@@ -23,6 +23,16 @@ pixi install --locked -e default
 pixi run -e default pre-commit install
 ```
 
+On Linux x86_64 with a CUDA 12-compatible driver, the `dev` environment is the
+GPU-enabled development superset. It adds GPU4PySCF, profiling, IPython, a
+notebook kernel, and plotting tools while retaining the default test, lint,
+model, and benchmark tooling:
+
+```bash
+pixi install --locked -e dev
+pixi run -e dev ipython
+```
+
 Run the standard checks in their Pixi environments:
 
 ```bash

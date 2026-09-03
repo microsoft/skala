@@ -64,6 +64,14 @@ always use the selected environment:
 
 Set ``OMP_NUM_THREADS=4`` when running tests locally to match CI.
 
+On Linux x86_64 with a CUDA 12-compatible driver, install the GPU-enabled
+development superset with profiling and interactive analysis tools:
+
+.. code-block:: bash
+
+  pixi install --locked -e dev
+  pixi run -e dev ipython
+
 The locked compatibility environments are:
 
 .. list-table::

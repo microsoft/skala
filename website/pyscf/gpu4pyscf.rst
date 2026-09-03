@@ -22,9 +22,9 @@ The Skala functional can also be used in GPU4PySCF with an appropriate PyTorch C
 Installation
 ------------
 
-The repository provides three locked GPU environments. They combine conda-forge
-PyTorch and CUDA libraries with PyPI PySCF and the latest tested GPU4PySCF
-release, 1.8.1:
+The repository provides three locked GPU compatibility environments. They
+combine conda-forge PyTorch and CUDA libraries with PyPI PySCF and the latest
+tested GPU4PySCF release, 1.8.1:
 
 * ``gpu-cuda12-torch212``
 * ``gpu-cuda12-torch213``
