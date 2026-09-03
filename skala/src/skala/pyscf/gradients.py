@@ -18,7 +18,7 @@ from skala.dispersion import DFTD3Dispersion
 from skala.features import Feature, FeatureMap
 from skala.functional.base import ExcFunctionalBase
 from skala.pyscf.gradient_core import (
-    contract_veff_block,
+    contract_ao_derivative_block,
     feature_derivatives,
     grid_derivative_block,
 )
@@ -91,20 +91,15 @@ def veff_and_expl_nuc_grad(
     nuc_grad_feats.discard(Feature.ATOMIC_GRID_WEIGHTS)
 
     # Get required derivatives
-    nuc_feat_names = list(nuc_grad_feats)  # ensure specific order
-    nuc_feat_tensors = [mol_feats[feat] for feat in nuc_feat_names]
+    nuc_feats = {feat: mol_feats[feat] for feat in nuc_grad_feats}
     other_feats = {
         feat: mol_feats[feat] for feat in mol_feats if feat not in nuc_grad_feats
     }
 
-    def exc_feat_func(*nuc_feat_tensors: torch.Tensor) -> torch.Tensor:
-        exc_mol_feats = (
-            dict(zip(nuc_feat_names, nuc_feat_tensors, strict=True)) | other_feats
-        )
-        return functional.get_exc(exc_mol_feats)
+    def exc_feat_func(differentiable_features: FeatureMap) -> torch.Tensor:
+        return functional.get_exc(differentiable_features | other_feats)
 
-    dExc_tuple = feature_derivatives(exc_feat_func, nuc_feat_tensors)
-    dExc: FeatureMap = dict(zip(nuc_feat_names, dExc_tuple, strict=True))
+    dExc = feature_derivatives(exc_feat_func, nuc_feats)
 
     LOG.debug("autograd gradients for nuclear features done")
 
@@ -126,7 +121,7 @@ def veff_and_expl_nuc_grad(
         dExc_atm = grid_derivative_block(dExc, atm_start, atm_end)
 
         # Calculate the contribution to veff for this atomic grid
-        veff_atm = contract_veff_block(ao, dExc_atm)
+        veff_atm = contract_ao_derivative_block(ao, dExc_atm)
 
         if Feature.GRID_COORDS in dExc_atm:
             # also add the explicit grid coordinate dependence
