@@ -106,7 +106,7 @@ def feature_derivatives(
 def grid_derivative_block(
     derivatives: FeatureMap, grid_start: int, grid_end: int
 ) -> FeatureMap:
-    """Slice grid-resolved feature derivatives to one atom's grid block.
+    """Select a slice of the feature derivatives from `grid_start` to `grid_end`.
 
     Density-like features store the grid-point dimension last, whereas grid
     coordinates and weights store it first. Non-grid features, such as atomic
