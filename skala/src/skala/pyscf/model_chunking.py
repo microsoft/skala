@@ -53,10 +53,11 @@ def evaluate_model_features(
 ) -> FeatureMap:
     """Evaluate a model's named features without running the model."""
     model_features = get_grid_features(mol, dm, grids, feature_spec)
-    if not feature_spec.requires_ao_evaluation:
+    ao_features = feature_spec.ao_features
+    if ao_features is None:
         return model_features
 
-    feature_function = feature_math.MGGAFeatureFunction(feature_spec.ao_features)
+    feature_function = feature_math.MGGAFeatureFunction(ao_features)
     raw_features = ao_evaluation.evaluate_raw_features_auto_chunk(
         dm,
         mol,
@@ -257,9 +258,9 @@ class ModelFeatureChunker:
         safety_fraction: float = 0.8,
     ) -> None:
         evaluation_feature_spec = feature_plan.evaluation_feature_spec
-        feature_function = feature_math.MGGAFeatureFunction(
-            evaluation_feature_spec.ao_features
-        )
+        ao_features = evaluation_feature_spec.ao_features
+        assert ao_features is not None
+        feature_function = feature_math.MGGAFeatureFunction(ao_features)
         grid_features = get_grid_features(mol, dm, grids, evaluation_feature_spec)
         atomic_grid_sizes = grid_features[Feature.ATOMIC_GRID_SIZES]
         if feature_plan.model_feature_spec.supports_spatial_decomposition:
@@ -410,9 +411,7 @@ def evaluate_chunked_feature_gradients(
         )
 
     ao_features = feature_spec.ao_features
-    nfeatures = (
-        feature_math.MGGAFeatureFunction(ao_features).nfeats if ao_features else 0
-    )
+    nfeatures = ao_features.nfeats if ao_features is not None else 0
     chunk_indices = _make_model_chunk_indices(
         dm,
         atomic_grid_sizes,

@@ -2,11 +2,9 @@
 
 """Backend-independent PyTorch operations for PySCF nuclear gradients."""
 
-from collections.abc import Callable, Iterable, Iterator
-from dataclasses import dataclass
-from enum import IntEnum
+from collections.abc import Callable, Iterable
 from types import EllipsisType
-from typing import ClassVar, TypeAlias
+from typing import TypeAlias
 
 import torch
 from torch import Tensor
@@ -16,6 +14,7 @@ from skala.features import AO_FEATURES, Feature, FeatureMap, ao_derivative_order
 from skala.functional.base import ExcFunctionalBase
 from skala.pyscf.backend import Grid
 from skala.pyscf.evaluation import FeatureSpec
+from skala.pyscf.feature_math import PackedAO
 from skala.pyscf.model_chunking import (
     evaluate_chunked_feature_gradients,
     evaluate_model_features,
@@ -32,47 +31,6 @@ SUPPORTED_NUCLEAR_GRADIENT_FEATURES = frozenset(
         Feature.COARSE_0_ATOMIC_COORDS,
     }
 )
-
-
-class _Direction(IntEnum):
-    """Cartesian direction indices used by feature and potential tensors."""
-
-    X = 0
-    Y = 1
-    Z = 2
-
-
-@dataclass(frozen=True)
-class _PackedAO:
-    """Views into PySCF's packed AO derivative dimension."""
-
-    tensor: torch.Tensor
-
-    # PySCF's ``eval_ao(..., deriv=2)`` order is
-    # value, x, y, z, xx, xy, xz, yy, yz, zz. Mixed derivatives are reused
-    # across the symmetric off-diagonal entries of the Cartesian Hessian.
-    _HESSIAN_COMPONENTS: ClassVar[tuple[tuple[int, int, int], ...]] = (
-        (4, 5, 6),
-        (5, 7, 8),
-        (6, 8, 9),
-    )
-
-    @property
-    def value(self) -> torch.Tensor:
-        """AO values with shape ``(npoints, nao)``."""
-        return self.tensor[0]
-
-    @property
-    def gradient(self) -> torch.Tensor:
-        """AO gradients with shape ``(3, npoints, nao)``."""
-        return self.tensor[1:4]
-
-    def hessian(self) -> Iterator[tuple[_Direction, _Direction, torch.Tensor]]:
-        """Yield both Cartesian directions and each AO Hessian component."""
-        for ao_direction in _Direction:
-            for feature_direction in _Direction:
-                component = self._HESSIAN_COMPONENTS[ao_direction][feature_direction]
-                yield ao_direction, feature_direction, self.tensor[component]
 
 
 _FeatureSlice: TypeAlias = tuple[slice] | tuple[EllipsisType, slice]
@@ -304,45 +262,42 @@ def contract_ao_derivative_block(
         indexed by spin, Cartesian direction, and the two AO indices. The result
         has the same device and dtype as ``ao``.
     """
-    packed_ao = _PackedAO(ao)
+    packed_ao = PackedAO(ao)
     nao = ao.shape[-1]
     potential_derivatives = ao.new_zeros((2, 3, nao, nao))
 
-    if Feature.DENSITY in feature_derivatives:
-        potential_derivatives += torch.einsum(
-            "si, xip, iq -> sxpq",
-            feature_derivatives[Feature.DENSITY],
-            packed_ao.gradient,
-            packed_ao.value,
-        )
-
-    if Feature.GRAD in feature_derivatives:
-        exc_dgrad = feature_derivatives[Feature.GRAD]
-        potential_derivatives += torch.einsum(
-            "syi, xip, yiq -> sxpq",
-            exc_dgrad,
-            packed_ao.gradient,
-            packed_ao.gradient,
-        )
-        for ao_direction, feature_direction, ao_hessian in packed_ao.hessian():
-            potential_derivatives[:, ao_direction] += torch.einsum(
-                "si, ip, iq -> spq",
-                exc_dgrad[:, feature_direction],
-                ao_hessian,
+    for feature, feature_derivative in feature_derivatives.items():
+        if feature == Feature.DENSITY:
+            potential_derivatives += torch.einsum(
+                "si, xip, iq -> sxpq",
+                feature_derivative,
+                packed_ao.gradient,
                 packed_ao.value,
             )
-
-    if Feature.KIN in feature_derivatives:
-        exc_dkin = feature_derivatives[Feature.KIN]
-        for ao_direction, feature_direction, ao_hessian in packed_ao.hessian():
-            potential_derivatives[:, ao_direction] += (
-                torch.einsum(
-                    "si, ip, iq -> spq",
-                    exc_dkin,
-                    ao_hessian,
-                    packed_ao.gradient[feature_direction],
-                )
-                / 2
+        elif feature == Feature.GRAD:
+            potential_derivatives += torch.einsum(
+                "syi, xip, yiq -> sxpq",
+                feature_derivative,
+                packed_ao.gradient,
+                packed_ao.gradient,
             )
+            for ao_direction, feature_direction, ao_hessian in packed_ao.hessian():
+                potential_derivatives[:, ao_direction] += torch.einsum(
+                    "si, ip, iq -> spq",
+                    feature_derivative[:, feature_direction],
+                    ao_hessian,
+                    packed_ao.value,
+                )
+        elif feature == Feature.KIN:
+            for ao_direction, feature_direction, ao_hessian in packed_ao.hessian():
+                potential_derivatives[:, ao_direction] += (
+                    torch.einsum(
+                        "si, ip, iq -> spq",
+                        feature_derivative,
+                        ao_hessian,
+                        packed_ao.gradient[feature_direction],
+                    )
+                    / 2
+                )
 
     return potential_derivatives

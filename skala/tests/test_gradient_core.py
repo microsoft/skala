@@ -158,6 +158,8 @@ def test_contract_ao_derivative_block_matches_reference() -> None:
             dtype=torch.float64,
         ),
         Feature.KIN: torch.tensor([[0.0, 67.0], [0.0, 71.0]], dtype=torch.float64),
+        Feature.GRID_COORDS: torch.ones((2, 3), dtype=torch.float64),
+        Feature.GRID_WEIGHTS: torch.ones(2, dtype=torch.float64),
     }
     actual = contract_ao_derivative_block(ao, grid_derivative_block(derivatives, 1, 2))
     expected = torch.tensor(

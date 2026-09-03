@@ -5,7 +5,7 @@ from typing import Any, TypeAlias, cast
 import numpy as np
 import pytest
 import torch
-from skala.features import Feature, FeatureMap
+from skala.features import AOFeatureSpec, Feature, FeatureMap
 from skala.functional.base import ExcFunctionalBase
 from skala.pyscf import ao_evaluation as ao_evaluation_module
 from skala.pyscf import grids as grids_module
@@ -83,7 +83,7 @@ def test_mgga_supported_features_are_linear_in_density_matrix(
     Linearity requires the first JVP to equal direct feature evaluation on the
     tangent and the second JVP to vanish.
     """
-    feature_function = MGGAFeatureFunction(feature_names)
+    feature_function = MGGAFeatureFunction(AOFeatureSpec(feature_names))
     ncomp = (expected_deriv + 1) * (expected_deriv + 2) * (expected_deriv + 3) // 6
     ao = torch.arange(1, ncomp * 2 * 3 + 1, dtype=torch.float64).reshape(ncomp, 2, 3)
     if expected_deriv == 0:
@@ -130,7 +130,7 @@ def test_mgga_analytic_vjp_matches_autograd(
     feature_names: tuple[Feature, ...], spin_channels: int | None
 ) -> None:
     """Match the analytic MGGA VJP to autograd for every feature and spin layout."""
-    feature_function = MGGAFeatureFunction(feature_names)
+    feature_function = MGGAFeatureFunction(AOFeatureSpec(feature_names))
     ncomp = (
         (feature_function.deriv + 1)
         * (feature_function.deriv + 2)
@@ -159,7 +159,7 @@ def test_feature_block_compiled_vjp_matches_eager(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Match compiled blockwise feature evaluation and VJP to eager execution."""
-    feature_function = MGGAFeatureFunction(_MGGA_FEATURES)
+    feature_function = MGGAFeatureFunction(AOFeatureSpec(_MGGA_FEATURES))
     generator = torch.Generator().manual_seed(0)
     block = _AOBlock(
         ao_values=torch.randn((10, 3, 5), dtype=torch.float64, generator=generator),
@@ -207,7 +207,7 @@ def test_feature_block_compiled_vjp_matches_eager(
     ("feature_names", "message"),
     [
         ([], "At least one AO-derived feature must be selected"),
-        ([Feature.GRID_WEIGHTS], "Unsupported MGGA features: grid_weights"),
+        ([Feature.GRID_WEIGHTS], "Unsupported AO features: grid_weights"),
     ],
 )
 def test_mgga_requires_at_least_one_ao_derived_feature(
@@ -215,7 +215,7 @@ def test_mgga_requires_at_least_one_ao_derived_feature(
 ) -> None:
     """Reject MGGA feature functions that contain no AO-derived feature."""
     with pytest.raises(ValueError, match=message):
-        MGGAFeatureFunction(feature_names)
+        MGGAFeatureFunction(AOFeatureSpec(feature_names))
 
 
 def test_patch_ao_screening_restores_previous_decision(carbon: gto.Mole) -> None:
@@ -287,7 +287,7 @@ def test_dense_model_evaluation_uses_model_chunks(
 
 def test_resolve_ao_block_size_modes(carbon: gto.Mole) -> None:
     """Resolve aligned CPU block sizes and reject explicit GPU block sizing."""
-    feature_function = MGGAFeatureFunction([Feature.DENSITY])
+    feature_function = MGGAFeatureFunction(AOFeatureSpec([Feature.DENSITY]))
     backend_block_size = dft.gen_grid.BLKSIZE
 
     # CPU sizes are aligned locally; GPU sizing is delegated unless explicitly invalid.
@@ -678,7 +678,7 @@ def test_feature_block_helper_localizes_derivative_vectors() -> None:
     adjoint calculation must select only this block's grid cotangent. Comparing both
     operations with direct local formulas catches mixing up AO and grid localization.
     """
-    feature_function = MGGAFeatureFunction([Feature.DENSITY])
+    feature_function = MGGAFeatureFunction(AOFeatureSpec([Feature.DENSITY]))
     block = _AOBlock(
         ao_values=torch.tensor([[1.0, 2.0], [3.0, 4.0]], dtype=torch.float64),
         active_ao_indices=torch.tensor([0, 2]),
@@ -719,7 +719,7 @@ def test_blockwise_ao_feature_transforms_follow_linear_operator(
 ) -> None:
     """Check spin-resolved first and second JVPs and the adjoint JVP."""
     grids = _minimal_atom_grid(carbon)
-    feature_function = MGGAFeatureFunction([Feature.DENSITY])
+    feature_function = MGGAFeatureFunction(AOFeatureSpec([Feature.DENSITY]))
     identity = torch.eye(carbon.nao_nr(), dtype=torch.float64)
     dm = torch.stack((identity, 2 * identity))
     tangent = torch.arange(1, dm.numel() + 1, dtype=dm.dtype).reshape(dm.shape)
@@ -809,7 +809,7 @@ def test_cpu_screening_slices_and_scatters_full_derivatives(
 
     monkeypatch.setattr(dft.numint, "NumInt", FakeNumInt)
 
-    feature_function = MGGAFeatureFunction([Feature.DENSITY])
+    feature_function = MGGAFeatureFunction(AOFeatureSpec([Feature.DENSITY]))
     dm = torch.diag(
         torch.arange(1, carbon.nao_nr() + 1, dtype=torch.float64)
     ).requires_grad_()
@@ -881,7 +881,7 @@ def test_cpu_all_active_block_uses_dense_sentinel(
                 )
 
     monkeypatch.setattr(dft.numint, "NumInt", FakeNumInt)
-    feature_function = MGGAFeatureFunction([Feature.DENSITY])
+    feature_function = MGGAFeatureFunction(AOFeatureSpec([Feature.DENSITY]))
 
     blocks = list(_CPUAOBlockLoop(carbon, grids, feature_function, block_size))
 
@@ -915,7 +915,7 @@ def test_cpu_no_active_aos_returns_full_zero_derivatives(
             yield ao, None, grids.weights, grids.coords
 
     monkeypatch.setattr(dft.numint, "NumInt", FakeNumInt)
-    feature_function = MGGAFeatureFunction([Feature.DENSITY])
+    feature_function = MGGAFeatureFunction(AOFeatureSpec([Feature.DENSITY]))
     dm = torch.eye(carbon.nao_nr(), dtype=torch.float64).requires_grad_()
 
     features = evaluate_ao_features_blockwise(

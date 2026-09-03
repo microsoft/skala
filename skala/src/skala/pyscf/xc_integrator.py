@@ -11,7 +11,7 @@ from pyscf.dft import numint as pyscf_numint
 from torch import Tensor
 
 from pyscf import gto
-from skala.features import Feature
+from skala.features import AOFeatureSpec, Feature
 from skala.functional.base import ExcFunctionalBase
 from skala.pyscf import ao_evaluation, feature_math
 from skala.pyscf.backend import Grid, check_gpu_imports_were_successful
@@ -88,7 +88,9 @@ class XCIntegrator:
         """Evaluate the total density on each grid point."""
         self._validate_device(dm)
         _assert_skala_grid(grids, self.device)
-        feature_function = feature_math.MGGAFeatureFunction({Feature.DENSITY})
+        feature_function = feature_math.MGGAFeatureFunction(
+            AOFeatureSpec([Feature.DENSITY])
+        )
         evaluate_raw_features = self._raw_feature_evaluator(
             mol,
             grids,
@@ -127,9 +129,9 @@ class XCIntegrator:
             Feature.GRID_WEIGHTS,
         }
         feature_plan = ModelFeaturePlan(evaluation_feature_spec, model_feature_spec)
-        feature_function = feature_math.MGGAFeatureFunction(
-            evaluation_feature_spec.ao_features
-        )
+        ao_features = evaluation_feature_spec.ao_features
+        assert ao_features is not None
+        feature_function = feature_math.MGGAFeatureFunction(ao_features)
         evaluate_raw_features = self._raw_feature_evaluator(
             mol,
             grids,
@@ -189,9 +191,9 @@ class XCIntegrator:
         dm0 = dm0.requires_grad_()
         evaluation_feature_spec = self.feature_spec | {Feature.ATOMIC_GRID_SIZES}
         feature_plan = ModelFeaturePlan(evaluation_feature_spec, self.feature_spec)
-        feature_function = feature_math.MGGAFeatureFunction(
-            evaluation_feature_spec.ao_features
-        )
+        ao_features = evaluation_feature_spec.ao_features
+        assert ao_features is not None
+        feature_function = feature_math.MGGAFeatureFunction(ao_features)
         evaluate_raw_features = self._raw_feature_evaluator(
             mol,
             grids,

@@ -7,7 +7,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 
-from skala.features import AO_FEATURES, Feature
+from skala.features import AO_FEATURES, AOFeatureSpec, Feature
 
 _ATOMIC_LAYOUT_FEATURES = frozenset(
     {
@@ -23,6 +23,8 @@ class FeatureSpec:
 
     def __init__(self, features: Iterable[Feature]) -> None:
         self._features = frozenset(features)
+        ao_features = self._features & AO_FEATURES
+        self._ao_features = AOFeatureSpec(ao_features) if ao_features else None
 
     def __iter__(self) -> Iterator[Feature]:
         return iter(self._features)
@@ -44,14 +46,14 @@ class FeatureSpec:
         return FeatureSpec(self._features | frozenset(other))
 
     @property
-    def ao_features(self) -> frozenset[Feature]:
+    def ao_features(self) -> AOFeatureSpec | None:
         """Return the requested AO-derived features."""
-        return self._features & AO_FEATURES
+        return self._ao_features
 
     @property
     def requires_ao_evaluation(self) -> bool:
         """Return whether AO-derived features are requested."""
-        return bool(self.ao_features)
+        return self._ao_features is not None
 
     @property
     def requires_atomic_layout(self) -> bool:
