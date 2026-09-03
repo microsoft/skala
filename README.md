@@ -90,7 +90,8 @@ pip install skala-cuda12x
 
 The `skala-cuda13x` package is available for CUDA 13.
 
-For a reproducible source environment, choose one of the locked GPU environments:
+For a reproducible source environment, choose one of the locked GPU compatibility
+environments:
 
 | Environment | CUDA | PyTorch |
 |---|---:|---:|
