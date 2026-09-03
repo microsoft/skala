@@ -333,6 +333,7 @@ def parse_arguments(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--max-memory-mb", type=int, default=2000)
     parser.add_argument("--threads", type=int, default=4)
     parser.add_argument("--runtime-repetitions", type=int, default=3)
+    parser.add_argument("--runtime-warmup-runs", type=int, default=2)
     parser.add_argument("--timeout-minutes", type=float, default=30.0)
     parser.add_argument("--azimuth-step-degrees", type=int, default=30)
     parser.add_argument("--polar-step-degrees", type=int, default=30)
@@ -358,6 +359,8 @@ def config_from_arguments(
         raise ValueError("--threads must be positive")
     if arguments.runtime_repetitions <= 0:
         raise ValueError("--runtime-repetitions must be positive")
+    if arguments.runtime_warmup_runs < 0:
+        raise ValueError("--runtime-warmup-runs must be non-negative")
     if arguments.azimuth_step_degrees <= 0 or 360 % arguments.azimuth_step_degrees:
         raise ValueError("--azimuth-step-degrees must be a positive divisor of 360")
     if arguments.polar_step_degrees <= 0 or 180 % arguments.polar_step_degrees:
@@ -375,6 +378,7 @@ def config_from_arguments(
         max_memory_mb=arguments.max_memory_mb,
         cpu_threads=arguments.threads,
         runtime_repetitions=arguments.runtime_repetitions,
+        runtime_warmup_runs=arguments.runtime_warmup_runs,
         worker_timeout_seconds=round(arguments.timeout_minutes * 60),
         smoke_run=arguments.smoke,
         azimuth_step_degrees=arguments.azimuth_step_degrees,

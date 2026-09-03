@@ -95,6 +95,7 @@ class BenchmarkConfig:
     max_memory_mb: int = 2000
     cpu_threads: int = 4
     runtime_repetitions: int = 3
+    runtime_warmup_runs: int = 2
     worker_timeout_seconds: int = 30 * 60
     smoke_run: bool = False
 
@@ -572,6 +573,8 @@ def run_measurement(payload: dict[str, Any]) -> dict[str, Any]:
     with dense_route_override:
         measurement = payload["measurement"]
         if measurement == "runtime":
+            for _ in range(int(payload["runtime_warmup_runs"])):
+                evaluate()
             case["synchronize"]()
             started = time.perf_counter()
             result = evaluate()
@@ -814,6 +817,7 @@ def worker_payload(
         "forced_dense": mode.endswith("_dense"),
         "mode": mode,
         "measurement": measurement,
+        "runtime_warmup_runs": config.runtime_warmup_runs,
         "molecule": {
             "carbon_count": molecule.carbon_count,
             "formula": molecule.formula,
@@ -1064,6 +1068,7 @@ def parse_arguments(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--max-memory-mb", type=int, default=2000)
     parser.add_argument("--threads", type=int, default=4)
     parser.add_argument("--runtime-repetitions", type=int, default=3)
+    parser.add_argument("--runtime-warmup-runs", type=int, default=2)
     parser.add_argument("--timeout-minutes", type=float, default=30.0)
     parser.add_argument(
         "--smoke",
@@ -1085,6 +1090,8 @@ def config_from_arguments(arguments: argparse.Namespace) -> BenchmarkConfig:
         raise ValueError("--threads must be positive")
     if arguments.runtime_repetitions <= 0:
         raise ValueError("--runtime-repetitions must be positive")
+    if arguments.runtime_warmup_runs < 0:
+        raise ValueError("--runtime-warmup-runs must be non-negative")
     source_root = arguments.source_root.expanduser().resolve()
     if not (source_root / "src" / "skala").is_dir():
         raise FileNotFoundError(f"No src/skala package below {source_root}")
@@ -1098,6 +1105,7 @@ def config_from_arguments(arguments: argparse.Namespace) -> BenchmarkConfig:
         max_memory_mb=arguments.max_memory_mb,
         cpu_threads=arguments.threads,
         runtime_repetitions=arguments.runtime_repetitions,
+        runtime_warmup_runs=arguments.runtime_warmup_runs,
         worker_timeout_seconds=round(arguments.timeout_minutes * 60),
         smoke_run=arguments.smoke,
     )
