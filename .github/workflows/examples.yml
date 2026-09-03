@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths: &gauxc-paths
       - '.github/workflows/examples.yml'
+      - '.github/actions/setup-pixi/**'
       - 'gauxc/**'
       - 'pixi.lock'
       - 'pixi.toml'
@@ -27,13 +28,9 @@ jobs:
       uses: ./.github/actions/cpu-diagnostics
 
     - name: Setup Pixi
-      uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
+      uses: ./.github/actions/setup-pixi
       with:
-        pixi-version: v0.78.0
-        environments: assets
-        activate-environment: true
-        locked: true
-        cache: false
+        environment: assets
 
     - name: Download checkpoint
       run: >-
@@ -86,14 +83,10 @@ jobs:
       uses: ./skala/.github/actions/cpu-diagnostics
 
     - name: Setup Pixi
-      uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
+      uses: ./skala/.github/actions/setup-pixi
       with:
-        pixi-version: v0.78.0
         working-directory: skala
-        environments: ${{ matrix.environment }}
-        activate-environment: true
-        locked: true
-        cache: false
+        environment: ${{ matrix.environment }}
 
     - name: Checkout development GauXC
       if: ${{ matrix.source == 'development' }}

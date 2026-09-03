@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths: &skala-test-paths
       - '.github/workflows/skala-test.yml'
+      - '.github/actions/setup-pixi/**'
       - 'pixi.lock'
       - 'pixi.toml'
       - 'pyproject.toml'
@@ -48,13 +49,9 @@ jobs:
       uses: ./.github/actions/cpu-diagnostics
 
     - name: Setup Pixi
-      uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
+      uses: ./.github/actions/setup-pixi
       with:
-        pixi-version: v0.78.0
-        environments: ${{ matrix.environment }}
-        activate-environment: true
-        locked: true
-        cache: false
+        environment: ${{ matrix.environment }}
 
     - name: Run tests with coverage
       run: >-
@@ -88,14 +85,10 @@ jobs:
       uses: ./.github/actions/cpu-diagnostics
 
     - name: Setup Pixi
-      uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
+      uses: ./.github/actions/setup-pixi
       with:
-        pixi-version: v0.78.0
+        environment: ${{ matrix.environment }}
         pixi-bin-path: ${{ runner.temp }}/bin/pixi
-        environments: ${{ matrix.environment }}
-        activate-environment: true
-        locked: true
-        cache: false
         post-cleanup: true
 
     - name: Verify CUDA is available
@@ -122,13 +115,9 @@ jobs:
       uses: ./.github/actions/cpu-diagnostics
 
     - name: Setup Pixi
-      uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
+      uses: ./.github/actions/setup-pixi
       with:
-        pixi-version: v0.78.0
-        environments: test-py312-pyscf214-torch213
-        activate-environment: true
-        locked: true
-        cache: false
+        environment: test-py312-pyscf214-torch213
 
     - name: Run profiling tests
       run: pytest -v -m profiling skala/tests/

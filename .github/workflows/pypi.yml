@@ -23,13 +23,9 @@ jobs:
       uses: ./.github/actions/cpu-diagnostics
 
     - name: Setup Pixi
-      uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
+      uses: ./.github/actions/setup-pixi
       with:
-        pixi-version: v0.78.0
-        environments: release
-        activate-environment: true
-        locked: true
-        cache: false
+        environment: release
 
     - name: Build a binary wheel and a source tarball
       run: python tools/build_release.py ${{ matrix.package }}
@@ -52,13 +48,9 @@ jobs:
       uses: ./.github/actions/cpu-diagnostics
 
     - name: Setup Pixi
-      uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
+      uses: ./.github/actions/setup-pixi
       with:
-        pixi-version: v0.78.0
-        environments: release
-        activate-environment: true
-        locked: true
-        cache: false
+        environment: release
 
     - name: Build conda artifact
       run: pixi publish --path skala --target-dir dist-conda

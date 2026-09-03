@@ -16,7 +16,7 @@ or contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any addi
 
 ## Development setup
 
-Install Pixi 0.75, then create the default locked development environment from the repository root:
+Install Pixi 0.78, then create the default locked development environment from the repository root:
 
 ```bash
 pixi install --locked -e default

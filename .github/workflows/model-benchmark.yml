@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths: &model-benchmark-paths
       - '.github/workflows/model-benchmark.yml'
+      - '.github/actions/setup-pixi/**'
       - 'conftest.py'
       - 'pixi.lock'
       - 'pixi.toml'
@@ -35,14 +36,10 @@ jobs:
       uses: ./.github/actions/cpu-diagnostics
 
     - name: Setup Pixi
-      uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
+      uses: ./.github/actions/setup-pixi
       with:
-        pixi-version: v0.78.0
+        environment: default
         pixi-bin-path: ${{ runner.temp }}/bin/pixi
-        environments: default
-        activate-environment: true
-        locked: true
-        cache: false
         post-cleanup: true
 
     - name: Run CPU model benchmarks
@@ -63,14 +60,10 @@ jobs:
       uses: ./.github/actions/cpu-diagnostics
 
     - name: Setup Pixi
-      uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
+      uses: ./.github/actions/setup-pixi
       with:
-        pixi-version: v0.78.0
+        environment: gpu-cuda12-torch213
         pixi-bin-path: ${{ runner.temp }}/bin/pixi
-        environments: gpu-cuda12-torch213
-        activate-environment: true
-        locked: true
-        cache: false
         post-cleanup: true
 
     - name: Verify CUDA is available
