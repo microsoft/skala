@@ -293,10 +293,6 @@ NB_MODULE(_skalaxc, module) {
       .def(nb::init<>())
       .def_rw("weight_algorithm",
               &SkalaXC::MolecularWeightsSettings::weight_alg);
-  nb::class_<SkalaXC::IntegratorSettingsEXC_GRAD>(module, "GradientSettings")
-      .def(nb::init<>())
-      .def_rw("include_weight_derivatives",
-              &SkalaXC::IntegratorSettingsEXC_GRAD::include_weight_derivatives);
 
   nb::class_<SkalaXC::TimingValue>(module, "TimingValue")
       .def_ro("last_nanoseconds", &SkalaXC::TimingValue::last_nanoseconds)
@@ -572,22 +568,18 @@ NB_MODULE(_skalaxc, module) {
       .def(
           "eval_exc_grad",
           [](PythonIntegrator& integrator, const InputMatrix& scalar_density,
-             const InputMatrix& spin_density,
-             const SkalaXC::IntegratorSettingsEXC_GRAD* settings) {
+             const InputMatrix& spin_density) {
             Matrix scalar = matrix_view(scalar_density, integrator.nbf);
             Matrix spin = matrix_view(spin_density, integrator.nbf);
-            const SkalaXC::IntegratorSettingsEXC_GRAD default_settings{};
 
             auto result = [&] {
               nb::gil_scoped_release release;
-              return integrator.value.eval_exc_grad(
-                  scalar, spin, settings ? *settings : default_settings);
+              return integrator.value.eval_exc_grad(scalar, spin);
             }();
 
             return move_gradient_to_numpy(std::move(result), integrator.natoms);
           },
           "scalar_density"_a, "spin_density"_a,
-          "settings"_a.none() = nb::none(),
           "Evaluate the UKS XC nuclear gradient. Releases the Python GIL; "
           "do not call concurrently on the same instance.")
       .def("diagnostics",

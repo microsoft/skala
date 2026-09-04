@@ -16,5 +16,4 @@ _skalaxc.XCIntegrator.eval_exc_grad:
         self,
         scalar_density: np.ndarray[tuple[int, int], np.dtype[np.float64]],
         spin_density: np.ndarray[tuple[int, int], np.dtype[np.float64]],
-        settings: GradientSettings = ...,
     ) -> np.ndarray[tuple[int, int], np.dtype[np.float64]]: ...

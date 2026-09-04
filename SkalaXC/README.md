@@ -116,7 +116,10 @@ The public boundary exposes **zero** GauXC / LibTorch symbols or types:
   `std::vector<double>` with `3 * natoms` atom-major `xyz` values. Overloads
   also write potentials into pre-sized `nbf × nbf` matrices and gradients into
   a pre-sized `std::vector<double>` under the same column-major and atom-major
-  contracts. `SkalaSettings` selects the model when the integrator is
+  contracts. Matrix types must expose contiguous `double` storage through
+  `data()` in column-major order; row-major and strided matrix types are not
+  supported. Nuclear gradients always include molecular-weight derivatives.
+  `SkalaSettings` selects the model when the integrator is
   constructed. The integrator loads and owns that TorchScript module for its
   lifetime, so subsequent evaluations neither reload it nor use a process-wide
   model cache.
