@@ -59,14 +59,10 @@ jobs:
           submodules: recursive
 
       - name: Setup Pixi
-        uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
+        uses: ./.github/actions/setup-pixi
         with:
-          pixi-version: v0.78.0
           pixi-bin-path: ${{ runner.temp }}/bin/pixi
-          environments: ${{ matrix.environment }}
-          activate-environment: ${{ matrix.environment }}
-          locked: true
-          cache: false
+          environment: ${{ matrix.environment }}
           post-cleanup: true
 
       - name: Verify compiler toolchain
@@ -129,14 +125,10 @@ jobs:
           submodules: recursive
 
       - name: Setup Pixi
-        uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
+        uses: ./.github/actions/setup-pixi
         with:
-          pixi-version: v0.78.0
           pixi-bin-path: ${{ runner.temp }}/bin/pixi
-          environments: ${{ matrix.environment }}
-          activate-environment: ${{ matrix.environment }}
-          locked: true
-          cache: false
+          environment: ${{ matrix.environment }}
           post-cleanup: true
 
       - name: Verify GPU runtime
@@ -218,14 +210,10 @@ jobs:
           submodules: recursive
 
       - name: Setup Pixi
-        uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
+        uses: ./.github/actions/setup-pixi
         with:
-          pixi-version: v0.78.0
           pixi-bin-path: ${{ runner.temp }}/bin/pixi
-          environments: ${{ matrix.environment }}
-          activate-environment: ${{ matrix.environment }}
-          locked: true
-          cache: false
+          environment: ${{ matrix.environment }}
           post-cleanup: true
 
       - name: Verify GPU and MPI runtime
