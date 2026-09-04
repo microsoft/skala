@@ -1,0 +1,3 @@
+[submodule "SkalaXC/external/GauXC"]
+	path = SkalaXC/external/GauXC
+	url = https://github.com/wavefunction91/GauXC.git
