@@ -1,0 +1,38 @@
+name: SkalaXC Doxygen
+
+on:
+  push:
+    branches: [main]
+    paths: &skalaxc-doxygen-paths
+      - SkalaXC/CMakeLists.txt
+      - SkalaXC/Doxyfile.in
+      - SkalaXC/cmake/skalaxc-doxygen.cmake
+      - SkalaXC/include/**
+      - SkalaXC/src/**
+      - .github/workflows/skalaxc-doxygen.yml
+      - pixi.lock
+      - pixi.toml
+  pull_request:
+    branches: [main]
+    paths: *skalaxc-doxygen-paths
+
+permissions:
+  contents: read
+
+jobs:
+  doxygen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Pixi
+        uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
+        with:
+          pixi-version: v0.78.0
+          environments: skalaxc-tools
+          activate-environment: true
+          locked: true
+          cache: false
+
+      - name: Validate project documentation
+        run: pixi run -e skalaxc-tools skalaxc-doxygen

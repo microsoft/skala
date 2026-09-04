@@ -18,16 +18,12 @@ Learn more about Skala in our [ArXiv paper](https://arxiv.org/abs/2506.14665).
 The published `skala` package contains only the runtime needed to load released checkpoints and
 use Skala through [PySCF](https://pyscf.org/),
 [GPU4PySCF](https://pyscf.org/user/gpu.html), and [ASE](https://ase-lib.org/).
-The trainable model definition, benchmark/report tooling, GauXC utilities, tests, documentation,
-and examples remain in separate repository components and are not included in the wheel or source
-distribution.
+The trainable model definition, benchmark/report tooling, tests, documentation, and examples remain
+in separate repository components and are not included in the wheel or source distribution.
 
 Repository resources include:
     - [Skala in C++ with libtorch](https://github.com/microsoft/skala/tree/main/model/examples/cpp/cpp_integration)
    - [Skala in Fortran with FTorch](https://microsoft.github.io/skala/ftorch)
-   - [Skala in C++ with GauXC](https://microsoft.github.io/skala/gauxc/cpp-library)
-   - [Skala in C with GauXC](https://microsoft.github.io/skala/gauxc/c-library)
-   - [Skala in Fortran with GauXC](https://microsoft.github.io/skala/gauxc/fortran-library)
 
 ## Getting started: PySCF (CPU)
 
