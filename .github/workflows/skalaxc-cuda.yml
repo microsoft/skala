@@ -178,6 +178,7 @@ jobs:
           ctest \
             --test-dir SkalaXC/build-cuda-runtime-${{ matrix.version }} \
             -R '^(skalaxc_c_api|skalaxc_fortran)$' \
+            --no-tests=error \
             --output-on-failure
 
       - name: Test GPU4PySCF-SkalaXC parity
@@ -253,4 +254,5 @@ jobs:
           ctest
           --test-dir SkalaXC/build-cuda-mpi-${{ matrix.version }}
           -R '^skalaxc_unit_mpi\.(cuda_idle_rank|cuda_subcommunicator)$'
+          --no-tests=error
           --output-on-failure
