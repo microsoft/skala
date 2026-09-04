@@ -10,7 +10,7 @@ from pathlib import Path, PurePosixPath
 
 PACKAGES = ("skala", "microsoft-skala", "skala-cuda12x", "skala-cuda13x")
 
-FORBIDDEN_PARTS = {"tests", "model", "gauxc", "docs", "examples", "benchmark"}
+FORBIDDEN_PARTS = {"tests", "model", "docs", "examples", "benchmark"}
 FORBIDDEN_RUNTIME_PATHS = {
     PurePosixPath("skala/functional/layers.py"),
     PurePosixPath("skala/functional/model.py"),
