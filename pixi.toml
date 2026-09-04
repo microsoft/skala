@@ -30,11 +30,8 @@ opt_einsum_fx = "*"
 [feature.model-definition.pypi-dependencies]
 skala-model = { path = "model", editable = true }
 
-[feature.gauxc-python.dependencies]
-h5py = "*"
-
 [feature.component-sources.activation.env]
-PYTHONPATH = "$PIXI_PROJECT_ROOT/gauxc/src"
+PYTHONPATH = "$PIXI_PROJECT_ROOT/model/src:$PIXI_PROJECT_ROOT/benchmark/src"
 
 [feature.model-assets.dependencies]
 huggingface_hub = "*"
@@ -85,10 +82,13 @@ pytorch-gpu = "2.12.*"
 platforms = ["linux-64-cuda12"]
 
 [feature.cuda-12.dependencies]
-cuda-cudart-dev = ">=12,<13"
-cuda-nvrtc = ">=12,<13"
-cuda-version = ">=12,<13"
+# GCC 14 requires CUDA 12.8 or newer. Keep the runtime toolkit in the same
+# compatibility range as the compiler selected by skalaxc-cuda12-build below.
+cuda-cudart-dev = ">=12.8,<13"
+cuda-nvrtc-dev = ">=12.8,<13"
+cuda-version = ">=12.8,<13"
 cutensor = ">=2"
+libcublas-dev = ">=12.8,<13"
 
 [feature.cuda-12.pypi-dependencies]
 gpu4pyscf-cuda12x = "==1.8.1"
@@ -98,9 +98,10 @@ platforms = ["linux-64-cuda13"]
 
 [feature.cuda-13.dependencies]
 cuda-cudart-dev = ">=13,<14"
-cuda-nvrtc = ">=13,<14"
+cuda-nvrtc-dev = ">=13,<14"
 cuda-version = ">=13,<14"
 cutensor = ">=2"
+libcublas-dev = ">=13,<14"
 
 [feature.cuda-13.pypi-dependencies]
 gpu4pyscf-cuda13x = "==1.8.1"
@@ -152,7 +153,7 @@ sphinxcontrib-moderncmakedomain = "*"
 python-build = "*"
 
 [feature.native-toolchain]
-platforms = ["linux-64", "linux-64-cuda12"]
+platforms = ["linux-64", "linux-aarch64", "osx-arm64", "linux-64-cuda12", "linux-64-cuda13"]
 
 [feature.native-toolchain.dependencies]
 c-compiler = "*"
@@ -161,54 +162,141 @@ cxx-compiler = "*"
 ninja = "*"
 nlohmann_json = ">=3.9"
 
+[feature.native-toolchain.activation.env]
+CC = "$CONDA_PREFIX/bin/cc"
+CXX = "$CONDA_PREFIX/bin/c++"
+
 [feature.fortran]
-platforms = ["linux-64"]
+platforms = ["linux-64", "linux-aarch64", "osx-arm64", "linux-64-cuda12", "linux-64-cuda13"]
 
 [feature.fortran.dependencies]
 fortran-compiler = "*"
 
-[feature.hdf5-serial]
-platforms = ["linux-64", "linux-64-cuda12"]
+[feature.fortran.activation.env]
+FC = "$CONDA_PREFIX/bin/gfortran"
 
-[feature.hdf5-serial.dependencies]
-hdf5 = { version = "*", build = "nompi_*" }
+[feature.skalaxc-core.dependencies]
+catch2 = "2.*"
+eigen = ">=5,<6"
+git = "*"
+hdf5 = "*"
+libblas = "*"
+liblapack = "*"
+pkg-config = "*"
 
-[feature.mpi]
-platforms = ["linux-64"]
-
-[feature.mpi.dependencies]
-hdf5 = { version = "*", build = "mpi_openmpi_*" }
+[feature.skalaxc-mpi.dependencies]
 openmpi = "*"
 
-[feature.gauxc-core]
-platforms = ["linux-64", "linux-64-cuda12"]
+[feature.skalaxc-python.dependencies]
+h5py = "*"
+mpi4py = ">=4"
+mypy = ">=1.11"
+nanobind = ">=2.4"
+pip = "*"
+scikit-build-core = ">=0.11"
 
-[feature.gauxc-core.dependencies]
-gau2grid = ">=2.0.6"
-integratorxx = ">=1.0"
-libblas = "*"
+[feature.skalaxc-core.target.osx-arm64.dependencies]
+llvm-openmp = "*"
 
-[feature.gauxc-cpu]
+[feature.skalaxc-clang]
 platforms = ["linux-64"]
 
-[feature.gauxc-cpu.dependencies]
-exchcxx = { version = ">=1.0", build = "cpu_*" }
+[feature.skalaxc-clang.dependencies]
+clang_linux-64 = "22.*"
+clangxx_linux-64 = "22.*"
+clang-tools = "22.*"
+cmake = ">=3.21,<4"
+llvm-openmp = "*"
+ninja = "*"
+nlohmann_json = ">=3.9"
 
-[feature.gauxc-cuda12]
+[feature.skalaxc-clang.activation.env]
+CC = "$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-clang"
+CXX = "$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-clang++"
+
+[feature.skalaxc-cuda12-build]
 platforms = ["linux-64-cuda12"]
 
-[feature.gauxc-cuda12.dependencies]
-cuda-compiler = ">=12,<13"
-cuda-nvrtc-dev = ">=12,<13"
-cuda-version = ">=12,<13"
-exchcxx = { version = ">=1.0", build = "cuda*" }
-libcublas-dev = ">=12,<13"
-libcusparse-dev = ">=12,<13"
-libmagma-devel = ">=2.10,<2.11"
+[feature.skalaxc-cuda12-build.dependencies]
+# PyTorch's CUDA compiler bounds require GCC <15 for CUDA 12.8/12.9.
+# Pin nvcc as well: an unconstrained build dependency can otherwise combine
+# CUDA 13 nvcc/GCC 15 with CUDA 12 headers from the host environment.
+cuda-compiler = ">=12.8,<13"
+gcc_linux-64 = "14.*"
+gfortran_linux-64 = "14.*"
+gxx_linux-64 = "14.*"
+
+[feature.skalaxc-cuda12-build.activation.env]
+CUDACXX = "$CONDA_PREFIX/bin/nvcc"
+
+[feature.skalaxc-cuda13-build]
+platforms = ["linux-64-cuda13"]
+
+[feature.skalaxc-cuda13-build.dependencies]
+# CUDA 13 supports GCC 15; keep this compiler family independent of the CUDA
+# 12 pin and of unconstrained CPU toolchains.
+cuda-compiler = ">=13,<14"
+gcc_linux-64 = "15.*"
+gfortran_linux-64 = "15.*"
+gxx_linux-64 = "15.*"
+
+[feature.skalaxc-cuda13-build.activation.env]
+CUDACXX = "$CONDA_PREFIX/bin/nvcc"
+
+[feature.skalaxc-cuda13-clang-build]
+platforms = ["linux-64-cuda13"]
+
+[feature.skalaxc-cuda13-clang-build.dependencies]
+# Clang 20 is within PyTorch's conservative CUDA 13 bound (Clang <21).
+clang_linux-64 = "20.*"
+clangxx_linux-64 = "20.*"
+cmake = ">=3.21,<4"
+cuda-compiler = ">=13,<14"
+llvm-openmp = "*"
+ninja = "*"
+nlohmann_json = ">=3.9"
+
+[feature.skalaxc-cuda13-clang-build.activation.env]
+CC = "$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-clang"
+CUDACXX = "$CONDA_PREFIX/bin/nvcc"
+CUDAHOSTCXX = "$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-clang++"
+CXX = "$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-clang++"
+
+[feature.skalaxc-tools]
+platforms = ["linux-64"]
+
+[feature.skalaxc-tools.dependencies]
+clang-tools = "22.*"
+cmake = ">=3.21,<4"
+doxygen = ">=1.9"
+
+[feature.skalaxc-package]
+platforms = ["linux-64", "linux-aarch64", "osx-arm64"]
+
+[feature.skalaxc-package.dependencies]
+rattler-build = "0.74.*"
+
+[feature.skalaxc-parity]
+platforms = ["linux-64"]
+
+[feature.skalaxc-core.tasks]
+skalaxc-configure-host = { cmd = "cmake -S SkalaXC -B SkalaXC/build-pixi-host -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$PIXI_PROJECT_ROOT/SkalaXC/install-pixi-host -DSKALAXC_BUILD_FORTRAN=ON -DSKALAXC_BUILD_TESTS=ON -DSKALAXC_BUILD_EXAMPLES=ON -DSKALAXC_DOWNLOAD_MODELS=ON -DSKALAXC_ENABLE_CUDA=OFF -DSKALAXC_ENABLE_MPI=OFF -DSKALAXC_ENABLE_OPENMP=ON -DSKALAXC_ENABLE_SANITIZERS=OFF" }
+skalaxc-build-host = { cmd = "cmake --build SkalaXC/build-pixi-host --parallel 2", depends-on = ["skalaxc-configure-host"] }
+skalaxc-test-host = { cmd = "ctest --test-dir SkalaXC/build-pixi-host --output-on-failure", depends-on = ["skalaxc-build-host"], env = { OMP_NUM_THREADS = "4", SKALAXC_TEST_SEED = "20260729" } }
+skalaxc-test-abi = { cmd = "ctest --test-dir SkalaXC/build-pixi-host -R 'skalaxc_abi\\.(exported_symbols|c_consumer_dependencies)' --output-on-failure", depends-on = ["skalaxc-build-host"], env = { OMP_NUM_THREADS = "4" } }
+skalaxc-install-core = { cmd = "cmake -E rm -rf SkalaXC/install-pixi-core && cmake --install SkalaXC/build-pixi-host --prefix SkalaXC/install-pixi-core --component Core", depends-on = ["skalaxc-build-host"] }
+skalaxc-install-full = { cmd = "cmake -E rm -rf SkalaXC/install-pixi-full && cmake --install SkalaXC/build-pixi-host --prefix SkalaXC/install-pixi-full", depends-on = ["skalaxc-build-host"] }
+skalaxc-test-installed-core = { cmd = "cmake -E rm -rf SkalaXC/build-pixi-consumer-core && cmake -S SkalaXC/tests/installed -B SkalaXC/build-pixi-consumer-core -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=$PIXI_PROJECT_ROOT/SkalaXC/install-pixi-core -DSKALAXC_TEST_FORTRAN=OFF -DSKALAXC_EXPECT_FORTRAN_UNAVAILABLE=ON && cmake --build SkalaXC/build-pixi-consumer-core --parallel 2 && ctest --test-dir SkalaXC/build-pixi-consumer-core --output-on-failure", depends-on = ["skalaxc-install-core"], env = { OMP_NUM_THREADS = "4" } }
+skalaxc-test-installed-full = { cmd = "cmake -E rm -rf SkalaXC/build-pixi-consumer-full && cmake -S SkalaXC/tests/installed -B SkalaXC/build-pixi-consumer-full -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=$PIXI_PROJECT_ROOT/SkalaXC/install-pixi-full -DSKALAXC_TEST_FORTRAN=ON -DSKALAXC_EXPECT_FORTRAN_UNAVAILABLE=OFF && cmake --build SkalaXC/build-pixi-consumer-full --parallel 2 && ctest --test-dir SkalaXC/build-pixi-consumer-full --output-on-failure", depends-on = ["skalaxc-install-full"], env = { OMP_NUM_THREADS = "4" } }
+skalaxc-configure-sanitizer = { cmd = "cmake -S SkalaXC -B SkalaXC/build-pixi-sanitizer -G Ninja -DCMAKE_BUILD_TYPE=Debug -DSKALAXC_BUILD_FORTRAN=OFF -DSKALAXC_BUILD_TESTS=ON -DSKALAXC_BUILD_EXAMPLES=OFF -DSKALAXC_DOWNLOAD_MODELS=ON -DSKALAXC_ENABLE_CUDA=OFF -DSKALAXC_ENABLE_MPI=OFF -DSKALAXC_ENABLE_OPENMP=OFF -DSKALAXC_ENABLE_SANITIZERS=ON" }
+skalaxc-test-sanitizer = { cmd = "cmake --build SkalaXC/build-pixi-sanitizer --target skalaxc_unit_test --parallel 2 && SkalaXC/build-pixi-sanitizer/tests/skalaxc_unit_test '[skala][stress]'", depends-on = ["skalaxc-configure-sanitizer"], env = { OMP_NUM_THREADS = "4", ASAN_OPTIONS = "detect_leaks=1:halt_on_error=1", UBSAN_OPTIONS = "halt_on_error=1:print_stacktrace=1", SKALAXC_MODEL_PATH = "$PIXI_PROJECT_ROOT/SkalaXC/build-pixi-sanitizer/data/skala_models" } }
+skalaxc-configure-clang-tidy = { cmd = "cmake -S SkalaXC -B SkalaXC/build-pixi-clang-tidy -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DSKALAXC_BUILD_FORTRAN=OFF -DSKALAXC_BUILD_TESTS=OFF -DSKALAXC_BUILD_EXAMPLES=ON -DSKALAXC_DOWNLOAD_MODELS=OFF -DSKALAXC_ENABLE_CUDA=OFF -DSKALAXC_ENABLE_MPI=OFF -DSKALAXC_ENABLE_OPENMP=ON -DSKALAXC_ENABLE_SANITIZERS=OFF" }
+skalaxc-clang-tidy = { cmd = "run-clang-tidy -p SkalaXC/build-pixi-clang-tidy -j 2 -config-file SkalaXC/.clang-tidy -header-filter '^.*/SkalaXC/(include|src|tests|examples)/' '^.*/SkalaXC/(src|tests|examples)/.*\\.(cc|cpp|cxx)$'", depends-on = ["skalaxc-configure-clang-tidy"] }
+skalaxc-doxygen = { cmd = "cmake -DSKALAXC_DOXYGEN_SOURCE_DIR=$PIXI_PROJECT_ROOT/SkalaXC -DSKALAXC_DOXYGEN_BINARY_DIR=$PIXI_PROJECT_ROOT/SkalaXC/build-pixi-doxygen -DSKALAXC_DOXYGEN_PROJECT_VERSION=development -P SkalaXC/cmake/skalaxc-doxygen.cmake && doxygen SkalaXC/build-pixi-doxygen/Doxyfile" }
 
 [environments]
-default = { features = ["python-runtime", "model-definition", "gauxc-python", "component-sources", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-213-cpu", "test", "lint", "profiling", "benchmark"], no-default-feature = true, platforms = ["linux-64", "linux-aarch64", "osx-arm64"] }
-lint = { features = ["python-runtime", "model-definition", "gauxc-python", "component-sources", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-213-cpu", "test", "lint", "profiling", "benchmark"], no-default-feature = true, platforms = ["linux-64"] }
+default = { features = ["python-runtime", "model-definition", "component-sources", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-213-cpu", "test", "lint", "profiling", "benchmark"], no-default-feature = true, platforms = ["linux-64", "linux-aarch64", "osx-arm64"] }
+lint = { features = ["python-runtime", "model-definition", "component-sources", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-213-cpu", "test", "lint", "profiling", "benchmark"], no-default-feature = true, platforms = ["linux-64"] }
 test-py311-pyscf214-torch213 = { features = ["python-runtime", "model-assets", "python-311", "pyscf-214", "dispersion", "torch-213-cpu", "test"], no-default-feature = true, platforms = ["linux-64"] }
 test-py312-pyscf214-torch212 = { features = ["python-runtime", "component-sources", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-212-cpu", "test", "profiling", "benchmark"], no-default-feature = true, platforms = ["linux-64", "linux-aarch64", "osx-arm64"] }
 test-py312-pyscf214-torch213 = { features = ["python-runtime", "component-sources", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-213-cpu", "test", "profiling", "benchmark"], no-default-feature = true, platforms = ["linux-64", "linux-aarch64", "osx-arm64"] }
@@ -220,9 +308,12 @@ docs = { features = ["python-runtime", "component-sources", "model-assets", "pyt
 assets = { features = ["python-312", "model-assets"], no-default-feature = true, platforms = ["linux-64"] }
 release = { features = ["python-312", "release"], no-default-feature = true, platforms = ["linux-64"] }
 cpp-integration = { features = ["python-runtime", "model-definition", "component-sources", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-213-cpu", "native-toolchain"], no-default-feature = true, platforms = ["linux-64"] }
-gauxc-openmp = { features = ["python-312", "torch-213-cpu", "native-toolchain", "gauxc-core", "gauxc-cpu", "hdf5-serial"], no-default-feature = true, platforms = ["linux-64"] }
-gauxc-openmp-fortran = { features = ["python-312", "torch-213-cpu", "native-toolchain", "fortran", "gauxc-core", "gauxc-cpu", "hdf5-serial"], no-default-feature = true, platforms = ["linux-64"] }
-gauxc-mpi = { features = ["python-312", "torch-213-cpu", "native-toolchain", "gauxc-core", "gauxc-cpu", "mpi"], no-default-feature = true, platforms = ["linux-64"] }
-gauxc-mpi-fortran = { features = ["python-312", "torch-213-cpu", "native-toolchain", "fortran", "gauxc-core", "gauxc-cpu", "mpi"], no-default-feature = true, platforms = ["linux-64"] }
-gauxc-cuda12 = { features = ["python-312", "torch-213-gpu", "native-toolchain", "gauxc-core", "gauxc-cuda12", "hdf5-serial"], no-default-feature = true, platforms = ["linux-64-cuda12"] }
 ftorch = { features = ["python-312", "model-assets", "torch-213-cpu", "native-toolchain", "fortran"], no-default-feature = true, platforms = ["linux-64"] }
+skalaxc-host = { features = ["python-312", "torch-213-cpu", "native-toolchain", "fortran", "skalaxc-core", "skalaxc-mpi", "skalaxc-python", "test"], no-default-feature = true, platforms = ["linux-64", "linux-aarch64", "osx-arm64"] }
+skalaxc-host-clang = { features = ["python-312", "torch-213-cpu", "fortran", "skalaxc-core", "skalaxc-mpi", "skalaxc-python", "skalaxc-clang", "test"], no-default-feature = true, platforms = ["linux-64"] }
+skalaxc-cuda12 = { features = ["python-runtime", "model-assets", "python-312", "pyscf-214", "torch-213-gpu", "cuda-12", "native-toolchain", "fortran", "skalaxc-core", "skalaxc-mpi", "skalaxc-python", "skalaxc-cuda12-build", "test"], no-default-feature = true, platforms = ["linux-64-cuda12"] }
+skalaxc-cuda13 = { features = ["python-runtime", "model-assets", "python-312", "pyscf-214", "torch-213-gpu", "cuda-13", "native-toolchain", "fortran", "skalaxc-core", "skalaxc-mpi", "skalaxc-python", "skalaxc-cuda13-build", "test"], no-default-feature = true, platforms = ["linux-64-cuda13"] }
+skalaxc-cuda13-clang = { features = ["python-runtime", "model-assets", "python-312", "pyscf-214", "torch-213-gpu", "cuda-13", "fortran", "skalaxc-core", "skalaxc-mpi", "skalaxc-python", "skalaxc-cuda13-clang-build", "test"], no-default-feature = true, platforms = ["linux-64-cuda13"] }
+skalaxc-parity = { features = ["python-runtime", "model-assets", "python-312", "pyscf-214", "torch-213-cpu", "native-toolchain", "skalaxc-core", "skalaxc-python", "skalaxc-parity", "test"], no-default-feature = true, platforms = ["linux-64"] }
+skalaxc-tools = { features = ["python-312", "torch-213-cpu", "skalaxc-core", "skalaxc-tools"], no-default-feature = true, platforms = ["linux-64"] }
+skalaxc-package = { features = ["skalaxc-package"], no-default-feature = true, platforms = ["linux-64", "linux-aarch64", "osx-arm64"] }
