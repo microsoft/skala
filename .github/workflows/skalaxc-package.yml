@@ -44,13 +44,9 @@ jobs:
           submodules: recursive
 
       - name: Setup Pixi
-        uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
+        uses: ./.github/actions/setup-pixi
         with:
-          pixi-version: v0.78.0
-          environments: skalaxc-package
-          activate-environment: true
-          locked: true
-          cache: false
+          environment: skalaxc-package
 
       - name: Render package matrix
         run: >-
@@ -88,13 +84,9 @@ jobs:
           submodules: recursive
 
       - name: Setup Pixi
-        uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
+        uses: ./.github/actions/setup-pixi
         with:
-          pixi-version: v0.78.0
-          environments: skalaxc-package
-          activate-environment: true
-          locked: true
-          cache: false
+          environment: skalaxc-package
 
       - name: Build and test representative CPU packages
         run: >-
@@ -137,14 +129,10 @@ jobs:
           submodules: recursive
 
       - name: Setup Pixi
-        uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
+        uses: ./.github/actions/setup-pixi
         with:
-          pixi-version: v0.78.0
           pixi-bin-path: ${{ runner.temp }}/bin/pixi
-          environments: skalaxc-package
-          activate-environment: true
-          locked: true
-          cache: false
+          environment: skalaxc-package
           post-cleanup: true
 
       - name: Verify GPU runtime

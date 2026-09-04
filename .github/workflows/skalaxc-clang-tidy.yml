@@ -26,13 +26,9 @@ jobs:
           submodules: recursive
 
       - name: Setup Pixi
-        uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
+        uses: ./.github/actions/setup-pixi
         with:
-          pixi-version: v0.78.0
-          environments: skalaxc-host-clang
-          activate-environment: true
-          locked: true
-          cache: false
+          environment: skalaxc-host-clang
 
       - name: Verify compiler toolchain
         uses: ./.github/actions/report-toolchain
