@@ -233,14 +233,6 @@ foreach(_skalaxc_target IN LISTS _skalaxc_owned_targets)
   endif()
 endforeach()
 
-# Catch2 v2 uses __COUNTER__ for test registration, which Clang 22 diagnoses
-# as a C2y extension under -Wpedantic.
-if(TARGET skalaxc_unit_test)
-  target_compile_options(skalaxc_unit_test PRIVATE
-    "$<$<COMPILE_LANG_AND_ID:CXX,Clang>:-Wno-c2y-extensions>"
-  )
-endif()
-
 unset(_skalaxc_target)
 unset(_skalaxc_owned_targets)
 

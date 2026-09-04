@@ -1,4 +1,5 @@
-#include <catch2/catch.hpp>
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 #include <skalaxc/skalaxc.hpp>
 
 #include "test_utils.hpp"
@@ -211,7 +212,7 @@ TEST_CASE("Skala CUDA exact-size batching modes agree",
   CHECK(SkalaXC::test::matrix_error_per_basis(
             std::get<2>(aggressive), std::get<2>(conservative)) <= 1e-10);
   CHECK(aggressive_diagnostics.device_id == 0);
-  CHECK(aggressive_diagnostics.device_memory_fraction == Approx(0.75));
+  CHECK(aggressive_diagnostics.device_memory_fraction == Catch::Approx(0.75));
   CHECK(aggressive_diagnostics.domain_batch_mode ==
         SkalaXC::DomainBatchMode::Aggressive);
   CHECK(aggressive_diagnostics.local_atoms == system.molecule.size());
@@ -326,16 +327,14 @@ TEST_CASE("Skala CUDA supports an MPI rank with no atomic domains",
   MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &world_size);
   if (world_size < 3) {
-    SUCCEED("Requires at least three MPI ranks");
-    return;
+    SKIP("Requires at least three MPI ranks");
   }
 
   MPI_Comm subcomm = MPI_COMM_NULL;
   MPI_Comm_split(MPI_COMM_WORLD, world_rank < 3 ? 0 : MPI_UNDEFINED, world_rank,
                  &subcomm);
   if (subcomm == MPI_COMM_NULL) {
-    SUCCEED("Only the first three ranks participate");
-    return;
+    SKIP("Only the first three ranks participate");
   }
 
   MPI_Comm local_comm = MPI_COMM_NULL;
@@ -384,7 +383,7 @@ TEST_CASE("Skala CUDA supports an MPI rank with no atomic domains",
     CHECK(std::abs(device_gradient[index] - host_gradient[index]) <= 1e-6);
   MPI_Comm_free(&subcomm);
 #else
-  SUCCEED("MPI disabled");
+  SKIP("MPI disabled");
 #endif
 }
 
@@ -396,8 +395,7 @@ TEST_CASE("Skala CUDA uses the runtime MPI subcommunicator",
   MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &world_size);
   if (world_size < 4) {
-    SUCCEED("Requires at least four MPI ranks");
-    return;
+    SKIP("Requires at least four MPI ranks");
   }
 
   const int color = world_rank % 2;
@@ -461,6 +459,6 @@ TEST_CASE("Skala CUDA uses the runtime MPI subcommunicator",
   CHECK(gradient_error <= 1e-6);
   MPI_Comm_free(&subcomm);
 #else
-  SUCCEED("MPI disabled");
+  SKIP("MPI disabled");
 #endif
 }

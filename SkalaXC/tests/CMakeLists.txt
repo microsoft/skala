@@ -32,53 +32,26 @@ if(_skalaxc_missing_model_files)
     "tpss.fun, and skala-1.1.fun.")
 endif()
 
-find_package(Catch2 CONFIG QUIET)
-if(Catch2_FOUND AND Catch2_VERSION VERSION_GREATER_EQUAL 3)
-  message(FATAL_ERROR
-    "Catch2 v${Catch2_VERSION} found, but SkalaXC unit tests require Catch2 v2 "
-    "(catch2/catch.hpp). Please install v2 or let FetchContent provide it.")
-endif()
+find_package(Catch2 3 CONFIG QUIET)
 
 if(NOT Catch2_FOUND)
   FetchContent_Declare(
     catch2
     GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-    GIT_TAG        v2.13.10
+    GIT_TAG        v3.8.1
   )
 
   set(CATCH_BUILD_TESTING OFF CACHE BOOL "Build Catch2 self tests" FORCE)
   set(CATCH_INSTALL_DOCS OFF CACHE BOOL "Install Catch2 docs" FORCE)
-  set(CATCH_INSTALL_HELPERS OFF CACHE BOOL "Install Catch2 helpers" FORCE)
-
-  if(DEFINED CACHE{CMAKE_WARN_DEPRECATED})
-    set(_skalaxc_catch2_warn_deprecated_defined TRUE)
-    get_property(_skalaxc_catch2_warn_deprecated
-      CACHE CMAKE_WARN_DEPRECATED PROPERTY VALUE)
-  else()
-    set(_skalaxc_catch2_warn_deprecated_defined FALSE)
-  endif()
-  set(CMAKE_WARN_DEPRECATED OFF CACHE BOOL
-      "Suppress deprecation warnings while configuring Catch2" FORCE)
 
   FetchContent_MakeAvailable(catch2)
-
-  if(_skalaxc_catch2_warn_deprecated_defined)
-    set(CMAKE_WARN_DEPRECATED "${_skalaxc_catch2_warn_deprecated}"
-        CACHE BOOL "Whether to issue warnings for deprecated functionality" FORCE)
-  else()
-    set(CMAKE_WARN_DEPRECATED ON CACHE BOOL
-        "Whether to issue warnings for deprecated functionality" FORCE)
-    unset(CMAKE_WARN_DEPRECATED CACHE)
-  endif()
-  unset(_skalaxc_catch2_warn_deprecated)
-  unset(_skalaxc_catch2_warn_deprecated_defined)
 endif()
 
 # Make Catch2's `catch_discover_tests` helper available. An installed Catch2
 # exposes the module through its package; a FetchContent build ships it under
-# the source tree's contrib/ directory.
+# the source tree's extras/ directory.
 if(NOT Catch2_FOUND)
-  list(APPEND CMAKE_MODULE_PATH "${catch2_SOURCE_DIR}/contrib")
+  list(APPEND CMAKE_MODULE_PATH "${catch2_SOURCE_DIR}/extras")
 endif()
 include(Catch)
 

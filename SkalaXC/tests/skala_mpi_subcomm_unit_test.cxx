@@ -1,4 +1,4 @@
-#include <catch2/catch.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 #include "model_grid_exchange.hpp"
 #include "mpi_wrapper.hpp"
@@ -20,8 +20,7 @@ TEST_CASE("Eigen MPI collectives use runtime communicator",
   MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &world_size);
   if (world_size < 3) {
-    SUCCEED("Requires at least 3 MPI ranks");
-    return;
+    SKIP("Requires at least 3 MPI ranks");
   }
 
   MPI_Comm subcomm = MPI_COMM_NULL;
@@ -68,7 +67,7 @@ TEST_CASE("Eigen MPI collectives use runtime communicator",
 
   MPI_Comm_free(&subcomm);
 #else
-  SUCCEED("MPI disabled");
+  SKIP("MPI disabled");
 #endif
 }
 
@@ -80,8 +79,7 @@ TEST_CASE("MPI gradient wrapper transports semantic point records",
   MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &world_size);
   if (world_size < 3) {
-    SUCCEED("Requires at least 3 MPI ranks");
-    return;
+    SKIP("Requires at least 3 MPI ranks");
   }
 
   MPI_Comm subcomm = MPI_COMM_NULL;
@@ -148,7 +146,7 @@ TEST_CASE("MPI gradient wrapper transports semantic point records",
 
   MPI_Comm_free(&subcomm);
 #else
-  SUCCEED("MPI disabled");
+  SKIP("MPI disabled");
 #endif
 }
 
@@ -160,8 +158,7 @@ TEST_CASE("Model grid layout caches subcommunicator ordering metadata",
   MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &world_size);
   if (world_size < 3) {
-    SUCCEED("Requires at least 3 MPI ranks");
-    return;
+    SKIP("Requires at least 3 MPI ranks");
   }
 
   MPI_Comm subcomm = MPI_COMM_NULL;
@@ -222,6 +219,6 @@ TEST_CASE("Model grid layout caches subcommunicator ordering metadata",
 
   MPI_Comm_free(&subcomm);
 #else
-  SUCCEED("MPI disabled");
+  SKIP("MPI disabled");
 #endif
 }

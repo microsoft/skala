@@ -3160,7 +3160,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/c-ares-1.34.8-hebe6cf0_2.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/c-compiler-1.11.0-h4d9bdce_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/cairo-1.18.4-h3c89d7e_3.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/catch2-2.13.9-h924138e_0.tar.bz2
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/catch2-3.16.0-h4dbf13b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/cmake-3.31.8-hc85cc9f_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/conda-gcc-specs-14.4.0-h611768e_4.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/contourpy-1.3.3-py312h0a2e395_4.conda
@@ -3454,7 +3454,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/c-ares-1.34.8-hebe6cf0_2.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/c-compiler-2.0.0-ha29393d_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/cairo-1.18.4-h3c89d7e_3.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/catch2-2.13.9-h924138e_0.tar.bz2
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/catch2-3.16.0-h4dbf13b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/cmake-3.31.8-hc85cc9f_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/conda-gcc-specs-15.3.0-h8846f6e_4.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/contourpy-1.3.3-py312h0a2e395_4.conda
@@ -3750,7 +3750,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/c-ares-1.34.8-hebe6cf0_2.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/c-compiler-2.0.0-ha29393d_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/cairo-1.18.4-h3c89d7e_3.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/catch2-2.13.9-h924138e_0.tar.bz2
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/catch2-3.16.0-h4dbf13b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/clang-20-20.1.8-default_hc302687_17.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/clang-20.1.8-default_cfg_h7f4fe12_17.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/clang_impl_linux-64-20.1.8-default_cfg_h027053c_17.conda
@@ -4048,7 +4048,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/bzip2-1.0.8-hda65f42_10.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/c-ares-1.34.8-hebe6cf0_2.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/c-compiler-2.0.0-ha29393d_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/catch2-2.13.9-h924138e_0.tar.bz2
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/catch2-3.16.0-h4dbf13b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/cmake-3.31.8-hc85cc9f_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/conda-gcc-specs-15.3.0-h8846f6e_4.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/coverage-7.16.0-py312h8b7ec3f_0.conda
@@ -4208,7 +4208,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/bzip2-1.0.8-hda65f42_10.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/c-ares-1.34.8-hebe6cf0_2.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/c-compiler-2.0.0-ha29393d_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/catch2-2.13.9-h924138e_0.tar.bz2
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/catch2-3.16.0-h4dbf13b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/cmake-3.31.8-hc85cc9f_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/conda-gcc-specs-15.3.0-h8846f6e_4.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/coverage-7.16.0-py312h8b7ec3f_0.conda
@@ -4368,7 +4368,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/bzip2-1.0.8-hda65f42_10.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/c-ares-1.34.8-hebe6cf0_2.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/c-compiler-2.0.0-ha29393d_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/catch2-2.13.9-h924138e_0.tar.bz2
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/catch2-3.16.0-h4dbf13b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/cmake-3.31.8-hc85cc9f_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/conda-gcc-specs-15.3.0-h8846f6e_4.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/coverage-7.16.0-py312h8b7ec3f_0.conda
@@ -4528,7 +4528,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/bzip2-1.0.8-h4777abc_10.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/c-ares-1.34.8-h29ee22c_2.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/c-compiler-2.0.0-h1f08cd5_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/catch2-2.13.9-hdd96247_0.tar.bz2
+      - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/catch2-3.16.0-h45ce4d5_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/cmake-3.31.8-hc9d863e_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/conda-gcc-specs-15.3.0-hbdd0822_4.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/coverage-7.16.0-py312he7c6268_0.conda
@@ -4735,7 +4735,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/bzip2-1.0.8-h4e30115_10.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/c-ares-1.34.8-h74c22ad_2.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/c-compiler-2.0.0-h39478f8_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/catch2-2.13.9-h3e96240_0.tar.bz2
+      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/catch2-3.16.0-hfbe1efa_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/cctools-1030.6.3-llvm21_1_h8e84c17_6.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/cctools_impl_osx-arm64-1030.6.3-llvm21_1_h2e2604f_6.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/cctools_osx-arm64-1030.6.3-llvm21_1_h8e84c17_6.conda
@@ -4860,7 +4860,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/binutils_linux-64-2.46.1-default_h4852527_102.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/bzip2-1.0.8-hda65f42_10.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/c-ares-1.34.8-hebe6cf0_2.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/catch2-2.13.9-h924138e_0.tar.bz2
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/catch2-3.16.0-h4dbf13b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/clang-22-22.1.8-default_h90b978e_10.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/clang-format-22-22.1.8-default_h0acdd01_10.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/clang-format-22.1.8-default_hf2538bd_10.conda
@@ -5035,7 +5035,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/binutils_linux-64-2.46.1-default_h4852527_102.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/bzip2-1.0.8-hda65f42_10.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/c-ares-1.34.8-hebe6cf0_2.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/catch2-2.13.9-h924138e_0.tar.bz2
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/catch2-3.16.0-h4dbf13b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/clang-22-22.1.8-default_h90b978e_10.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/clang-format-22-22.1.8-default_h0acdd01_10.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/clang-format-22.1.8-default_hf2538bd_10.conda
@@ -5210,7 +5210,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/binutils_linux-64-2.46.1-default_h4852527_102.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/bzip2-1.0.8-hda65f42_10.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/c-ares-1.34.8-hebe6cf0_2.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/catch2-2.13.9-h924138e_0.tar.bz2
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/catch2-3.16.0-h4dbf13b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/clang-22-22.1.8-default_h90b978e_10.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/clang-format-22-22.1.8-default_h0acdd01_10.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/clang-format-22.1.8-default_hf2538bd_10.conda
@@ -5419,7 +5419,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/c-ares-1.34.8-hebe6cf0_2.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/c-compiler-2.0.0-ha29393d_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/cairo-1.18.4-h3c89d7e_3.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/catch2-2.13.9-h924138e_0.tar.bz2
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/catch2-3.16.0-h4dbf13b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/cmake-3.31.8-hc85cc9f_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/conda-gcc-specs-15.3.0-h8846f6e_4.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/contourpy-1.3.3-py312h0a2e395_4.conda
@@ -5639,7 +5639,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/c-ares-1.34.8-hebe6cf0_2.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/c-compiler-2.0.0-ha29393d_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/cairo-1.18.4-h3c89d7e_3.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/catch2-2.13.9-h924138e_0.tar.bz2
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/catch2-3.16.0-h4dbf13b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/cmake-3.31.8-hc85cc9f_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/conda-gcc-specs-15.3.0-h8846f6e_4.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/contourpy-1.3.3-py312h0a2e395_4.conda
@@ -5859,7 +5859,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/c-ares-1.34.8-hebe6cf0_2.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/c-compiler-2.0.0-ha29393d_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/cairo-1.18.4-h3c89d7e_3.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/catch2-2.13.9-h924138e_0.tar.bz2
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/catch2-3.16.0-h4dbf13b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/cmake-3.31.8-hc85cc9f_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/conda-gcc-specs-15.3.0-h8846f6e_4.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/contourpy-1.3.3-py312h0a2e395_4.conda
@@ -6077,7 +6077,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/aws-checksums-0.2.10-h01ee8f8_5.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/bzip2-1.0.8-hda65f42_10.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/c-ares-1.34.8-hebe6cf0_2.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/catch2-2.13.9-h924138e_0.tar.bz2
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/catch2-3.16.0-h4dbf13b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/clang-format-22-22.1.8-default_h0acdd01_10.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/clang-format-22.1.8-default_hf2538bd_10.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/clang-scan-deps-22.1.8-default_h0acdd01_10.conda
@@ -8530,16 +8530,20 @@ packages:
     - cairo >=1.18.4,<2.0a0
   size: 991011
   timestamp: 1788221336073
-- conda: https://conda.anaconda.org/conda-forge/linux-64/catch2-2.13.9-h924138e_0.tar.bz2
-  sha256: b5c186b7471f8b83b6f43da027ce52221c4dc38486fa4c29dcf13c0b983e5363
-  md5: 3bac0f38d2638c639b871ddf8acd76d4
+- conda: https://conda.anaconda.org/conda-forge/linux-64/catch2-3.16.0-h4dbf13b_0.conda
+  sha256: 2912874e38b635b89db9bbecb284f13ae449a6c3925a28a87f78b23e4730d767
+  md5: ff146041192f4d830974030bdec19f86
   depends:
-  - libgcc-ng >=10.3.0
+  - __glibc >=2.17,<3.0.a0
+  - libstdcxx >=15
+  - libgcc >=15
   license: BSL-1.0
   purls: []
-  run_exports: {}
-  size: 187591
-  timestamp: 1649837382544
+  run_exports:
+    weak:
+    - catch2 >=3.16.0,<4.0a0
+  size: 659129
+  timestamp: 1787658434406
 - conda: https://conda.anaconda.org/conda-forge/linux-64/cffi-2.1.1-py312h703531f_3.conda
   sha256: 7c6e8b24d62e0bfa5d14050cd29053778f399feefa7d6887b04575210285a849
   md5: 41f019d067f8c52c6d9283d8afb28889
@@ -15457,15 +15461,18 @@ packages:
     - cairo >=1.18.4,<2.0a0
   size: 977511
   timestamp: 1788221293457
-- conda: https://conda.anaconda.org/conda-forge/linux-aarch64/catch2-2.13.9-hdd96247_0.tar.bz2
-  sha256: 4c738448dd9a4e54f810d705f0c951e49ee39215716d9248f1454fc6430ec8da
-  md5: f481a94d126b8c3541b85992be91a846
+- conda: https://conda.anaconda.org/conda-forge/linux-aarch64/catch2-3.16.0-h45ce4d5_0.conda
+  sha256: 674ee6e038149d00572feddd7dc27d21f84c36966060850184dada23b1c5e21b
+  md5: 9c3d4936cdb5a00b8665f3136387d094
   depends:
-  - libgcc-ng >=10.3.0
+  - libstdcxx >=15
+  - libgcc >=15
   license: BSL-1.0
-  run_exports: {}
-  size: 186142
-  timestamp: 1649837465796
+  run_exports:
+    weak:
+    - catch2 >=3.16.0,<4.0a0
+  size: 651219
+  timestamp: 1787658438323
 - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/cffi-2.1.1-py312h563f9cf_3.conda
   sha256: 4d82c1db47442fa875fc28a9bb558936ce1eaf6ee7dd75342d2b08c673ef1895
   md5: e24f093fe036550d5e9810fcceff3849
@@ -21547,13 +21554,18 @@ packages:
     - cairo >=1.18.4,<2.0a0
   size: 840110
   timestamp: 1788221324814
-- conda: https://conda.anaconda.org/conda-forge/osx-arm64/catch2-2.13.9-h3e96240_0.tar.bz2
-  sha256: 94f8f70ed80bf795d2b12ce0b71b8d149bdf987b92fe7914ac2e29d546e01cba
-  md5: d5196391283cd5c4491e5fb3d2b2930e
+- conda: https://conda.anaconda.org/conda-forge/osx-arm64/catch2-3.16.0-hfbe1efa_0.conda
+  sha256: 7fbbb02deb5e3b2896f7b71fd5f3fc091d2c4e05b6c499ccc137b72487494977
+  md5: df1d7061f2d09aa5afa8b54915a47d66
+  depends:
+  - libcxx >=21
+  - __osx >=11.0
   license: BSL-1.0
-  run_exports: {}
-  size: 186306
-  timestamp: 1649837788039
+  run_exports:
+    weak:
+    - catch2 >=3.16.0,<4.0a0
+  size: 521799
+  timestamp: 1787658440126
 - conda: https://conda.anaconda.org/conda-forge/osx-arm64/cctools-1030.6.3-llvm21_1_h8e84c17_6.conda
   sha256: 5325a4044f0292d83c3c91b3a84f5e2d9a90803e404da0d940102499c7101fe2
   md5: 8d4aa8689ae07aac4e26a3dabbd17288

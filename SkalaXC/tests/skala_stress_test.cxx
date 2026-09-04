@@ -1,4 +1,5 @@
-#include <catch2/catch.hpp>
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 #include <skalaxc/skalaxc.hpp>
 
@@ -65,7 +66,7 @@ TEST_CASE("Repeated host evaluations remain stable and bounded",
   for (int iteration = 0; iteration < 100; ++iteration) {
     const auto result = integrator.eval_exc_vxc(scalar_density, spin_density);
     REQUIRE(std::get<0>(result) ==
-            Approx(std::get<0>(reference)).margin(1e-13));
+            Catch::Approx(std::get<0>(reference)).margin(1e-13));
     REQUIRE((std::get<1>(result) - std::get<1>(reference)).norm() <= 1e-13);
     REQUIRE((std::get<2>(result) - std::get<2>(reference)).norm() <= 1e-13);
   }

@@ -176,7 +176,7 @@ fortran-compiler = "*"
 FC = "$CONDA_PREFIX/bin/gfortran"
 
 [feature.skalaxc-core.dependencies]
-catch2 = "2.*"
+catch2 = "3.*"
 eigen = ">=5,<6"
 git = "*"
 hdf5 = "*"

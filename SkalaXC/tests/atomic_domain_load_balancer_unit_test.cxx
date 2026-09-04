@@ -1,6 +1,6 @@
 #include "atomic_domain_load_balancer.hpp"
 
-#include <catch2/catch.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 #include <gauxc/external/hdf5.hpp>
 #include <gauxc/molgrid/defaults.hpp>
