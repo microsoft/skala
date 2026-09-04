@@ -2,7 +2,9 @@ import pytest
 import torch
 from skala.features import Feature
 from skala.pyscf import ao_evaluation as ao_evaluation_module
+from skala.pyscf import feature_math
 from skala.pyscf import xc_integrator as xc_integrator_module
+from skala.pyscf.backend import Grid
 from skala.pyscf.grids import SkalaGrids
 from skala.pyscf.model_chunking import ModelFeatureChunk
 from skala.pyscf.xc_integrator import XCIntegrator, XCResult
@@ -92,9 +94,11 @@ def test_xc_integrator_returns_tensors_and_xc_only_response(
     def fake_evaluate_raw_features(
         dm: torch.Tensor,
         mol: gto.Mole,
-        grids: object,
-        feature_function: object,
-        **kwargs: object,
+        grids: Grid,
+        feature_function: feature_math.LinearFeature,
+        block_size: int | None = None,
+        max_memory: int = 2000,
+        gpu: bool = False,
     ) -> torch.Tensor:
         return dm.sum().reshape(1)
 

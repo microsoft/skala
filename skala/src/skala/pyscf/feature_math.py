@@ -3,7 +3,7 @@
 """Raw density-feature mathematics and model formatting."""
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
+from collections.abc import Callable, Iterable, Iterator
 from enum import IntEnum
 from typing import ClassVar
 
@@ -11,6 +11,62 @@ import torch
 from torch import nn
 
 from skala.features import AOFeatureSpec, Feature, FeatureMap
+
+
+def _disconnected_features_error(features: Iterable[Feature]) -> RuntimeError:
+    feature_names = ", ".join(sorted(feature.value for feature in features))
+    return RuntimeError(
+        f"XC energy is disconnected from requested features: {feature_names}"
+    )
+
+
+def feature_derivatives(
+    exc_func: Callable[[FeatureMap], torch.Tensor], features: FeatureMap
+) -> FeatureMap:
+    """Differentiate a scalar XC energy with respect to molecular features.
+
+    Ordinary autograd tensors are used instead of ``torch.func.vjp`` functional
+    tensors because traced TorchScript models may require accessible backing
+    storage.
+
+    Args:
+        exc_func: Callable accepting the differentiable features and returning
+            scalar XC energy.
+        features: Molecular features to differentiate, keyed by feature name.
+
+    Returns:
+        XC energy derivatives keyed by feature name.
+
+    Raises:
+        RuntimeError: If the XC energy is disconnected from a requested feature.
+    """
+    if not features:
+        return {}
+
+    differentiable_features = {
+        feature: tensor.detach().requires_grad_(True)
+        for feature, tensor in features.items()
+    }
+    exc = exc_func(differentiable_features)
+    if not exc.requires_grad:
+        raise _disconnected_features_error(differentiable_features)
+
+    gradients = torch.autograd.grad(
+        exc,
+        tuple(differentiable_features.values()),
+        create_graph=False,
+        retain_graph=False,
+        allow_unused=True,
+    )
+    derivatives: FeatureMap = {
+        feature: gradient.detach()
+        for feature, gradient in zip(differentiable_features, gradients, strict=True)
+        if gradient is not None
+    }
+    if len(derivatives) != len(differentiable_features):
+        disconnected_features = differentiable_features.keys() - derivatives.keys()
+        raise _disconnected_features_error(disconnected_features)
+    return derivatives
 
 
 class AODirection(IntEnum):

@@ -8,7 +8,7 @@ atom-local shapes and coordinates.
 """
 
 import logging
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 
 import torch
@@ -218,6 +218,21 @@ class ModelFeaturePlan:
     including runtime bookkeeping. The model specification defines the smaller
     feature set exposed to each functional invocation.
 
+    Examples:
+        Evaluation may include features that are not passed to the model:
+
+        >>> evaluation = FeatureSpec([Feature.DENSITY, Feature.ATOMIC_GRID_SIZES])
+        >>> model = FeatureSpec([Feature.DENSITY])
+        >>> ModelFeaturePlan(evaluation, model).model_feature_spec == model
+        True
+
+        Model features that are unavailable from evaluation are rejected:
+
+        >>> ModelFeaturePlan(model, FeatureSpec([Feature.GRID_WEIGHTS]))
+        Traceback (most recent call last):
+        ...
+        ValueError: Model features missing from evaluation: grid_weights
+
     Attributes:
         evaluation_feature_spec: Complete feature set evaluated for the calculation.
         model_feature_spec: Features exposed to each functional invocation.
@@ -226,17 +241,19 @@ class ModelFeaturePlan:
     evaluation_feature_spec: FeatureSpec
     model_feature_spec: FeatureSpec
 
+    def __post_init__(self) -> None:
+        missing_features = set(self.model_feature_spec) - set(
+            self.evaluation_feature_spec
+        )
+        if missing_features:
+            missing_names = ", ".join(
+                sorted(feature.value for feature in missing_features)
+            )
+            raise ValueError(f"Model features missing from evaluation: {missing_names}")
+
 
 class ModelFeatureChunker:
     """Prepare atom-aligned model inputs from globally evaluated AO features.
-
-    ``atom_major_raw_features`` must use the packed channel layout derived from
-    ``feature_plan.evaluation_feature_spec.ao_features`` and must arrange complete
-    atomic grids contiguously in molecular atom order. The chunker groups
-    equal-sized atomic grids, chooses a memory-limited number of atoms per model
-    invocation, decodes each packed slice, and exposes only
-    ``feature_plan.model_feature_spec`` to the functional. Atomic grids are never
-    split.
 
     Iteration yields detached chunk-local raw tensors requiring gradients so model
     cotangents can be assembled and propagated through the global AO evaluation.
@@ -337,33 +354,6 @@ class ModelFeatureChunker:
             )
 
 
-def feature_derivatives(
-    exc_func: Callable[..., Tensor], feature_tensors: Sequence[Tensor]
-) -> tuple[Tensor, ...]:
-    """Differentiate a scalar XC energy with respect to molecular features."""
-    if not feature_tensors:
-        return ()
-
-    differentiable_features = tuple(
-        tensor.detach().requires_grad_(True) for tensor in feature_tensors
-    )
-    exc = exc_func(*differentiable_features)
-    if not exc.requires_grad:
-        return tuple(torch.zeros_like(feature) for feature in differentiable_features)
-
-    gradients = torch.autograd.grad(
-        exc,
-        differentiable_features,
-        create_graph=False,
-        retain_graph=False,
-        allow_unused=True,
-    )
-    return tuple(
-        torch.zeros_like(feature) if gradient is None else gradient.detach()
-        for feature, gradient in zip(differentiable_features, gradients, strict=True)
-    )
-
-
 def _evaluate_feature_gradients(
     functional: ExcFunctionalBase,
     model_features: FeatureMap,
@@ -376,13 +366,10 @@ def _evaluate_feature_gradients(
     if not inputs:
         return {}
 
-    def evaluate(*input_values: Tensor) -> Tensor:
-        return functional.get_exc(
-            model_features | dict(zip(inputs, input_values, strict=True))
-        )
-
-    gradients = feature_derivatives(evaluate, tuple(inputs.values()))
-    return dict(zip(inputs, gradients, strict=True))
+    return feature_math.feature_derivatives(
+        lambda input_features: functional.get_exc(model_features | input_features),
+        inputs,
+    )
 
 
 def evaluate_chunked_feature_gradients(

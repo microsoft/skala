@@ -9,44 +9,59 @@ from skala.functional.base import ExcFunctionalBase
 from skala.pyscf import model_chunking
 from skala.pyscf.backend import Grid
 from skala.pyscf.evaluation import FeatureSpec
+from skala.pyscf.feature_math import feature_derivatives
 
 from pyscf import gto
+
+
+def test_model_feature_plan_rejects_features_missing_from_evaluation() -> None:
+    with pytest.raises(
+        ValueError, match="Model features missing from evaluation: grid_weights"
+    ):
+        model_chunking.ModelFeaturePlan(
+            evaluation_feature_spec=FeatureSpec([Feature.DENSITY]),
+            model_feature_spec=FeatureSpec([Feature.DENSITY, Feature.GRID_WEIGHTS]),
+        )
 
 
 def test_feature_derivatives() -> None:
     density = torch.tensor([1.0, 2.0], dtype=torch.float64)
     weights = torch.tensor([3.0, 4.0], dtype=torch.float64)
 
-    derivatives = model_chunking.feature_derivatives(
-        lambda rho, grid_weights: (rho.square() * grid_weights).sum(),
-        [density, weights],
+    derivatives = feature_derivatives(
+        lambda features: (
+            features[Feature.DENSITY].square() * features[Feature.GRID_WEIGHTS]
+        ).sum(),
+        {Feature.DENSITY: density, Feature.GRID_WEIGHTS: weights},
     )
 
-    torch.testing.assert_close(derivatives[0], 2 * density * weights)
-    torch.testing.assert_close(derivatives[1], density.square())
-    assert model_chunking.feature_derivatives(lambda: torch.tensor(0.0), []) == ()
+    torch.testing.assert_close(derivatives[Feature.DENSITY], 2 * density * weights)
+    torch.testing.assert_close(derivatives[Feature.GRID_WEIGHTS], density.square())
+    assert feature_derivatives(lambda _: torch.tensor(0.0), {}) == {}
 
 
-def test_feature_derivatives_returns_zero_for_disconnected_feature() -> None:
+def test_feature_derivatives_rejects_disconnected_feature() -> None:
     used = torch.tensor(2.0)
     unused = torch.tensor(3.0)
 
-    derivatives = model_chunking.feature_derivatives(
-        lambda value, _: value.square(), [used, unused]
-    )
+    with pytest.raises(
+        RuntimeError,
+        match="XC energy is disconnected from requested features: grid_weights",
+    ):
+        feature_derivatives(
+            lambda features: features[Feature.DENSITY].square(),
+            {Feature.DENSITY: used, Feature.GRID_WEIGHTS: unused},
+        )
 
-    torch.testing.assert_close(derivatives[0], 2 * used)
-    torch.testing.assert_close(derivatives[1], torch.zeros_like(unused))
 
-
-def test_feature_derivatives_returns_zero_for_constant_energy() -> None:
+def test_feature_derivatives_rejects_constant_energy() -> None:
     feature = torch.tensor(2.0)
 
-    (derivative,) = model_chunking.feature_derivatives(
-        lambda _: torch.tensor(1.0), [feature]
-    )
-
-    torch.testing.assert_close(derivative, torch.zeros_like(feature))
+    with pytest.raises(
+        RuntimeError,
+        match="XC energy is disconnected from requested features: density",
+    ):
+        feature_derivatives(lambda _: torch.tensor(1.0), {Feature.DENSITY: feature})
 
 
 def test_model_feature_chunker_sorts_complete_atomic_grids(
@@ -211,11 +226,15 @@ def test_chunked_feature_gradients_match_unchunked(
 
 
 @pytest.mark.parametrize("supports_spatial_decomposition", [False, True])
-@pytest.mark.parametrize("constant_energy", [False, True])
-def test_feature_gradients_preserve_zero_gradient_contract(
+@pytest.mark.parametrize(
+    ("constant_energy", "disconnected_features"),
+    [(False, "grid_weights"), (True, "density, grid_weights")],
+)
+def test_chunked_feature_gradients_reject_disconnected_features(
     monkeypatch: pytest.MonkeyPatch,
     supports_spatial_decomposition: bool,
     constant_energy: bool,
+    disconnected_features: str,
 ) -> None:
     density = torch.tensor([[2.0, 3.0]], dtype=torch.float64)
     grid_weights = torch.tensor([4.0, 5.0], dtype=torch.float64)
@@ -241,18 +260,16 @@ def test_feature_gradients_preserve_zero_gradient_contract(
         lambda **kwargs: {2: 1},
     )
 
-    actual = model_chunking.evaluate_chunked_feature_gradients(
-        TestFunctional(),
-        dm=torch.eye(1, dtype=torch.float64),
-        model_features=model_features,
-        differentiable_features={Feature.DENSITY, Feature.GRID_WEIGHTS},
-    )
-
-    expected_density = torch.zeros_like(density) if constant_energy else 2 * density
-    torch.testing.assert_close(actual[Feature.DENSITY], expected_density)
-    torch.testing.assert_close(
-        actual[Feature.GRID_WEIGHTS], torch.zeros_like(grid_weights)
-    )
+    with pytest.raises(
+        RuntimeError,
+        match=f"XC energy is disconnected from requested features: {disconnected_features}",
+    ):
+        model_chunking.evaluate_chunked_feature_gradients(
+            TestFunctional(),
+            dm=torch.eye(1, dtype=torch.float64),
+            model_features=model_features,
+            differentiable_features={Feature.DENSITY, Feature.GRID_WEIGHTS},
+        )
 
 
 def test_atom_grid_chunks_pack_equal_sizes_up_to_cap() -> None:

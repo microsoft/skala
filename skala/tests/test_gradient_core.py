@@ -10,9 +10,9 @@ from skala.features import Feature, FeatureMap
 from skala.functional.base import ExcFunctionalBase
 from skala.pyscf import gradient_core
 from skala.pyscf.backend import Grid
+from skala.pyscf.feature_math import feature_derivatives
 from skala.pyscf.gradient_core import (
     contract_ao_derivative_block,
-    feature_derivatives,
     grid_derivative_block,
 )
 

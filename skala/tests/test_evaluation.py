@@ -2,7 +2,7 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 import torch
-from skala.features import AOFeatureSpec, Feature, ao_derivative_order
+from skala.features import AOFeatureSpec, Feature
 from skala.pyscf.evaluation import EvaluationPolicy, FeatureSpec
 from skala.pyscf.feature_math import AODirection, MGGAFeatureFunction, PackedAO
 
@@ -125,15 +125,16 @@ def test_feature_spec_derives_evaluation_needs() -> None:
 @pytest.mark.parametrize(
     ("features", "expected"),
     [
-        ([], 0),
         ([Feature.DENSITY], 0),
         ([Feature.GRAD], 1),
         ([Feature.KIN], 1),
         ([Feature.LAPL], 2),
     ],
 )
-def test_ao_derivative_order(features: list[Feature], expected: int) -> None:
-    assert ao_derivative_order(features) == expected
+def test_ao_feature_spec_derivative_order(
+    features: list[Feature], expected: int
+) -> None:
+    assert AOFeatureSpec(features).nderiv == expected
 
 
 @pytest.mark.parametrize(

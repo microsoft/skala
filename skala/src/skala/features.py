@@ -34,23 +34,6 @@ AO_FEATURES = frozenset(
 )
 
 
-def ao_derivative_order(features: Iterable[Feature]) -> int:
-    """Return the highest AO derivative order required by the features.
-
-    Args:
-        features: Molecular features to inspect.
-
-    Returns:
-        Required AO derivative order, or zero when no AO feature is present.
-    """
-    ao_features = AO_FEATURES & set(features)
-    if Feature.LAPL in ao_features:
-        return 2
-    if ao_features & {Feature.GRAD, Feature.KIN}:
-        return 1
-    return 0
-
-
 class AOFeatureSpec:
     """Normalized non-empty set of AO-derived features."""
 
@@ -97,7 +80,11 @@ class AOFeatureSpec:
     @property
     def nderiv(self) -> int:
         """Return the required AO derivative order."""
-        return ao_derivative_order(self._features)
+        if Feature.LAPL in self._features:
+            return 2
+        if self._features & {Feature.GRAD, Feature.KIN}:
+            return 1
+        return 0
 
     @property
     def nfeats(self) -> int:

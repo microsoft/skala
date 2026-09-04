@@ -2,7 +2,7 @@
 
 """Backend-independent PyTorch operations for PySCF nuclear gradients."""
 
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 from types import EllipsisType
 from typing import TypeAlias
 
@@ -10,7 +10,7 @@ import torch
 from torch import Tensor
 
 from pyscf import gto
-from skala.features import AO_FEATURES, Feature, FeatureMap, ao_derivative_order
+from skala.features import Feature, FeatureMap
 from skala.functional.base import ExcFunctionalBase
 from skala.pyscf.backend import Grid
 from skala.pyscf.evaluation import FeatureSpec
@@ -34,63 +34,6 @@ SUPPORTED_NUCLEAR_GRADIENT_FEATURES = frozenset(
 
 
 _FeatureSlice: TypeAlias = tuple[slice] | tuple[EllipsisType, slice]
-
-
-def _disconnected_features_error(features: Iterable[Feature]) -> RuntimeError:
-    feature_names = ", ".join(sorted(feature.value for feature in features))
-    return RuntimeError(
-        f"XC energy is disconnected from requested features: {feature_names}"
-    )
-
-
-def feature_derivatives(
-    exc_func: Callable[[FeatureMap], torch.Tensor], features: FeatureMap
-) -> FeatureMap:
-    """Differentiate a scalar XC energy with respect to molecular features.
-
-    Ordinary autograd tensors are used instead of ``torch.func.vjp`` functional
-    tensors because traced TorchScript models may require accessible backing
-    storage.
-
-    Args:
-        exc_func: Callable accepting the differentiable features and returning
-            scalar XC energy.
-        features: Molecular features to differentiate, keyed by feature name.
-
-    Returns:
-        XC energy derivatives keyed by feature name.
-
-    Raises:
-        RuntimeError: If the XC energy is disconnected from a requested feature.
-
-    """
-    if not features:
-        return {}
-
-    differentiable_features = {
-        feature: tensor.detach().requires_grad_(True)
-        for feature, tensor in features.items()
-    }
-    exc = exc_func(differentiable_features)
-    if not exc.requires_grad:
-        raise _disconnected_features_error(differentiable_features)
-
-    gradients = torch.autograd.grad(
-        exc,
-        tuple(differentiable_features.values()),
-        create_graph=False,
-        retain_graph=False,
-        allow_unused=True,
-    )
-    derivatives: FeatureMap = {
-        feature: gradient.detach()
-        for feature, gradient in zip(differentiable_features, gradients, strict=True)
-        if gradient is not None
-    }
-    if len(derivatives) != len(differentiable_features):
-        disconnected_features = differentiable_features.keys() - derivatives.keys()
-        raise _disconnected_features_error(disconnected_features)
-    return derivatives
 
 
 def grid_derivative_block(
@@ -162,8 +105,9 @@ def evaluate_nuclear_feature_derivatives(
             f"Not supported features for nuclear gradient: {unsupported}"
         )
 
-    ao_features = differentiable_features & AO_FEATURES
-    ao_deriv = ao_derivative_order(ao_features) + int(bool(ao_features))
+    ao_feature_spec = FeatureSpec(differentiable_features).ao_features
+    # Nuclear gradients need one order beyond feature evaluation; non-AO paths need none.
+    ao_deriv = 0 if ao_feature_spec is None else ao_feature_spec.nderiv + 1
     differentiable_features.discard(Feature.ATOMIC_GRID_WEIGHTS)
     model_features = evaluate_model_features(
         mol,
