@@ -214,8 +214,3 @@ def test_gradient_is_atom_major_and_tracks_diagnostics() -> None:
         diagnostics.timing(skalaxc.TimingMetric.TOTAL_EXC_GRADIENT).status
         == skalaxc.TimingStatus.COMPLETE
     )
-
-    settings = skalaxc.GradientSettings()
-    settings.include_weight_derivatives = False
-    with pytest.raises(skalaxc.SkalaXCError, match="weight_derivatives"):
-        integrator.eval_exc_grad(scalar_density, spin_density, settings)

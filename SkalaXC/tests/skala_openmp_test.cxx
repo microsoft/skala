@@ -11,6 +11,7 @@
 #include <cmath>
 #include <string>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 #ifdef SKALAXC_HAS_OPENMP
@@ -38,17 +39,18 @@ class OpenMPSettingsGuard {
   int max_threads_;
 };
 
-}  // namespace
-#endif
+using Matrix = Eigen::MatrixXd;
 
-TEST_CASE("OpenMP thread counts preserve host EXC, VXC, and gradients",
-          "[skala][openmp]") {
-#ifdef SKALAXC_HAS_OPENMP
-  using Matrix = Eigen::MatrixXd;
-  const std::string fixture =
-      std::string(SKALAXC_GAUXC_REF_DATA_PATH) + "/h2o2_def2-tzvp.hdf5";
-  const auto system = SkalaXC::test::load_molecular_system(fixture);
-  const auto density = SkalaXC::test::load_uks_density(fixture, "/DENSITY", "");
+struct HostEvaluation {
+  std::tuple<double, Matrix, Matrix> exc_vxc;
+  std::vector<double> gradient;
+  SkalaXC::DiagnosticsSnapshot diagnostics;
+};
+
+HostEvaluation evaluate(const SkalaXC::test::MolecularSystem& system,
+                        const SkalaXC::test::UksDensity& density,
+                        int thread_count) {
+  omp_set_num_threads(thread_count);
   auto grid = SkalaXC::test::make_molgrid(
       system.molecule, SkalaXC::AtomicGridSizeDefault::FineGrid);
   SkalaXC::RuntimeEnvironment runtime{SKALAXC_MPI_CODE(MPI_COMM_WORLD)};
@@ -65,34 +67,45 @@ TEST_CASE("OpenMP thread counts preserve host EXC, VXC, and gradients",
   auto integrator = integrator_factory.get_instance(
       SkalaXC::functional_type("TPSS"), load_balancer);
 
+  auto exc_vxc = integrator.eval_exc_vxc(density.scalar, density.spin);
+  auto gradient = integrator.eval_exc_grad(density.scalar, density.spin);
+  return {std::move(exc_vxc), std::move(gradient), integrator.diagnostics()};
+}
+
+}  // namespace
+#endif
+
+TEST_CASE("OpenMP thread counts preserve host EXC, VXC, and gradients",
+          "[skala][openmp]") {
+#ifdef SKALAXC_HAS_OPENMP
   OpenMPSettingsGuard restore_openmp_settings;
-  omp_set_num_threads(1);
-  const auto single_thread =
-      integrator.eval_exc_vxc(density.scalar, density.spin);
-  const auto single_thread_gradient =
-      integrator.eval_exc_grad(density.scalar, density.spin);
-  omp_set_num_threads(2);
-  const auto two_threads =
-      integrator.eval_exc_vxc(density.scalar, density.spin);
-  const auto two_thread_gradient =
-      integrator.eval_exc_grad(density.scalar, density.spin);
+  const std::string fixture =
+      std::string(SKALAXC_GAUXC_REF_DATA_PATH) + "/h2o2_def2-tzvp.hdf5";
+  const auto system = SkalaXC::test::load_molecular_system(fixture);
+  const auto density = SkalaXC::test::load_uks_density(fixture, "/DENSITY", "");
+  const auto single_thread = evaluate(system, density, 1);
+  const auto two_threads = evaluate(system, density, 2);
+
+  REQUIRE(single_thread.diagnostics.openmp_threads == 1);
+  REQUIRE(two_threads.diagnostics.openmp_threads == 2);
 
   const double exc_error =
-      std::abs(std::get<0>(single_thread) - std::get<0>(two_threads)) /
-      std::max(1.0, std::abs(std::get<0>(single_thread)));
+      std::abs(std::get<0>(single_thread.exc_vxc) -
+               std::get<0>(two_threads.exc_vxc)) /
+      std::max(1.0, std::abs(std::get<0>(single_thread.exc_vxc)));
   const double scalar_error = SkalaXC::test::matrix_error_per_basis(
-      std::get<1>(single_thread), std::get<1>(two_threads));
+      std::get<1>(single_thread.exc_vxc), std::get<1>(two_threads.exc_vxc));
   const double spin_error = SkalaXC::test::matrix_error_per_basis(
-      std::get<2>(single_thread), std::get<2>(two_threads));
-  REQUIRE(single_thread_gradient.size() == two_thread_gradient.size());
+      std::get<2>(single_thread.exc_vxc), std::get<2>(two_threads.exc_vxc));
+  REQUIRE(single_thread.gradient.size() == two_threads.gradient.size());
   double gradient_error = 0.0;
-  for (std::size_t i = 0; i < single_thread_gradient.size(); ++i) {
+  for (std::size_t i = 0; i < single_thread.gradient.size(); ++i) {
     const double difference =
-        single_thread_gradient[i] - two_thread_gradient[i];
+        single_thread.gradient[i] - two_threads.gradient[i];
     gradient_error += difference * difference;
   }
   gradient_error = std::sqrt(gradient_error) /
-                   static_cast<double>(single_thread_gradient.size());
+                   static_cast<double>(single_thread.gradient.size());
   CHECK(exc_error <= 1e-12);
   CHECK(scalar_error <= 1e-12);
   CHECK(spin_error <= 1e-12);

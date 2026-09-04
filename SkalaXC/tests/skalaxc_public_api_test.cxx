@@ -299,18 +299,6 @@ bool gradient_api_works(const std::string& fixture) {
     translation[i % 3] += gradient[i];
   }
 
-  // SkalaXC supports only weight-derivative-inclusive gradients; requesting
-  // otherwise must be rejected.
-  bool rejects_no_weight_derivatives = false;
-  SkalaXC::IntegratorSettingsEXC_GRAD no_weight_derivatives;
-  no_weight_derivatives.include_weight_derivatives = false;
-  try {
-    (void)built.integrator.eval_exc_grad(density.scalar, density.spin,
-                                         no_weight_derivatives);
-  } catch (const SkalaXC::Exception&) {
-    rejects_no_weight_derivatives = true;
-  }
-
   const auto diagnostics = built.integrator.diagnostics();
   const bool diagnostics_valid =
       diagnostics.exc_gradient_calls == 2 &&
@@ -319,9 +307,9 @@ bool gradient_api_works(const std::string& fixture) {
       diagnostics.timing(SkalaXC::TimingMetric::GradientAssembly).status ==
           SkalaXC::TimingStatus::Complete;
 
-  return diagnostics_valid && rejects_no_weight_derivatives &&
-         std::sqrt(squared_norm) > 1e-3 && std::abs(translation[0]) < 1e-10 &&
-         std::abs(translation[1]) < 1e-10 && std::abs(translation[2]) < 1e-10;
+  return diagnostics_valid && std::sqrt(squared_norm) > 1e-3 &&
+         std::abs(translation[0]) < 1e-10 && std::abs(translation[1]) < 1e-10 &&
+         std::abs(translation[2]) < 1e-10;
 }
 
 bool diagnostics_api_works(const std::string& fixture) {

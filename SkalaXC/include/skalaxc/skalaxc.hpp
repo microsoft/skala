@@ -460,21 +460,6 @@ struct DiagnosticsSnapshot {
   }
 };
 
-/** @brief Base XC integrator settings (mirrors GauXC::IntegratorSettingsXC). */
-struct IntegratorSettingsXC {
-  virtual ~IntegratorSettingsXC() = default;
-};
-
-/**
- * @brief XC-gradient settings (mirrors GauXC::IntegratorSettingsEXC_GRAD).
- *
- * SkalaXC supports only @c include_weight_derivatives == true (the GauXC
- * default); requesting @c false throws from XCIntegrator::eval_exc_grad.
- */
-struct IntegratorSettingsEXC_GRAD : public IntegratorSettingsXC {
-  bool include_weight_derivatives = true;  ///< Include molecular-weight terms.
-};
-
 /**
  * @brief Skala ML functional selector.
  *
@@ -751,6 +736,10 @@ class SKALAXC_EXPORT MolecularWeightsFactory {
  * to/from the non-template evaluation core (detail::IntegratorCore). Only the
  * host UKS methods SkalaXC supports are exposed.
  *
+ * @pre MatrixType stores contiguous @c double values in column-major order and
+ * exposes @c rows(), @c cols(), and @c data(). Row-major and strided matrix
+ * types are unsupported.
+ *
  * @warning An integrator instance is not safe for concurrent calls, moves, or
  * destruction. Serialize access to a shared instance or use one integrator per
  * calling thread. Distinct instances may execute concurrently.
@@ -796,17 +785,14 @@ class XCIntegrator {
    * @brief Evaluate the UKS ML XC energy and potential (scalar, z).
    * @param Ps Scalar density matrix in column-major storage.
    * @param Pz Spin-density matrix in column-major storage.
-   * @param settings XC evaluation settings.
    * @return XC energy, scalar potential matrix, and spin potential matrix.
    */
-  exc_vxc_type_uks eval_exc_vxc(
-      const MatrixType& Ps, const MatrixType& Pz,
-      const IntegratorSettingsXC& settings = IntegratorSettingsXC{}) {
+  exc_vxc_type_uks eval_exc_vxc(const MatrixType& Ps, const MatrixType& Pz) {
     require_core();
     const std::int64_t n = core_->nbf();
     MatrixType VXCs(n, n);
     MatrixType VXCz(n, n);
-    const value_type EXC = eval_exc_vxc(Ps, Pz, VXCs, VXCz, settings);
+    const value_type EXC = eval_exc_vxc(Ps, Pz, VXCs, VXCz);
     return std::make_tuple(EXC, std::move(VXCs), std::move(VXCz));
   }
 
@@ -816,16 +802,12 @@ class XCIntegrator {
    * @param Pz Spin-density matrix in column-major storage.
    * @param VXCs Pre-sized `nbf` by `nbf` scalar potential output.
    * @param VXCz Pre-sized `nbf` by `nbf` spin potential output.
-   * @param settings XC evaluation settings.
    * @return XC energy.
    * @throws Exception If the integrator is uninitialized or a matrix extent is
    * invalid. Extents are validated before either output is modified.
    */
-  value_type eval_exc_vxc(
-      const MatrixType& Ps, const MatrixType& Pz, MatrixType& VXCs,
-      MatrixType& VXCz,
-      const IntegratorSettingsXC& settings = IntegratorSettingsXC{}) {
-    (void)settings;
+  value_type eval_exc_vxc(const MatrixType& Ps, const MatrixType& Pz,
+                          MatrixType& VXCs, MatrixType& VXCz) {
     require_core();
     const std::int64_t n = core_->nbf();
     check_square(Ps, n, "density");
@@ -839,15 +821,13 @@ class XCIntegrator {
    * @brief Evaluate the UKS ML XC nuclear gradient (atom-major xyz).
    * @param Ps Scalar density matrix in column-major storage.
    * @param Pz Spin-density matrix in column-major storage.
-   * @param settings XC-gradient evaluation settings.
-   * @return XC nuclear gradient with exactly three values per atom.
+   * @return XC nuclear gradient with exactly three values per atom, including
+   * molecular-weight derivatives.
    */
-  exc_grad_type eval_exc_grad(
-      const MatrixType& Ps, const MatrixType& Pz,
-      const IntegratorSettingsXC& settings = IntegratorSettingsXC{}) {
+  exc_grad_type eval_exc_grad(const MatrixType& Ps, const MatrixType& Pz) {
     require_core();
     exc_grad_type gradient(static_cast<std::size_t>(3 * core_->natoms()));
-    eval_exc_grad(Ps, Pz, gradient, settings);
+    eval_exc_grad(Ps, Pz, gradient);
     return gradient;
   }
 
@@ -856,23 +836,13 @@ class XCIntegrator {
    * @param Ps Scalar density matrix in column-major storage.
    * @param Pz Spin-density matrix in column-major storage.
    * @param gradient Pre-sized `3 * natoms` atom-major xyz output.
-   * @param settings XC-gradient evaluation settings.
    * @throws Exception If the integrator is uninitialized, an input matrix
-   * extent is invalid, the gradient extent is invalid, or unsupported settings
-   * are requested. Inputs and output extent are validated before the output is
-   * modified.
+   * extent is invalid, or the gradient extent is invalid. Inputs and output
+   * extent are validated before the output is modified.
    */
-  void eval_exc_grad(
-      const MatrixType& Ps, const MatrixType& Pz, exc_grad_type& gradient,
-      const IntegratorSettingsXC& settings = IntegratorSettingsXC{}) {
+  void eval_exc_grad(const MatrixType& Ps, const MatrixType& Pz,
+                     exc_grad_type& gradient) {
     require_core();
-    if (const auto* g =
-            dynamic_cast<const IntegratorSettingsEXC_GRAD*>(&settings)) {
-      if (!g->include_weight_derivatives)
-        throw Exception(
-            "SkalaXC eval_exc_grad supports include_weight_derivatives=true "
-            "only");
-    }
     const std::int64_t n = core_->nbf();
     check_square(Ps, n, "density");
     check_square(Pz, n, "density");
