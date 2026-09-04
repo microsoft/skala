@@ -117,6 +117,7 @@ jobs:
         run: >-
           ctest
           --test-dir SkalaXC/build-ci-${{ matrix.name }}
+          --no-tests=error
           --output-on-failure
 
       - name: Install
@@ -135,7 +136,8 @@ jobs:
       - name: Test installed consumers
         run: |
           cmake --build SkalaXC/build-installed-consumers-${{ matrix.name }}
-          ctest --test-dir SkalaXC/build-installed-consumers-${{ matrix.name }} --output-on-failure
+          ctest --test-dir SkalaXC/build-installed-consumers-${{ matrix.name }} \
+            --no-tests=error --output-on-failure
 
   sanitizer:
     name: gcc-asan-ubsan
@@ -169,19 +171,18 @@ jobs:
           -DSKALAXC_ENABLE_SANITIZERS=ON
 
       - name: Build sanitizer tests
-        run: >-
-          cmake --build SkalaXC/build-ci-sanitizer
-          --target skalaxc_unit_test skalaxc_c_api_test
+        run: cmake --build SkalaXC/build-ci-sanitizer
 
-      - name: Test repeated evaluation and C boundary
+      - name: Test with sanitizers
         env:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
           SKALAXC_MODEL_PATH: ${{ github.workspace }}/SkalaXC/build-ci-sanitizer/data/skala_models
-        run: |
-          SkalaXC/build-ci-sanitizer/tests/skalaxc_unit_test '[skala][stress]'
-          ctest --test-dir SkalaXC/build-ci-sanitizer \
-            -R '^skalaxc_c_api$' --output-on-failure
+        run: >-
+          ctest
+          --test-dir SkalaXC/build-ci-sanitizer
+          --no-tests=error
+          --output-on-failure
 
   clang-release:
     name: clang-22-release
@@ -230,4 +231,5 @@ jobs:
         run: >-
           ctest
           --test-dir SkalaXC/build-ci-clang-release
+          --no-tests=error
           --output-on-failure
