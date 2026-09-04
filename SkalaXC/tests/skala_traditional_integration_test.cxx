@@ -364,7 +364,7 @@ TEST_CASE("SkalaXC baselines reproduce GauXC traditional functionals",
   const std::string basis_path =
       std::string(SKALAXC_TEST_BASIS_PATH) + "/cc-pvdz.g94";
 
-  // Six small (3-4 atom) molecules; every element appears in cc-pVDZ.
+  // Seven small (2-4 atom) molecules; every element appears in cc-pVDZ.
   const std::vector<MoleculeCase> molecules = {
       {"h2o",
        {{8, 0.0000, 0.0000, 0.1173},
@@ -393,6 +393,7 @@ TEST_CASE("SkalaXC baselines reproduce GauXC traditional functionals",
         {8, 0.0000, 0.0000, 0.6742},
         {1, 0.0000, 0.9337, -1.1109},
         {1, 0.0000, -0.9337, -1.1109}}},
+      {"hcl", {{1, 0.0000, 0.0000, 0.0000}, {17, 0.0000, 0.0000, 1.2746}}},
   };
 
   const std::vector<FunctionalCase> functionals = {
