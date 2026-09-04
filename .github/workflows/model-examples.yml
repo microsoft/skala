@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths: &model-example-paths
       - '.github/workflows/model-examples.yml'
+      - '.github/actions/setup-pixi/**'
       - 'model/examples/**'
       - 'model/src/**'
       - 'pixi.lock'
@@ -29,13 +30,9 @@ jobs:
       uses: ./.github/actions/cpu-diagnostics
 
     - name: Setup Pixi
-      uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
+      uses: ./.github/actions/setup-pixi
       with:
-        pixi-version: v0.75.0
-        environments: assets
-        activate-environment: true
-        locked: true
-        cache: false
+        environment: assets
 
     - name: Download checkpoint
       run: >-
@@ -56,13 +53,9 @@ jobs:
       uses: ./.github/actions/cpu-diagnostics
 
     - name: Setup Pixi
-      uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
+      uses: ./.github/actions/setup-pixi
       with:
-        pixi-version: v0.75.0
-        environments: default
-        activate-environment: true
-        locked: true
-        cache: false
+        environment: default
 
     - name: Generate features
       run: >-
@@ -88,13 +81,9 @@ jobs:
       uses: ./.github/actions/cpu-diagnostics
 
     - name: Setup Pixi
-      uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
+      uses: ./.github/actions/setup-pixi
       with:
-        pixi-version: v0.75.0
-        environments: cpp-integration
-        activate-environment: true
-        locked: true
-        cache: false
+        environment: cpp-integration
 
     - name: Configure and build project
       run: |
@@ -131,13 +120,9 @@ jobs:
       uses: ./.github/actions/cpu-diagnostics
 
     - name: Setup Pixi
-      uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
+      uses: ./.github/actions/setup-pixi
       with:
-        pixi-version: v0.75.0
-        environments: ftorch
-        activate-environment: true
-        locked: true
-        cache: false
+        environment: ftorch
 
     - name: Configure, build, and install project
       run: |

@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths: &docs-paths
       - '.github/workflows/docs.yml'
+      - '.github/actions/setup-pixi/**'
       - 'benchmark/pyproject.toml'
       - 'pixi.lock'
       - 'pixi.toml'
@@ -38,13 +39,9 @@ jobs:
         uses: ./.github/actions/cpu-diagnostics
 
       - name: Setup Pixi
-        uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
+        uses: ./.github/actions/setup-pixi
         with:
-          pixi-version: v0.75.0
-          environments: docs
-          activate-environment: true
-          locked: true
-          cache: false
+          environment: docs
 
       - name: Build documentation
         run: |

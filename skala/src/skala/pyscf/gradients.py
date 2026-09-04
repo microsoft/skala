@@ -17,6 +17,11 @@ from pyscf import dft, gto
 from skala.dispersion import DFTD3Dispersion
 from skala.features import Feature, FeatureMap
 from skala.functional.base import ExcFunctionalBase
+from skala.pyscf.gradient_core import (
+    contract_ao_derivative_block,
+    feature_derivatives,
+    grid_derivative_block,
+)
 
 LOG = logging.getLogger(__name__)
 
@@ -86,25 +91,17 @@ def veff_and_expl_nuc_grad(
     nuc_grad_feats.discard(Feature.ATOMIC_GRID_WEIGHTS)
 
     # Get required derivatives
-    nuc_feat_names = list(nuc_grad_feats)  # ensure specific order
-    nuc_feat_tensors = [mol_feats[feat] for feat in nuc_feat_names]
+    nuc_feats = {feat: mol_feats[feat] for feat in nuc_grad_feats}
     other_feats = {
         feat: mol_feats[feat] for feat in mol_feats if feat not in nuc_grad_feats
     }
 
-    def exc_feat_func(*nuc_feat_tensors: torch.Tensor) -> torch.Tensor:
-        exc_mol_feats = (
-            dict(zip(nuc_feat_names, nuc_feat_tensors, strict=True)) | other_feats
-        )
-        return functional.get_exc(exc_mol_feats)
+    def exc_feat_func(differentiable_features: FeatureMap) -> torch.Tensor:
+        return functional.get_exc(differentiable_features | other_feats)
 
-    dExc_func = torch.func.vjp(exc_feat_func, *nuc_feat_tensors)[1]
-    dExc_tuple = dExc_func(torch.tensor(1.0, dtype=rdm1.dtype))
-    dExc: FeatureMap = {}
-    for i in range(len(dExc_tuple)):
-        dExc[nuc_feat_names[i]] = dExc_tuple[i].detach()
+    dExc = feature_derivatives(exc_feat_func, nuc_feats)
 
-    LOG.debug("torch.func.vjp done")
+    LOG.debug("autograd gradients for nuclear features done")
 
     nao = rdm1.shape[-1]
     veff = torch.zeros((2, 3, nao, nao), dtype=rdm1.dtype)
@@ -121,94 +118,17 @@ def veff_and_expl_nuc_grad(
         if ao_deriv == 0:
             ao = ao[None, ...]
         atm_end = atm_start + weight.shape[0]
+        dExc_atm = grid_derivative_block(dExc, atm_start, atm_end)
 
         # Calculate the contribution to veff for this atomic grid
-        veff_atm = torch.zeros((2, 3, nao, nao), dtype=rdm1.dtype)
+        veff_atm = contract_ao_derivative_block(ao, dExc_atm)
 
-        if Feature.DENSITY in nuc_grad_feats:
-            veff_atm += torch.einsum(
-                "si, xip, iq -> sxpq",
-                dExc[Feature.DENSITY][:, atm_start:atm_end],
-                ao[1:4],
-                ao[0],
-            )
-
-        if Feature.GRAD in nuc_grad_feats:
-            Exc_dgrad_atm = dExc[Feature.GRAD][:, :, atm_start:atm_end]
-
-            veff_atm += torch.einsum(
-                "syi, xip, yiq -> sxpq", Exc_dgrad_atm, ao[1:4], ao[1:4]
-            )
-            # XX, XY, XZ = 4, 5, 6
-            veff_atm[:, 0] += torch.einsum(
-                "si, ip, iq -> spq", Exc_dgrad_atm[:, 0], ao[4], ao[0]
-            )
-            veff_atm[:, 0] += torch.einsum(
-                "si, ip, iq -> spq", Exc_dgrad_atm[:, 1], ao[5], ao[0]
-            )
-            veff_atm[:, 0] += torch.einsum(
-                "si, ip, iq -> spq", Exc_dgrad_atm[:, 2], ao[6], ao[0]
-            )
-            # YX, YY, YZ = 5, 7, 8
-            veff_atm[:, 1] += torch.einsum(
-                "si, ip, iq -> spq", Exc_dgrad_atm[:, 0], ao[5], ao[0]
-            )
-            veff_atm[:, 1] += torch.einsum(
-                "si, ip, iq -> spq", Exc_dgrad_atm[:, 1], ao[7], ao[0]
-            )
-            veff_atm[:, 1] += torch.einsum(
-                "si, ip, iq -> spq", Exc_dgrad_atm[:, 2], ao[8], ao[0]
-            )
-            # ZX, ZY, ZZ = 6, 8, 9
-            veff_atm[:, 2] += torch.einsum(
-                "si, ip, iq -> spq", Exc_dgrad_atm[:, 0], ao[6], ao[0]
-            )
-            veff_atm[:, 2] += torch.einsum(
-                "si, ip, iq -> spq", Exc_dgrad_atm[:, 1], ao[8], ao[0]
-            )
-            veff_atm[:, 2] += torch.einsum(
-                "si, ip, iq -> spq", Exc_dgrad_atm[:, 2], ao[9], ao[0]
-            )
-
-        if Feature.KIN in nuc_grad_feats:
-            Exc_dkin_atm = dExc[Feature.KIN][:, atm_start:atm_end]
-            # XX, XY, XZ = 4, 5, 6
-            veff_atm[:, 0] += (
-                torch.einsum("si, ip, iq -> spq", Exc_dkin_atm, ao[4], ao[1]) / 2
-            )
-            veff_atm[:, 0] += (
-                torch.einsum("si, ip, iq -> spq", Exc_dkin_atm, ao[5], ao[2]) / 2
-            )
-            veff_atm[:, 0] += (
-                torch.einsum("si, ip, iq -> spq", Exc_dkin_atm, ao[6], ao[3]) / 2
-            )
-            # YX, YY, YZ = 5, 7, 8
-            veff_atm[:, 1] += (
-                torch.einsum("si, ip, iq -> spq", Exc_dkin_atm, ao[5], ao[1]) / 2
-            )
-            veff_atm[:, 1] += (
-                torch.einsum("si, ip, iq -> spq", Exc_dkin_atm, ao[7], ao[2]) / 2
-            )
-            veff_atm[:, 1] += (
-                torch.einsum("si, ip, iq -> spq", Exc_dkin_atm, ao[8], ao[3]) / 2
-            )
-            # ZX, ZY, ZZ = 6, 8, 9
-            veff_atm[:, 2] += (
-                torch.einsum("si, ip, iq -> spq", Exc_dkin_atm, ao[6], ao[1]) / 2
-            )
-            veff_atm[:, 2] += (
-                torch.einsum("si, ip, iq -> spq", Exc_dkin_atm, ao[8], ao[2]) / 2
-            )
-            veff_atm[:, 2] += (
-                torch.einsum("si, ip, iq -> spq", Exc_dkin_atm, ao[9], ao[3]) / 2
-            )
-
-        if Feature.GRID_COORDS in nuc_grad_feats:
+        if Feature.GRID_COORDS in dExc_atm:
             # also add the explicit grid coordinate dependence
-            nuc_grad[atm_id] += dExc[Feature.GRID_COORDS][atm_start:atm_end].sum(dim=0)
+            nuc_grad[atm_id] += dExc_atm[Feature.GRID_COORDS].sum(dim=0)
 
-        if Feature.GRID_WEIGHTS in nuc_grad_feats:
-            Exc_dgw = dExc[Feature.GRID_WEIGHTS][atm_start:atm_end]
+        if Feature.GRID_WEIGHTS in dExc_atm:
+            Exc_dgw = dExc_atm[Feature.GRID_WEIGHTS]
             nuc_grad += torch.from_numpy(weight1) @ Exc_dgw
             # add the grid coordinate dependence via the density-like quantities to the nuclear gradient
             # we get those from the veff block. This tends to largely cancel with the grid_weights derivative,

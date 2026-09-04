@@ -1,0 +1,34 @@
+name: Setup Pixi
+description: Install Pixi and activate a locked project environment.
+
+inputs:
+  environment:
+    description: Pixi environment to install and activate.
+    required: true
+  working-directory:
+    description: Directory containing the Pixi project.
+    required: false
+    default: ''
+  pixi-bin-path:
+    description: Optional path at which to install the Pixi binary.
+    required: false
+    default: ''
+  post-cleanup:
+    description: Whether to remove Pixi and its environment after the job.
+    required: false
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Pixi
+      uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
+      with:
+        pixi-version: v0.78.0
+        working-directory: ${{ inputs.working-directory }}
+        pixi-bin-path: ${{ inputs.pixi-bin-path }}
+        environments: ${{ inputs.environment }}
+        activate-environment: true
+        locked: true
+        cache: false
+        post-cleanup: ${{ inputs.post-cleanup }}
