@@ -1,0 +1,245 @@
+name: SkalaXC CI
+
+on:
+  push:
+    branches: [ main ]
+    paths: &skalaxc-ci-paths
+      - .gitmodules
+      - SkalaXC/**
+      - .github/actions/report-toolchain/action.yml
+      - .github/workflows/skalaxc-ci.yml
+      - pixi.lock
+      - pixi.toml
+  pull_request:
+    branches: [ main ]
+    paths: *skalaxc-ci-paths
+
+permissions:
+  contents: read
+
+env:
+  OMP_NUM_THREADS: "4"
+
+jobs:
+  build-and-test:
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: serial-release
+            runner: ubuntu-latest
+            mpi: OFF
+            openmp: ON
+            hdf5: ON
+            build_type: Release
+          - name: serial-release-linux-aarch64
+            runner: ubuntu-24.04-arm
+            mpi: OFF
+            openmp: ON
+            hdf5: ON
+            build_type: Release
+          - name: serial-release-macos-arm64
+            runner: macos-14
+            mpi: OFF
+            openmp: ON
+            hdf5: ON
+            build_type: Release
+          - name: serial-debug
+            runner: ubuntu-latest
+            mpi: OFF
+            openmp: ON
+            hdf5: ON
+            build_type: Debug
+          - name: mpi-release
+            runner: microsoft-skala-cpu-pool
+            mpi: ON
+            openmp: ON
+            hdf5: ON
+            build_type: Release
+          - name: mpi-debug
+            runner: microsoft-skala-cpu-pool
+            mpi: ON
+            openmp: ON
+            hdf5: ON
+            build_type: Debug
+          - name: serial-release-no-openmp
+            runner: ubuntu-latest
+            mpi: OFF
+            openmp: OFF
+            hdf5: ON
+            build_type: Release
+          - name: serial-release-no-hdf5
+            runner: ubuntu-latest
+            mpi: OFF
+            openmp: ON
+            hdf5: OFF
+            build_type: Release
+
+    name: ${{ matrix.name }}
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: Setup Pixi
+        uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
+        with:
+          pixi-version: v0.78.0
+          environments: skalaxc-host
+          activate-environment: true
+          locked: true
+          cache: false
+
+      - name: Verify compiler toolchain
+        uses: ./.github/actions/report-toolchain
+
+      - name: Configure
+        run: >-
+          cmake
+          -S SkalaXC
+          -B SkalaXC/build-ci-${{ matrix.name }}
+          -G Ninja
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/SkalaXC/install-ci-${{ matrix.name }}
+          -DSKALAXC_BUILD_FORTRAN=ON
+          -DSKALAXC_BUILD_TESTS=ON
+          -DSKALAXC_BUILD_EXAMPLES=ON
+          -DSKALAXC_ENABLE_HDF5=${{ matrix.hdf5 }}
+          -DSKALAXC_ENABLE_MPI=${{ matrix.mpi }}
+          -DSKALAXC_ENABLE_OPENMP=${{ matrix.openmp }}
+
+      - name: Build
+        run: >-
+          cmake
+          --build SkalaXC/build-ci-${{ matrix.name }}
+
+      - name: Test
+        env:
+          SKALAXC_TEST_SEED: "20260729"
+        run: >-
+          ctest
+          --test-dir SkalaXC/build-ci-${{ matrix.name }}
+          --output-on-failure
+
+      - name: Install
+        run: cmake --install SkalaXC/build-ci-${{ matrix.name }}
+
+      - name: Configure installed consumers
+        run: >-
+          cmake
+          -S SkalaXC/tests/installed
+          -B SkalaXC/build-installed-consumers-${{ matrix.name }}
+          -G Ninja
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          -DCMAKE_PREFIX_PATH=${{ github.workspace }}/SkalaXC/install-ci-${{ matrix.name }}
+          -DSKALAXC_TEST_FORTRAN=ON
+
+      - name: Test installed consumers
+        run: |
+          cmake --build SkalaXC/build-installed-consumers-${{ matrix.name }}
+          ctest --test-dir SkalaXC/build-installed-consumers-${{ matrix.name }} --output-on-failure
+
+  sanitizer:
+    name: gcc-asan-ubsan
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: Setup Pixi
+        uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
+        with:
+          pixi-version: v0.78.0
+          environments: skalaxc-host
+          activate-environment: true
+          locked: true
+          cache: false
+
+      - name: Verify compiler toolchain
+        uses: ./.github/actions/report-toolchain
+
+      - name: Configure
+        run: >-
+          cmake
+          -S SkalaXC
+          -B SkalaXC/build-ci-sanitizer
+          -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DSKALAXC_BUILD_FORTRAN=OFF
+          -DSKALAXC_BUILD_TESTS=ON
+          -DSKALAXC_BUILD_EXAMPLES=OFF
+          -DSKALAXC_ENABLE_MPI=OFF
+          -DSKALAXC_ENABLE_OPENMP=OFF
+          -DSKALAXC_ENABLE_SANITIZERS=ON
+
+      - name: Build sanitizer tests
+        run: >-
+          cmake --build SkalaXC/build-ci-sanitizer
+          --target skalaxc_unit_test skalaxc_c_api_test
+
+      - name: Test repeated evaluation and C boundary
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+          SKALAXC_MODEL_PATH: ${{ github.workspace }}/SkalaXC/build-ci-sanitizer/data/skala_models
+        run: |
+          SkalaXC/build-ci-sanitizer/tests/skalaxc_unit_test '[skala][stress]'
+          ctest --test-dir SkalaXC/build-ci-sanitizer \
+            -R '^skalaxc_c_api$' --output-on-failure
+
+  clang-release:
+    name: clang-22-release
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: Setup Pixi
+        uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
+        with:
+          pixi-version: v0.78.0
+          environments: skalaxc-host-clang
+          activate-environment: true
+          locked: true
+          cache: false
+
+      - name: Verify compiler toolchain
+        uses: ./.github/actions/report-toolchain
+        with:
+          c-compiler: x86_64-conda-linux-gnu-clang
+          cxx-compiler: x86_64-conda-linux-gnu-clang++
+          fortran-compiler: x86_64-conda-linux-gnu-gfortran
+
+      - name: Configure
+        run: >-
+          cmake
+          -S SkalaXC
+          -B SkalaXC/build-ci-clang-release
+          -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_C_COMPILER=x86_64-conda-linux-gnu-clang
+          -DCMAKE_CXX_COMPILER=x86_64-conda-linux-gnu-clang++
+          -DCMAKE_Fortran_COMPILER=x86_64-conda-linux-gnu-gfortran
+          "-DBLAS_LIBRARIES=$CONDA_PREFIX/lib/libblas.so"
+          -DSKALAXC_BUILD_FORTRAN=ON
+          -DSKALAXC_BUILD_TESTS=ON
+          -DSKALAXC_BUILD_EXAMPLES=ON
+          -DSKALAXC_ENABLE_MPI=OFF
+          -DSKALAXC_ENABLE_OPENMP=ON
+
+      - name: Build
+        run: cmake --build SkalaXC/build-ci-clang-release
+
+      - name: Test
+        env:
+          SKALAXC_TEST_SEED: "20260729"
+        run: >-
+          ctest
+          --test-dir SkalaXC/build-ci-clang-release
+          --output-on-failure

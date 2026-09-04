@@ -30,10 +30,9 @@ OMP_NUM_THREADS=4 pixi run -e default pytest -v --doctest-modules \
 	--cov=skala --cov-report=xml --cov-report=term-missing --cov-report=html \
 	--durations=50 --durations-min=1.0 skala/src/skala/ skala/tests/
 OMP_NUM_THREADS=4 pixi run -e default pytest -v model/tests/test_model.py \
-	model/tests/test_utils.py gauxc/tests/ benchmark/tests/
+	model/tests/test_utils.py benchmark/tests/
 pixi run -e default pre-commit run --all-files
 pixi run -e docs sphinx-build -b html website website/_build/html
-pixi run -e docs sphinx-build -b html gauxc/docs website/_build/html/gauxc
 touch website/_build/html/.nojekyll
 ```
 
@@ -42,6 +41,20 @@ Set `OMP_NUM_THREADS=4` when running tests locally to match CI.
 Named compatibility environments cover Python 3.11 through 3.13, PySCF 2.14,
 PyTorch 2.12 and 2.13, GPU4PySCF 1.8.1, and CUDA 12 and 13. Keep `pixi.lock`
 synchronized with changes to `pixi.toml` or any component `pyproject.toml`.
+
+SkalaXC development uses the same root workspace. Its host environment is
+locked for Linux x86-64, Linux ARM64, and macOS ARM64:
+
+```bash
+pixi install --locked -e skalaxc-host
+OMP_NUM_THREADS=4 pixi run -e skalaxc-host skalaxc-test-host
+pixi run -e skalaxc-host-clang skalaxc-clang-tidy
+pixi run -e skalaxc-tools skalaxc-doxygen
+```
+
+CUDA 12 and 13 use the custom platforms `linux-64-cuda12` and
+`linux-64-cuda13`; pass the matching platform with `-p` to both `pixi install`
+and `pixi run`.
 
 
 ## Model development

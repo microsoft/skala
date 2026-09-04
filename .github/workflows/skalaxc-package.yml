@@ -1,0 +1,169 @@
+name: SkalaXC packages
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: &skalaxc-package-paths
+      - SkalaXC/CMakeLists.txt
+      - SkalaXC/cmake/**
+      - SkalaXC/include/**
+      - SkalaXC/python/**
+      - SkalaXC/recipe/**
+      - SkalaXC/src/**
+      - SkalaXC/pixi.toml
+      - .github/workflows/skalaxc-package.yml
+      - pixi.lock
+      - pixi.toml
+  pull_request:
+    branches: [main]
+    paths: *skalaxc-package-paths
+
+permissions:
+  contents: read
+
+env:
+  CPU_COUNT: "2"
+  OMP_NUM_THREADS: "4"
+
+jobs:
+  render:
+    name: Render ${{ matrix.target-platform }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target-platform:
+          - linux-64
+          - linux-aarch64
+          - osx-arm64
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: Setup Pixi
+        uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
+        with:
+          pixi-version: v0.78.0
+          environments: skalaxc-package
+          activate-environment: true
+          locked: true
+          cache: false
+
+      - name: Render package matrix
+        run: >-
+          rattler-build build
+          --recipe SkalaXC/recipe/recipe.yaml
+          --target-platform ${{ matrix.target-platform }}
+          --render-only
+          --log-style plain
+          > render-${{ matrix.target-platform }}.json
+
+      - name: Store rendered matrix
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: skalaxc-render-${{ matrix.target-platform }}
+          path: render-${{ matrix.target-platform }}.json
+          if-no-files-found: error
+
+  cpu-package:
+    name: CPU package (${{ matrix.target-platform }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target-platform: linux-64
+          - runner: ubuntu-24.04-arm
+            target-platform: linux-aarch64
+          - runner: macos-14
+            target-platform: osx-arm64
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: Setup Pixi
+        uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
+        with:
+          pixi-version: v0.78.0
+          environments: skalaxc-package
+          activate-environment: true
+          locked: true
+          cache: false
+
+      - name: Build and test representative CPU packages
+        run: >-
+          rattler-build build
+          --recipe SkalaXC/recipe/recipe.yaml
+          --target-platform ${{ matrix.target-platform }}
+          --variant mpi=nompi
+          --variant cuda=cpu
+          --variant python=3.12
+          --output-dir SkalaXC/output-packages
+          --log-style plain
+
+      - name: Store CPU packages
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: skalaxc-${{ matrix.target-platform }}-cpu
+          path: SkalaXC/output-packages/${{ matrix.target-platform }}/*.conda
+          if-no-files-found: error
+
+  cuda-package:
+    name: ${{ matrix.name }} package
+    runs-on: ${{ matrix.runner }}
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: CUDA 12
+            variant: cuda12
+            runner: microsoft-skala-small-gpu-pool
+          - name: CUDA 13
+            variant: cuda13
+            runner: microsoft-skala-gpu-pool
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: Setup Pixi
+        uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
+        with:
+          pixi-version: v0.78.0
+          pixi-bin-path: ${{ runner.temp }}/bin/pixi
+          environments: skalaxc-package
+          activate-environment: true
+          locked: true
+          cache: false
+          post-cleanup: true
+
+      - name: Verify GPU runtime
+        run: nvidia-smi
+
+      - name: Build and test representative ${{ matrix.name }} packages
+        run: >-
+          rattler-build build
+          --recipe SkalaXC/recipe/recipe.yaml
+          --target-platform linux-64
+          --variant mpi=nompi
+          --variant cuda=${{ matrix.variant }}
+          --variant python=3.12
+          --output-dir SkalaXC/output-packages
+          --log-style plain
+
+      - name: Store ${{ matrix.name }} packages
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: skalaxc-linux-64-${{ matrix.variant }}
+          path: SkalaXC/output-packages/linux-64/*.conda
+          if-no-files-found: error

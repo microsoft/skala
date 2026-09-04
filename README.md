@@ -19,27 +19,16 @@ This repository contains five components:
 
 1. [`skala/`](skala) is the only published Python package. It contains the runtime needed to load released checkpoints and use Skala through [PySCF](https://pyscf.org/), [GPU4PySCF](https://pyscf.org/user/gpu.html), and [ASE](https://ase-lib.org/).
 2. [`model/`](model) contains the trainable model definition, its tests, and compiled-model examples. This development code is not included in the `skala` wheel or source distribution.
-3. [`gauxc/`](gauxc) contains the GauXC exporter, native integration examples, tests, and source documentation.
+3. [`SkalaXC/`](SkalaXC) contains the standalone C++17 library and its C and Fortran bindings.
 4. [`benchmark/`](benchmark) contains the benchmark runner, reference data, report tooling, and tests.
 5. [`website/`](website) contains the main Sphinx site.
 
 Compiled-code examples include:
     - [Skala in C++ with libtorch](model/examples/cpp/cpp_integration)
    - [Skala in Fortran with FTorch](https://microsoft.github.io/skala/ftorch)
-   - [Skala in C++ with GauXC](https://microsoft.github.io/skala/gauxc/cpp-library)
-   - [Skala in C with GauXC](https://microsoft.github.io/skala/gauxc/c-library)
-   - [Skala in Fortran with GauXC](https://microsoft.github.io/skala/gauxc/fortran-library)
 
-Development-only imports use separate namespaces: `skala_model`, `skala_gauxc`, and
-`skala_benchmark`. They are intentionally not compatibility aliases inside the released `skala`
-package.
-
-### GauXC development version for PyTorch-based functionals like Skala
-
-[GauXC](https://github.com/wavefunction91/GauXC) is a CPU/GPU C++ library for XC functionals.
-A development version with an add-on supporting PyTorch-based functionals like Skala is available in the [`skala` branch of the GauXC repository](https://github.com/wavefunction91/GauXC/tree/skala).
-GauXC can be used to integrate Skala into other third-party DFT codes.
-For detailed documentation on using GauXC visit the [Skala integration guide](https://microsoft.github.io/skala/gauxc).
+Development-only imports use separate namespaces: `skala_model` and `skala_benchmark`. They are
+intentionally not compatibility aliases inside the released `skala` package.
 
 ## Getting started: PySCF (CPU)
 
@@ -62,6 +51,14 @@ committed Pixi lockfile. It uses Python 3.12, PySCF 2.14, and CPU-only PyTorch 2
 ```bash
 pixi install --locked -e default
 pixi run -e default python your_script.py
+```
+
+The standalone C++/C/Fortran library under `SkalaXC` uses dedicated
+environments from the same lockfile. Run its default host build and tests with:
+
+```bash
+pixi install --locked -e skalaxc-host
+OMP_NUM_THREADS=4 pixi run -e skalaxc-host skalaxc-test-host
 ```
 
 Run an SCF calculation with Skala for a hydrogen molecule:
