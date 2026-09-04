@@ -2,19 +2,13 @@
 
 """Feature requirements and numerical-evaluation policy."""
 
-from collections.abc import Iterable
+from __future__ import annotations
+
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 
-from skala.features import Feature
+from skala.features import AO_FEATURES, AOFeatureSpec, Feature
 
-_AO_FEATURES = frozenset(
-    {
-        Feature.DENSITY,
-        Feature.GRAD,
-        Feature.KIN,
-        Feature.LAPL,
-    }
-)
 _ATOMIC_LAYOUT_FEATURES = frozenset(
     {
         Feature.ATOMIC_GRID_WEIGHTS,
@@ -25,76 +19,51 @@ _ATOMIC_LAYOUT_FEATURES = frozenset(
 
 
 class FeatureSpec:
-    """Normalized feature names and their evaluation requirements."""
+    """Normalized set of named molecular features."""
 
-    def __init__(self, names: Iterable[Feature]) -> None:
-        self._names = frozenset(names)
+    def __init__(self, features: Iterable[Feature]) -> None:
+        self._features = frozenset(features)
+        ao_features = self._features & AO_FEATURES
+        self._ao_features = AOFeatureSpec(ao_features) if ao_features else None
 
-    @property
-    def names(self) -> frozenset[Feature]:
-        """Return the normalized feature names."""
-        return self._names
+    def __iter__(self) -> Iterator[Feature]:
+        return iter(self._features)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, FeatureSpec):
             return NotImplemented
-        return self.names == other.names
+        return self._features == other._features
 
     def __hash__(self) -> int:
-        return hash(self.names)
+        return hash(self._features)
 
     def requests(self, feature: Feature) -> bool:
         """Return whether a feature is requested."""
-        return feature in self.names
+        return feature in self._features
+
+    def __or__(self, other: FeatureSpec | Iterable[Feature]) -> FeatureSpec:
+        """Return a feature specification containing both operands."""
+        return FeatureSpec(self._features | frozenset(other))
 
     @property
-    def with_density(self) -> bool:
-        """Return whether density is requested."""
-        return self.requests(Feature.DENSITY)
-
-    @property
-    def with_grad(self) -> bool:
-        """Return whether the density gradient is requested."""
-        return self.requests(Feature.GRAD)
-
-    @property
-    def with_kin(self) -> bool:
-        """Return whether kinetic-energy density is requested."""
-        return self.requests(Feature.KIN)
-
-    @property
-    def with_lapl(self) -> bool:
-        """Return whether the density Laplacian is requested."""
-        return self.requests(Feature.LAPL)
+    def ao_features(self) -> AOFeatureSpec | None:
+        """Return the requested AO-derived features."""
+        return self._ao_features
 
     @property
     def requires_ao_evaluation(self) -> bool:
         """Return whether AO-derived features are requested."""
-        return bool(self.names & _AO_FEATURES)
-
-    @property
-    def mgga_feature_count(self) -> int:
-        """Return the scalar width of the requested meta-GGA features."""
-        return self.with_density + 3 * self.with_grad + self.with_kin + self.with_lapl
-
-    @property
-    def ao_derivative_order(self) -> int:
-        """Return the highest AO derivative order needed by the features."""
-        if Feature.LAPL in self.names:
-            return 2
-        if self.names & {Feature.GRAD, Feature.KIN}:
-            return 1
-        return 0
+        return self._ao_features is not None
 
     @property
     def requires_atomic_layout(self) -> bool:
         """Return whether grid points must retain per-atom ordering."""
-        return bool(self.names & _ATOMIC_LAYOUT_FEATURES)
+        return bool(self._features & _ATOMIC_LAYOUT_FEATURES)
 
     @property
     def supports_spatial_decomposition(self) -> bool:
         """Return whether spatial decomposition is supported."""
-        return Feature.ATOMIC_GRID_SIZES in self.names
+        return Feature.ATOMIC_GRID_SIZES in self._features
 
 
 @dataclass(frozen=True)
