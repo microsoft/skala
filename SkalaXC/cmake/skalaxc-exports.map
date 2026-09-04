@@ -1,0 +1,28 @@
+# SkalaXC public symbol export map (linker version script).
+#
+# Wired onto the final SkalaXC shared library (Phase 6) via
+#   -Wl,--version-script=${CMAKE_CURRENT_LIST_DIR}/skalaxc-exports.map
+#   -Wl,--exclude-libs,ALL
+# together with -fvisibility=hidden.
+#
+# Only the SkalaXC C / C++ / Fortran public API is exported. Every GauXC and
+# LibTorch symbol statically embedded into the library stays local, so a host
+# application that links its own GauXC cannot suffer an ODR / symbol clash.
+#
+# C++ symbols are matched by their Itanium-ABI mangled prefix (namespace
+# `SkalaXC` = `7SkalaXC`), which is more portable across binutils versions than
+# the `extern "C++"` demangled-glob form. This is defense-in-depth on top of
+# -fvisibility=hidden + SKALAXC_EXPORT.
+{
+  global:
+    skalaxc_*;
+    SkalaXC_*;
+    __skalaxc_*;
+    _ZN7SkalaXC*;   /* namespace SkalaXC: constructors, methods, functions */
+    _ZNK7SkalaXC*;  /* namespace SkalaXC: const methods                    */
+    _ZTIN7SkalaXC*; /* typeinfo      for SkalaXC::*                         */
+    _ZTSN7SkalaXC*; /* typeinfo name for SkalaXC::*                         */
+    _ZTVN7SkalaXC*; /* vtable        for SkalaXC::*                         */
+  local:
+    *;
+};

@@ -1,0 +1,75 @@
+schema_version: 1
+
+context:
+  version: "0.1.0"
+  torch_min: "2.8"
+  torch_max: "2.9"
+
+package:
+  name: skalaxc
+  version: ${{ version }}
+
+source:
+  - path: ../../..
+  - url: https://huggingface.co/microsoft/skala-baselines/resolve/main/ldax.fun
+    sha256: dd30928579ac970ffccc0c6f4ff6e2f7d7eeda3665352229a3f2678b3d0cb32e
+    file_name: ldax.fun
+    target_directory: data/skala_models
+  - url: https://huggingface.co/microsoft/skala-baselines/resolve/main/pbe.fun
+    sha256: da4da7dfed02bde938606c77b38e785283f15ad3be69159051e11cf213a97862
+    file_name: pbe.fun
+    target_directory: data/skala_models
+  - url: https://huggingface.co/microsoft/skala-baselines/resolve/main/tpss.fun
+    sha256: c2775e8c9512e399e8b35f1d4424052fdafaa8631a8e638a28ff460619999449
+    file_name: tpss.fun
+    target_directory: data/skala_models
+  - url: https://huggingface.co/microsoft/skala-1.1/resolve/main/skala-1.1-rev1.fun
+    sha256: 7f3e8622e1eb520ccd88a55464c3e359ac4d7e5ccbd1fb77a26afa1e1c20a5cd
+    file_name: skala-1.1.fun
+    target_directory: data/skala_models
+  - url: https://huggingface.co/microsoft/skala-1.1/resolve/main/skala-1.1-rev1-cuda.fun
+    sha256: f848eae769dca91741a518ae7275d10caac398ab21db649f91bc1f136872f223
+    file_name: skala-1.1-cuda.fun
+    target_directory: data/skala_models
+
+build:
+  number: 1
+  skip:
+    - not linux
+  script:
+    file: build.sh
+
+requirements:
+  build:
+    - ${{ compiler('c') }}
+    - ${{ compiler('cxx') }}
+    - cmake >=3.21
+    - ninja
+  host:
+    - python >=3.10
+    - pip
+    - scikit-build-core >=0.11
+    - nanobind >=2.4
+    - numpy >=1.23
+    - pytorch >=${{ torch_min }},<${{ torch_max }}
+    - hdf5
+    - libblas
+    - nlohmann_json
+    - eigen >=5,<6
+  run:
+    - python >=3.10
+    - numpy >=1.23
+    - pytorch >=${{ torch_min }},<${{ torch_max }}
+
+tests:
+  - python:
+      imports:
+        - skalaxc
+      pip_check: true
+
+about:
+  homepage: https://github.com/microsoft/skala
+  repository: https://github.com/microsoft/skala
+  license: MIT
+  license_file: LICENSE.txt
+  summary: Direct Python bindings for the SkalaXC C++ library

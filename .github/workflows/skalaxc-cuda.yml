@@ -1,0 +1,258 @@
+name: SkalaXC CUDA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths: &skalaxc-cuda-paths
+      - .gitmodules
+      - SkalaXC/**
+      - skala/src/skala/**
+      - tests/**
+      - .github/workflows/skalaxc-cuda.yml
+      - pixi.lock
+      - pixi.toml
+  pull_request:
+    branches: [ main]
+    paths: *skalaxc-cuda-paths
+
+permissions:
+  contents: read
+
+env:
+  OMP_NUM_THREADS: "4"
+  GAUXC_DEVICE_MEMORY_CAP: "1073741824"
+
+jobs:
+  cuda-build:
+    name: ${{ matrix.name }} build
+    runs-on: ${{ matrix.runner }}
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: CUDA 12
+            environment: skalaxc-cuda12
+            version: "12"
+            runner: microsoft-skala-small-gpu-pool
+            c_compiler: x86_64-conda-linux-gnu-gcc
+            cxx_compiler: x86_64-conda-linux-gnu-g++
+          - name: CUDA 13
+            environment: skalaxc-cuda13
+            version: "13"
+            runner: microsoft-skala-gpu-pool
+            c_compiler: x86_64-conda-linux-gnu-gcc
+            cxx_compiler: x86_64-conda-linux-gnu-g++
+          - name: CUDA 13 / Clang 20
+            environment: skalaxc-cuda13-clang
+            version: "13-clang20"
+            runner: microsoft-skala-gpu-pool
+            c_compiler: x86_64-conda-linux-gnu-clang
+            cxx_compiler: x86_64-conda-linux-gnu-clang++
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: Setup Pixi
+        uses: ./.github/actions/setup-pixi
+        with:
+          pixi-bin-path: ${{ runner.temp }}/bin/pixi
+          environment: ${{ matrix.environment }}
+          post-cleanup: true
+
+      - name: Verify compiler toolchain
+        run: |
+          ${{ matrix.c_compiler }} --version
+          ${{ matrix.cxx_compiler }} --version
+          nvcc --version
+
+      - name: Configure CUDA build
+        run: >-
+          cmake
+          -S SkalaXC
+          -B SkalaXC/build-cuda-${{ matrix.version }}
+          -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          "-DCMAKE_C_COMPILER=$CONDA_PREFIX/bin/${{ matrix.c_compiler }}"
+          "-DCMAKE_CXX_COMPILER=$CONDA_PREFIX/bin/${{ matrix.cxx_compiler }}"
+          "-DCMAKE_CUDA_HOST_COMPILER=$CONDA_PREFIX/bin/${{ matrix.cxx_compiler }}"
+          -DCMAKE_CUDA_ARCHITECTURES=80
+          -DSKALAXC_BUILD_FORTRAN=OFF
+          -DSKALAXC_BUILD_TESTS=ON
+          -DSKALAXC_BUILD_EXAMPLES=ON
+          -DSKALAXC_ENABLE_CUDA=ON
+          -DSKALAXC_ENABLE_MPI=OFF
+          -DSKALAXC_ENABLE_OPENMP=ON
+
+      - name: Verify CUDA is enabled
+        run: >-
+          grep -Fx
+          '#define SKALAXC_HAS_CUDA'
+          SkalaXC/build-cuda-${{ matrix.version }}/include/skalaxc/skalaxc_config.hpp
+
+      - name: Build CUDA targets
+        run: >-
+          cmake
+          --build SkalaXC/build-cuda-${{ matrix.version }}
+
+  cuda-test:
+    name: ${{ matrix.name }} runtime
+    runs-on: ${{ matrix.runner }}
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: CUDA 12
+            environment: skalaxc-cuda12
+            version: "12"
+            runner: microsoft-skala-small-gpu-pool
+          - name: CUDA 13
+            environment: skalaxc-cuda13
+            version: "13"
+            runner: microsoft-skala-gpu-pool
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: Setup Pixi
+        uses: ./.github/actions/setup-pixi
+        with:
+          pixi-bin-path: ${{ runner.temp }}/bin/pixi
+          environment: ${{ matrix.environment }}
+          post-cleanup: true
+
+      - name: Verify GPU runtime
+        run: |
+          nvidia-smi
+          python -c "import torch; assert torch.cuda.is_available(); print(torch.cuda.get_device_name(0))"
+          compute_capability=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | sed -n '1{s/\.//;p;}')
+          test -n "$compute_capability"
+          echo "SKALAXC_CUDA_ARCH=$compute_capability" >> "$GITHUB_ENV"
+
+      - name: Configure CUDA runtime build
+        run: >-
+          cmake
+          -S SkalaXC
+          -B SkalaXC/build-cuda-runtime-${{ matrix.version }}
+          -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          "-DCMAKE_CUDA_ARCHITECTURES=$SKALAXC_CUDA_ARCH"
+          -DSKALAXC_BUILD_FORTRAN=ON
+          -DSKALAXC_BUILD_TESTS=ON
+          -DSKALAXC_BUILD_EXAMPLES=OFF
+          -DSKALAXC_ENABLE_CUDA=ON
+          -DSKALAXC_ENABLE_MPI=OFF
+          -DSKALAXC_ENABLE_OPENMP=ON
+
+      - name: Build CUDA runtime tests
+        run: cmake --build SkalaXC/build-cuda-runtime-${{ matrix.version }}
+
+      - name: Install SkalaXC Python binding
+        env:
+          SkalaXC_DIR: ${{ github.workspace }}/SkalaXC/install-cuda-runtime-${{ matrix.version }}/lib/cmake/SkalaXC
+          SKALAXC_PYTHON_LAYOUT: WHEEL
+        run: |
+          cmake --install SkalaXC/build-cuda-runtime-${{ matrix.version }} \
+            --prefix SkalaXC/install-cuda-runtime-${{ matrix.version }} \
+            --component Core
+          python -m pip install SkalaXC/python \
+            --no-build-isolation --no-deps --force-reinstall
+
+      - name: Test CUDA runtime
+        env:
+          SKALAXC_MODEL_PATH: ${{ github.workspace }}/SkalaXC/build-cuda-runtime-${{ matrix.version }}/data/skala_models
+          SKALAXC_TEST_SEED: "20260729"
+        run: |
+          SkalaXC/build-cuda-runtime-${{ matrix.version }}/tests/skalaxc_unit_test \
+            '[skala][cuda]~[mpi-only]'
+          ctest \
+            --test-dir SkalaXC/build-cuda-runtime-${{ matrix.version }} \
+            -R '^(skalaxc_c_api|skalaxc_fortran)$' \
+            --no-tests=error \
+            --output-on-failure
+
+      - name: Test GPU4PySCF-SkalaXC parity
+        run: |
+          python -c "import skalaxc, torch; assert skalaxc.CUDA_ENABLED and torch.cuda.is_available()"
+          pytest -v -m gpu tests/test_pyscf_skalaxc_gpu_parity.py
+
+  cuda-mpi-test:
+    name: ${{ matrix.name }} MPI runtime
+    runs-on: ${{ matrix.runner }}
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: CUDA 12
+            environment: skalaxc-cuda12
+            version: "12"
+            runner: microsoft-skala-small-gpu-pool
+          - name: CUDA 13
+            environment: skalaxc-cuda13
+            version: "13"
+            runner: microsoft-skala-gpu-pool
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: Setup Pixi
+        uses: ./.github/actions/setup-pixi
+        with:
+          pixi-bin-path: ${{ runner.temp }}/bin/pixi
+          environment: ${{ matrix.environment }}
+          post-cleanup: true
+
+      - name: Verify GPU and MPI runtime
+        run: |
+          nvidia-smi
+          python -c "import torch; assert torch.cuda.is_available(); print(torch.cuda.get_device_name(0))"
+          mpiexec --version
+          compute_capability=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | sed -n '1{s/\.//;p;}')
+          test -n "$compute_capability"
+          echo "SKALAXC_CUDA_ARCH=$compute_capability" >> "$GITHUB_ENV"
+
+      - name: Configure CUDA MPI build
+        run: >-
+          cmake
+          -S SkalaXC
+          -B SkalaXC/build-cuda-mpi-${{ matrix.version }}
+          -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          "-DCMAKE_CUDA_ARCHITECTURES=$SKALAXC_CUDA_ARCH"
+          -DSKALAXC_BUILD_FORTRAN=OFF
+          -DSKALAXC_BUILD_TESTS=ON
+          -DSKALAXC_BUILD_EXAMPLES=OFF
+          -DSKALAXC_ENABLE_CUDA=ON
+          -DSKALAXC_ENABLE_MPI=ON
+          -DSKALAXC_ENABLE_OPENMP=ON
+          -DMPIEXEC_PREFLAGS=--oversubscribe
+
+      - name: Build CUDA MPI test
+        run: >-
+          cmake --build SkalaXC/build-cuda-mpi-${{ matrix.version }}
+          --target skalaxc_unit_test
+
+      - name: Test CUDA MPI communication
+        env:
+          SKALAXC_TEST_SEED: "20260729"
+        run: >-
+          ctest
+          --test-dir SkalaXC/build-cuda-mpi-${{ matrix.version }}
+          -R '^skalaxc_unit_mpi\.(cuda_idle_rank|cuda_subcommunicator)$'
+          --no-tests=error
+          --output-on-failure

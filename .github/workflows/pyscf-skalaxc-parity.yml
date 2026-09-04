@@ -1,0 +1,71 @@
+name: "PySCF-SkalaXC parity tests"
+
+on:
+  push:
+    branches: [main]
+    paths: &parity-test-paths
+      - '.github/workflows/pyscf-skalaxc-parity.yml'
+      - 'tests/**'
+      - 'skala/src/skala/**'
+      - 'SkalaXC/**'
+      - 'pixi.lock'
+      - 'pixi.toml'
+      - 'pyproject.toml'
+  pull_request:
+    branches: [main]
+    paths: *parity-test-paths
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      OMP_NUM_THREADS: 4
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      with:
+        submodules: recursive
+        persist-credentials: false
+
+    - name: Print CPU diagnostics
+      uses: ./.github/actions/cpu-diagnostics
+
+    - name: Setup Pixi
+      uses: ./.github/actions/setup-pixi
+      with:
+        environment: skalaxc-parity
+
+    - name: Configure SkalaXC
+      run: >-
+        cmake
+        -S SkalaXC
+        -B SkalaXC/build-pixi-parity
+        -G Ninja
+        -DCMAKE_BUILD_TYPE=Release
+        -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/SkalaXC/install-pixi-parity
+        -DSKALAXC_BUILD_FORTRAN=OFF
+        -DSKALAXC_BUILD_TESTS=OFF
+        -DSKALAXC_BUILD_EXAMPLES=OFF
+        -DSKALAXC_DOWNLOAD_MODELS=ON
+        -DSKALAXC_ENABLE_CUDA=OFF
+        -DSKALAXC_ENABLE_MPI=OFF
+        -DSKALAXC_ENABLE_OPENMP=ON
+
+    - name: Build and install SkalaXC
+      run: |
+        cmake --build SkalaXC/build-pixi-parity --parallel 2
+        cmake --install SkalaXC/build-pixi-parity --component Core
+
+    - name: Install SkalaXC Python binding
+      env:
+        SkalaXC_DIR: ${{ github.workspace }}/SkalaXC/install-pixi-parity/lib/cmake/SkalaXC
+        SKALAXC_PYTHON_LAYOUT: WHEEL
+      run: >-
+        python -m pip install SkalaXC/python
+        --no-build-isolation --no-deps --force-reinstall
+
+    - name: Run direct-binding parity tests
+      run: pytest -v tests/test_pyscf_skalaxc_parity.py

@@ -1,0 +1,8 @@
+_skalaxc.RuntimeEnvironment.__init__:
+    \from mpi4py.MPI import Intracomm
+    \from typing import overload
+    @overload
+    def __init__(self, communicator: Intracomm) -> None: ...
+
+    @overload
+    def __init__(self, communicator: Intracomm, settings: DeviceRuntimeSettings) -> None: ...
