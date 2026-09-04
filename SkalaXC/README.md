@@ -1,10 +1,11 @@
 # SkalaXC
 
 SkalaXC is a standalone machine-learning exchange–correlation (XC) functional
-library. It reuses GauXC's internal numerical machinery (grid, load balancer, collocation / local work
-  driver, molecular weights, HDF5 I/O), **without** using GauXC's public
-  `XCIntegrator` XC API, and exposes its **own ABI-isolated public API** (C++, C, and Fortran) for ML XC
-  evaluation. No GauXC or LibTorch type ever crosses the SkalaXC boundary.
+library. It reuses GauXC's internal numerical machinery (grid, load balancer,
+collocation / local work driver, molecular weights, HDF5 I/O), **without**
+using GauXC's public `XCIntegrator` XC API, and exposes its own
+dependency-isolated public APIs (C++, C, and Fortran) for ML XC evaluation. No
+GauXC or LibTorch type ever crosses the SkalaXC boundary.
 
 The complete validated capability is **host (CPU)** evaluation of the
 **unrestricted (UKS)** ML XC energy, potential, and nuclear gradient for the
@@ -107,7 +108,7 @@ file. If rank zero cannot read the model, it broadcasts the error message so
 that all ranks fail consistently instead of leaving non-root ranks blocked in
 an MPI collective. Every rank still needs enough memory for its local model.
 
-### 3. Strict ABI isolation (C, C++, and Fortran)
+### 3. Dependency and symbol isolation (C, C++, and Fortran)
 The public boundary exposes **zero** GauXC / LibTorch symbols or types:
 - **C++** — strict PIMPL: `SkalaXC::XCIntegrator` holds only a forward-declared
   `unique_ptr<Impl>`; all GauXC/Torch usage is confined to the `.cxx` TUs. Its
@@ -119,11 +120,14 @@ The public boundary exposes **zero** GauXC / LibTorch symbols or types:
   contracts. Matrix types must expose contiguous `double` storage through
   `data()` in column-major order; row-major and strided matrix types are not
   supported. Nuclear gradients always include molecular-weight derivatives.
-  `SkalaSettings` selects the model when the integrator is
+  `SkalaXC::functional_type` selects the model when the integrator is
   constructed. The integrator loads and owns that TorchScript module for its
   lifetime, so subsequent evaluations neither reload it nor use a process-wide
-  model cache.
-- **C** — opaque handle (`skalaxc_calculator_t`) + status codes + POD only.
+  model cache. This C++ API also exposes standard-library types and
+  `SkalaXC::Exception`; consumers must use a compatible compiler and C++
+  standard-library ABI. Cross-toolchain C++ ABI compatibility is not
+  guaranteed.
+- **C** — opaque handle (`skalaxc_xc_integrator_t`) + status codes + POD only.
 - **Fortran** — `iso_c_binding` wrapper over the C API; binds only to SkalaXC
   opaque handles. Assumed-shape array wrappers reject noncontiguous storage and
   extents that do not match the native molecule, basis, matrix, or gradient
@@ -139,9 +143,10 @@ The public boundary exposes **zero** GauXC / LibTorch symbols or types:
   `libskalaxc.so`; Eigen expressions are compiled only in private translation
   units. Everything is compiled `-fvisibility=hidden`
   and a linker **version script** (`cmake/skalaxc-exports.map`) plus
-  `--exclude-libs,ALL` export **only** `skalaxc_*` / `SkalaXC::*` symbols. This
-  prevents ODR / symbol-interposition clashes if the host application links its
-  own (possibly different) GauXC or LibTorch.
+  `--exclude-libs,ALL` export only the public C entry points and the mangled C++
+  definitions selected by the `SkalaXC` namespace allowlist. This prevents ODR
+  / symbol-interposition clashes if the host application links its own
+  (possibly different) GauXC or LibTorch.
 
 Consumers therefore need **only** this repository's public headers and
 `libskalaxc` — not GauXC, LibTorch, or Eigen.
@@ -543,7 +548,7 @@ and numerical tolerance rationale.
 CUDA builds also run TPSS device EXC/VXC and PBE device-gradient evaluations
 through the pure C and Fortran black-box tests.
 
-The black-box tests double as ABI-isolation proofs: they are given no GauXC
+The black-box tests double as dependency-isolation proofs: they are given no GauXC
 include dirs and do not link GauXC/LibTorch, so a successful compile+link is
 itself part of the test.
 
@@ -569,10 +574,10 @@ the integrator; evaluation calls provide only densities and output storage.
 
 ---
 
-## Verifying ABI isolation
+## Verifying exported-symbol isolation
 
 ```bash
-# Only skalaxc_* / SkalaXC::* symbols are exported (no GauXC/torch):
+# Only the public C API and mangled SkalaXC C++ definitions are exported:
 nm -D --defined-only build/src/libskalaxc.so.0.1.0 | grep -Ev 'skalaxc|SkalaXC'   # → empty
 
 # A pure-C consumer links only the SkalaXC C surface:
