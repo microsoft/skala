@@ -17,7 +17,8 @@
 #include <highfive/H5File.hpp>
 
 #include "skala_host_driver.hpp"
-#include <catch2/catch.hpp>
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 #include <skalaxc/skalaxc.hpp>
 
 #include <cmath>
@@ -272,9 +273,9 @@ TEST_CASE("Debug logging preserves host results", "[skala][debug-logging]") {
   SkalaXC::TimingSettings settings;
   settings.debug_logging = true;
   const auto logged = run_case(fixture, "LDA", runtime, settings);
-  CHECK(logged.exc == Approx(quiet.exc).epsilon(1e-13));
-  CHECK(logged.vxcs_err == Approx(quiet.vxcs_err).margin(1e-13));
-  CHECK(logged.vxcz_err == Approx(quiet.vxcz_err).margin(1e-13));
+  CHECK(logged.exc == Catch::Approx(quiet.exc).epsilon(1e-13));
+  CHECK(logged.vxcs_err == Catch::Approx(quiet.vxcs_err).margin(1e-13));
+  CHECK(logged.vxcz_err == Catch::Approx(quiet.vxcz_err).margin(1e-13));
 }
 
 TEST_CASE("Host domain batching modes are numerically equivalent",
@@ -328,7 +329,7 @@ TEST_CASE("Host domain batching modes are numerically equivalent",
       scalar_density, spin_density,
       RowMajorMatrixMap(aggressive_gradient.data(), molecule.natoms(), 3));
 
-  CHECK(aggressive_exc == Approx(conservative_exc).epsilon(1e-12));
+  CHECK(aggressive_exc == Catch::Approx(conservative_exc).epsilon(1e-12));
   CHECK(aggressive_scalar.isApprox(conservative_scalar, 1e-11));
   CHECK(aggressive_spin.isApprox(conservative_spin, 1e-11));
   CHECK(aggressive_gradient.isApprox(conservative_gradient, 1e-10));
@@ -474,5 +475,6 @@ TEST_CASE("Skala host gradient matches a Ridders derivative",
   INFO("Ridders error estimate=" << numerical.error);
   CHECK(std::abs(analytic_derivative) > 1e-3);
   CHECK(numerical.error < 1e-7);
-  CHECK(numerical.derivative == Approx(analytic_derivative).margin(1e-6));
+  CHECK(numerical.derivative ==
+        Catch::Approx(analytic_derivative).margin(1e-6));
 }

@@ -1,4 +1,5 @@
-#include <catch2/catch.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 
 #include "host/skala_util.hpp"
 #include "skala_model.hpp"
@@ -137,48 +138,49 @@ TEST_CASE("Model tensor validation rejects malformed boundary values",
   const c10::Device cpu(c10::DeviceType::CPU);
   const auto doubles = torch::TensorOptions().dtype(torch::kFloat64);
 
-  CHECK_THROWS_WITH(SkalaXC::validate_model_tensor({}, "test tensor", cpu,
-                                                   torch::kFloat64, {2}),
-                    Catch::Contains("Undefined test tensor"));
+  CHECK_THROWS_WITH(
+      SkalaXC::validate_model_tensor({}, "test tensor", cpu, torch::kFloat64,
+                                     {2}),
+      Catch::Matchers::ContainsSubstring("Undefined test tensor"));
 
   const auto wrong_type = torch::zeros({2}, torch::kFloat32);
   CHECK_THROWS_WITH(SkalaXC::validate_model_tensor(wrong_type, "test tensor",
                                                    cpu, torch::kFloat64, {2}),
-                    Catch::Contains("wrong dtype"));
+                    Catch::Matchers::ContainsSubstring("wrong dtype"));
 
   const auto wrong_shape = torch::zeros({3}, doubles);
   CHECK_THROWS_WITH(SkalaXC::validate_model_tensor(wrong_shape, "test tensor",
                                                    cpu, torch::kFloat64, {2}),
-                    Catch::Contains("invalid dimensions"));
+                    Catch::Matchers::ContainsSubstring("invalid dimensions"));
 
   const auto nonscalar_energy = torch::zeros({1}, doubles).requires_grad_(true);
   CHECK_THROWS_WITH(SkalaXC::validate_model_tensor(
                         nonscalar_energy, "integrated model energy", cpu,
                         torch::kFloat64, {}, false, true),
-                    Catch::Contains("invalid dimensions"));
+                    Catch::Matchers::ContainsSubstring("invalid dimensions"));
 
   const auto noncontiguous = torch::zeros({2, 3}, doubles).transpose(0, 1);
   CHECK_THROWS_WITH(SkalaXC::validate_model_tensor(noncontiguous, "test tensor",
                                                    cpu, torch::kFloat64,
                                                    noncontiguous.sizes(), true),
-                    Catch::Contains("must be contiguous"));
+                    Catch::Matchers::ContainsSubstring("must be contiguous"));
 
   const auto detached = torch::zeros({}, doubles);
   CHECK_THROWS_WITH(
       SkalaXC::validate_model_tensor(detached, "integrated model energy", cpu,
                                      torch::kFloat64, {}, false, true),
-      Catch::Contains("not connected to autograd"));
+      Catch::Matchers::ContainsSubstring("not connected to autograd"));
 
   CHECK_THROWS_WITH(
       SkalaXC::validate_model_tensor_finite(
           torch::full({1}, std::numeric_limits<double>::quiet_NaN(), doubles),
           "test tensor"),
-      Catch::Contains("Non-finite test tensor"));
+      Catch::Matchers::ContainsSubstring("Non-finite test tensor"));
   CHECK_THROWS_WITH(
       SkalaXC::validate_model_tensor_finite(
           torch::full({1}, std::numeric_limits<double>::infinity(), doubles),
           "test tensor"),
-      Catch::Contains("Non-finite test tensor"));
+      Catch::Matchers::ContainsSubstring("Non-finite test tensor"));
 
 #ifdef SKALAXC_HAS_CUDA
   if (torch::cuda::is_available()) {
@@ -187,7 +189,7 @@ TEST_CASE("Model tensor validation rejects malformed boundary values",
     CHECK_THROWS_WITH(
         SkalaXC::validate_model_tensor(device_tensor, "test tensor", cpu,
                                        torch::kFloat64, {2}),
-        Catch::Contains("wrong device"));
+        Catch::Matchers::ContainsSubstring("wrong device"));
 
     const auto deferred = SkalaXC::model_tensor_finite_check(device_tensor);
     CHECK(deferred.device() == cuda);
@@ -200,8 +202,9 @@ TEST_CASE("Model tensor validation rejects malformed boundary values",
 TEST_CASE("Model gradient validation preserves the feature contract",
           "[skala][model-validation]") {
   auto feature = torch::ones({2, 3}, torch::kFloat64).requires_grad_(true);
-  CHECK_THROWS_WITH(SkalaXC::validated_model_gradient(feature, "test gradient"),
-                    Catch::Contains("Undefined test gradient"));
+  CHECK_THROWS_WITH(
+      SkalaXC::validated_model_gradient(feature, "test gradient"),
+      Catch::Matchers::ContainsSubstring("Undefined test gradient"));
 
   feature.square().sum().backward();
   const auto gradient =
@@ -221,7 +224,7 @@ def forward(self, mol: Dict[str, Tensor]) -> int:
 )JIT");
   FeatureDict features;
   CHECK_THROWS_WITH(SkalaXC::get_exc(module.get_method("forward"), features),
-                    Catch::Contains("must be a tensor"));
+                    Catch::Matchers::ContainsSubstring("must be a tensor"));
 }
 
 TEST_CASE("Model resolution uses explicit and configured paths",
@@ -252,8 +255,9 @@ TEST_CASE("Model resolution uses explicit and configured paths",
             std::string::npos);
   }
 
-  CHECK_THROWS_WITH(SkalaXC::detail::resolve_model_path("SKALA", installed),
-                    Catch::Contains("specify a local checkpoint path"));
+  CHECK_THROWS_WITH(
+      SkalaXC::detail::resolve_model_path("SKALA", installed),
+      Catch::Matchers::ContainsSubstring("specify a local checkpoint path"));
 }
 
 TEST_CASE("Skala model loading validates paths and metadata",
@@ -368,6 +372,6 @@ TEST_CASE("Runtime rank zero broadcasts the model archive",
 
   MPI_Comm_free(&runtime_communicator);
 #else
-  SUCCEED("MPI disabled");
+  SKIP("MPI disabled");
 #endif
 }

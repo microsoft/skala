@@ -1,4 +1,4 @@
-#include <catch2/catch.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 #include <skalaxc/skalaxc.hpp>
 #include <skalaxc/skalaxc_config.hpp>
@@ -98,6 +98,6 @@ TEST_CASE("OpenMP thread counts preserve host EXC, VXC, and gradients",
   CHECK(spin_error <= 1e-12);
   CHECK(gradient_error <= 1e-10);
 #else
-  SUCCEED("OpenMP disabled");
+  SKIP("OpenMP disabled");
 #endif
 }

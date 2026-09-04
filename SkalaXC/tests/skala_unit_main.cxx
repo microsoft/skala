@@ -1,5 +1,7 @@
 #define CATCH_CONFIG_RUNNER
-#include <catch2/catch.hpp>
+#include <catch2/catch_session.hpp>
+#include <catch2/reporters/catch_reporter_event_listener.hpp>
+#include <catch2/reporters/catch_reporter_registrars.hpp>
 #include <skalaxc/skalaxc_config.hpp>
 
 #ifdef SKALAXC_HAS_CUDA
@@ -10,15 +12,15 @@ namespace {
 /**
  * @brief Release unused LibTorch CUDA allocations between Catch2 cases.
  *
- * Catch2 v2 executes cases serially within this process. CTest may still run
+ * Catch2 executes cases serially within this process. CTest may still run
  * separate test processes in parallel; each process has its own allocator,
  * although their live allocations still share the physical GPU. If in-process
  * parallel test execution is introduced, this process-wide cleanup must be
  * revisited because it can contend with concurrent cases and defeat caching.
  */
-class CudaCacheCleanupListener : public Catch::TestEventListenerBase {
+class CudaCacheCleanupListener : public Catch::EventListenerBase {
  public:
-  using Catch::TestEventListenerBase::TestEventListenerBase;
+  using Catch::EventListenerBase::EventListenerBase;
 
   void testCaseEnded(const Catch::TestCaseStats&) override {
     c10::cuda::CUDACachingAllocator::emptyCache();

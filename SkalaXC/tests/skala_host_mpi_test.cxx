@@ -1,4 +1,4 @@
-#include <catch2/catch.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 #include <skalaxc/skalaxc.hpp>
 
@@ -62,8 +62,7 @@ TEST_CASE("Skala host evaluation uses the runtime MPI subcommunicator",
   MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &world_size);
   if (world_size < 4) {
-    SUCCEED("Requires at least four MPI ranks");
-    return;
+    SKIP("Requires at least four MPI ranks");
   }
 
   const int color = world_rank % 2;
@@ -106,6 +105,6 @@ TEST_CASE("Skala host evaluation uses the runtime MPI subcommunicator",
   CHECK(gradient_error <= 1e-8);
   MPI_Comm_free(&subcomm);
 #else
-  SUCCEED("MPI disabled");
+  SKIP("MPI disabled");
 #endif
 }

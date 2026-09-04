@@ -1,7 +1,7 @@
 #include "atomic_domain_assignment.hpp"
 #include "saturating_math.hpp"
 
-#include <catch2/catch.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
 #include <limits>
