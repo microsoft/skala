@@ -2,15 +2,15 @@
 
 """Names of built-in molecular features."""
 
-from enum import Enum
-from typing import TYPE_CHECKING, TypeAlias
+from collections.abc import Iterable, Iterator
+from enum import StrEnum
+from typing import TypeAlias
 
-if TYPE_CHECKING:
-    from torch import Tensor
+from torch import Tensor
 
 
-class Feature(str, Enum):  # noqa: UP042 - Python 3.10-compatible StrEnum
-    """String-compatible names of features understood by Skala."""
+class Feature(StrEnum):
+    """features understood by Skala."""
 
     DENSITY = "density"
     GRAD = "grad"
@@ -23,7 +23,73 @@ class Feature(str, Enum):  # noqa: UP042 - Python 3.10-compatible StrEnum
     ATOMIC_GRID_SIZE_BOUND_SHAPE = "atomic_grid_size_bound_shape"
     COARSE_0_ATOMIC_COORDS = "coarse_0_atomic_coords"
 
-    __str__ = str.__str__
+
+AO_FEATURES = frozenset(
+    {
+        Feature.DENSITY,
+        Feature.GRAD,
+        Feature.KIN,
+        Feature.LAPL,
+    }
+)
 
 
-FeatureMap: TypeAlias = dict[Feature, "Tensor"]
+class AOFeatureSpec:
+    """Normalized non-empty set of AO-derived features."""
+
+    def __init__(self, features: Iterable[Feature]) -> None:
+        self._features = frozenset(features)
+        unsupported = self._features - AO_FEATURES
+        if unsupported:
+            unsupported_names = ", ".join(
+                sorted(str(feature) for feature in unsupported)
+            )
+            raise ValueError(f"Unsupported AO features: {unsupported_names}")
+        if not self._features:
+            raise ValueError("At least one AO-derived feature must be selected.")
+
+        self._feature_slices: dict[Feature, slice] = {}
+        feature_index = 0
+        for feature, width in (
+            (Feature.DENSITY, 1),
+            (Feature.GRAD, 3),
+            (Feature.KIN, 1),
+            (Feature.LAPL, 1),
+        ):
+            if feature in self._features:
+                self._feature_slices[feature] = slice(
+                    feature_index, feature_index + width
+                )
+                feature_index += width
+        self._nfeats = feature_index
+
+    def __contains__(self, feature: object) -> bool:
+        return feature in self._features
+
+    def __iter__(self) -> Iterator[tuple[Feature, slice]]:
+        return iter(self._feature_slices.items())
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, AOFeatureSpec):
+            return NotImplemented
+        return self._features == other._features
+
+    def __hash__(self) -> int:
+        return hash(self._features)
+
+    @property
+    def nderiv(self) -> int:
+        """Return the required AO derivative order."""
+        if Feature.LAPL in self._features:
+            return 2
+        if self._features & {Feature.GRAD, Feature.KIN}:
+            return 1
+        return 0
+
+    @property
+    def nfeats(self) -> int:
+        """Return the number of packed scalar feature channels."""
+        return self._nfeats
+
+
+FeatureMap: TypeAlias = dict[Feature, Tensor]

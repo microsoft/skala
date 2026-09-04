@@ -1,8 +1,12 @@
 import pytest
 import torch
-from skala.features import Feature, FeatureMap
+from skala.features import Feature
+from skala.pyscf import ao_evaluation as ao_evaluation_module
+from skala.pyscf import feature_math
 from skala.pyscf import xc_integrator as xc_integrator_module
+from skala.pyscf.backend import Grid
 from skala.pyscf.grids import SkalaGrids
+from skala.pyscf.model_chunking import ModelFeatureChunk
 from skala.pyscf.xc_integrator import XCIntegrator, XCResult
 
 from pyscf import dft, gto
@@ -87,22 +91,45 @@ def test_xc_integrator_returns_tensors_and_xc_only_response(
     mol = gto.M(atom="H 0 0 0; H 0 0 0.74", basis="sto-3g", verbose=0)
     grids = SkalaGrids(mol)
 
-    def fake_generate_features(
-        mol: gto.Mole,
+    def fake_evaluate_raw_features(
         dm: torch.Tensor,
-        grids: object,
-        features: set[Feature],
-        **kwargs: object,
-    ) -> FeatureMap:
-        return {
-            Feature.DENSITY: dm.sum().reshape(1),
-            Feature.GRID_WEIGHTS: torch.tensor([2.0], dtype=dm.dtype),
-        }
+        mol: gto.Mole,
+        grids: Grid,
+        feature_function: feature_math.LinearFeature,
+        block_size: int | None = None,
+        max_memory: int = 2000,
+        gpu: bool = False,
+    ) -> torch.Tensor:
+        return dm.sum().reshape(1)
+
+    class FakeModelFeatureChunker:
+        def __init__(
+            self,
+            mol: gto.Mole,
+            dm: torch.Tensor,
+            grids: object,
+            atom_major_raw_features: torch.Tensor,
+            **kwargs: object,
+        ) -> None:
+            self.raw_features = atom_major_raw_features
+
+        def __iter__(self) -> object:
+            yield ModelFeatureChunk(
+                grid_indices=torch.zeros(1, dtype=torch.int64),
+                raw_features=self.raw_features,
+                model_features={
+                    Feature.DENSITY: self.raw_features,
+                    Feature.GRID_WEIGHTS: self.raw_features.new_tensor([2.0]),
+                },
+            )
 
     monkeypatch.setattr(
-        xc_integrator_module,
-        "generate_features",
-        fake_generate_features,
+        ao_evaluation_module,
+        "evaluate_raw_features_auto_chunk",
+        fake_evaluate_raw_features,
+    )
+    monkeypatch.setattr(
+        xc_integrator_module, "ModelFeatureChunker", FakeModelFeatureChunker
     )
     integrator = XCIntegrator(QuadraticFunctional())
     dm = torch.tensor([[1.0, 2.0], [2.0, 3.0]], dtype=torch.float64)
@@ -111,7 +138,7 @@ def test_xc_integrator_returns_tensors_and_xc_only_response(
     response = integrator.gen_response(mol, grids, dm.detach().clone())
 
     assert isinstance(result, XCResult)
-    torch.testing.assert_close(result.electron_count, dm.new_tensor(16.0))
+    torch.testing.assert_close(result.electron_count, dm.new_tensor([16.0, 16.0]))
     torch.testing.assert_close(result.energy, dm.new_tensor(128.0))
     torch.testing.assert_close(result.potential, torch.full_like(dm, 32.0))
     torch.testing.assert_close(response(torch.ones_like(dm)), torch.full_like(dm, 16.0))

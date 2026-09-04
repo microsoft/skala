@@ -16,7 +16,6 @@ from torch.autograd.function import FunctionCtx
 from torch.utils.dlpack import from_dlpack
 
 from pyscf import dft, gto
-from skala.features import FeatureMap
 from skala.pyscf import feature_math
 from skala.pyscf.backend import (
     Array,
@@ -575,7 +574,7 @@ def _resolve_ao_block_size(
     return result
 
 
-def auto_chunk(
+def evaluate_raw_features_auto_chunk(
     dm: torch.Tensor,
     mol: gto.Mole,
     grids: Grid,
@@ -583,8 +582,8 @@ def auto_chunk(
     block_size: int | None = None,
     max_memory: int = 2000,
     gpu: bool = False,
-) -> FeatureMap:
-    """Evaluate raw features with a memory-derived or explicit AO block size."""
+) -> Tensor:
+    """Evaluate packed raw features with a memory-derived AO block size."""
     if gpu:
         check_gpu_imports_were_successful()
         if dm.device.type != "cuda":
@@ -598,4 +597,4 @@ def auto_chunk(
         features = evaluate_ao_features_blockwise(
             dm.double(), mol, grids, feature_function, blksize
         )
-    return feature_function.to_dict(features)
+    return features

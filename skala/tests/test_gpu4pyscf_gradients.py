@@ -19,12 +19,13 @@ from skala.gpu4pyscf import SkalaKS  # noqa: E402
 from skala.gpu4pyscf.gradients import (  # noqa: E402
     SkalaRKSGradient,
     SkalaUKSGradient,
+    _veff_and_expl_nuc_grad,
     nuc_grad_from_veff,
-    veff_and_expl_nuc_grad,
 )
 from skala.pyscf import SkalaKS as CpuSkalaKS  # noqa: E402
-from skala.pyscf.features import generate_features  # noqa: E402
+from skala.pyscf.evaluation import FeatureSpec  # noqa: E402
 from skala.pyscf.gradients import SkalaRKSGradient as CpuSkalaRKSGradient  # noqa: E402
+from skala.pyscf.model_chunking import evaluate_model_features  # noqa: E402
 from skala.utils import torch_allocator  # noqa: E402
 
 from pyscf import gto  # noqa: E402
@@ -155,6 +156,23 @@ def get_grid_and_rdm1(mol: gto.Mole) -> tuple[dft.Grids, torch.Tensor]:
     return mf.grids, rdm1  # maybe_expand_and_divide(rdm1, len(rdm1.shape) == 2, 2)
 
 
+def _evaluate_nuclear_gradient(
+    functional: ExcFunctionalBase,
+    mol: gto.Mole,
+    grid: dft.Grids,
+    rdm1: torch.Tensor,
+    nuc_grad_feats: set[Feature] | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    return _veff_and_expl_nuc_grad(
+        functional,
+        mol,
+        grid,
+        rdm1,
+        nuc_grad_feats,
+        max_memory_in_mb=int(mol.max_memory),
+    )
+
+
 def test_grid_coords_gradient(mol_name: str) -> None:
     class TestFunc(ExcFunctionalBase):
         def __init__(self) -> None:
@@ -168,7 +186,7 @@ def test_grid_coords_gradient(mol_name: str) -> None:
     mol = get_mol(mol_name)
     grid, rdm1 = get_grid_and_rdm1(mol)
     exc_test = TestFunc()
-    ana_grad = veff_and_expl_nuc_grad(exc_test, mol, grid, rdm1)[1]
+    ana_grad = _evaluate_nuclear_gradient(exc_test, mol, grid, rdm1)[1]
 
     # calculate exact result
     atom_grids_tab = grid.gen_atomic_grids(
@@ -195,7 +213,7 @@ def test_coarse_0_atomic_coords_gradient(mol_name: str) -> None:
     mol = get_mol(mol_name)
     grid, rdm1 = get_grid_and_rdm1(mol)
     exc_test = TestFunc()
-    ana_grad = veff_and_expl_nuc_grad(exc_test, mol, grid, rdm1)[1]
+    ana_grad = _evaluate_nuclear_gradient(exc_test, mol, grid, rdm1)[1]
 
     # calculate exact result
     exact_grad = torch.ones_like(ana_grad)
@@ -220,8 +238,8 @@ def test_grid_weights_gradient(mol_name: str) -> None:
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Calculates the gradient in Exc w.r.t. nuclear coordinates numerically"""
         # mol_.verbose = 2
-        mol_feats = generate_features(
-            mol, rdm1, minimal_grid(mol), set(weight_sum.features), gpu=True
+        mol_feats = evaluate_model_features(
+            mol, rdm1, minimal_grid(mol), FeatureSpec(weight_sum.features)
         )
 
         def weight_sum_as_nuc_coords_func(nuc_coords: torch.Tensor) -> torch.Tensor:
@@ -236,7 +254,7 @@ def test_grid_weights_gradient(mol_name: str) -> None:
 
     grid, rdm1 = get_grid_and_rdm1(mol)
     exc_test = TestFunc()
-    ana_grad = veff_and_expl_nuc_grad(exc_test, mol, grid, rdm1)[1]
+    ana_grad = _evaluate_nuclear_gradient(exc_test, mol, grid, rdm1)[1]
 
     # calculate numerical derivative as accurate as possible
     num_grad, num_err = finite_difference_nuc_grad(exc_test, mol, rdm1)
@@ -278,8 +296,8 @@ def test_density_veff(mol_name: str) -> None:
         def dens_sum_as_nuc_coords_func(nuc_coords: torch.Tensor) -> torch.Tensor:
             """Exc wrapper for the finite difference"""
             mol_.set_geom_(nuc_coords.cpu().numpy(), "bohr", symmetry=None)
-            mol_feats = generate_features(
-                mol_, rdm1, grid, set(dens_sum.features), gpu=True
+            mol_feats = evaluate_model_features(
+                mol_, rdm1, grid, FeatureSpec(dens_sum.features)
             )
 
             return dens_sum.get_exc(mol_feats)
@@ -294,7 +312,7 @@ def test_density_veff(mol_name: str) -> None:
     num_grad, num_err = finite_difference_nuc_grad(exc_test, mol, rdm1)
 
     # calculate analytic result
-    veff = veff_and_expl_nuc_grad(
+    veff = _evaluate_nuclear_gradient(
         exc_test, mol, grid, rdm1, nuc_grad_feats={Feature.DENSITY}
     )[0]
     ana_grad = 2 * nuc_grad_from_veff(mol, veff, rdm1)
@@ -339,8 +357,8 @@ def test_grad_veff(mol_name: str) -> None:
         def grad_func_as_nuc_coords_func(nuc_coords: torch.Tensor) -> torch.Tensor:
             """Exc wrapper for the finite difference"""
             mol_.set_geom_(nuc_coords.cpu().numpy(), "bohr", symmetry=None)
-            mol_feats = generate_features(
-                mol_, rdm1, grid, set(grad_func.features), gpu=True
+            mol_feats = evaluate_model_features(
+                mol_, rdm1, grid, FeatureSpec(grad_func.features)
             )
 
             return grad_func.get_exc(mol_feats)
@@ -356,7 +374,7 @@ def test_grad_veff(mol_name: str) -> None:
     num_grad, num_err = finite_difference_nuc_grad(exc_test, mol, rdm1)
 
     # calculate analytic result
-    veff = veff_and_expl_nuc_grad(
+    veff = _evaluate_nuclear_gradient(
         exc_test, mol, grid, rdm1, nuc_grad_feats={Feature.GRAD}
     )[0]
     ana_grad = 2 * nuc_grad_from_veff(mol, veff, rdm1)
@@ -396,8 +414,8 @@ def test_kin_veff(mol_name: str) -> None:
         def kin_func_as_nuc_coords_func(nuc_coords: torch.Tensor) -> torch.Tensor:
             """Exc wrapper for the finite difference"""
             mol_.set_geom_(nuc_coords.cpu().numpy(), "bohr", symmetry=None)
-            mol_feats = generate_features(
-                mol_, rdm1, grid, set(kin_func.features), gpu=True
+            mol_feats = evaluate_model_features(
+                mol_, rdm1, grid, FeatureSpec(kin_func.features)
             )
 
             return kin_func.get_exc(mol_feats)
@@ -413,7 +431,7 @@ def test_kin_veff(mol_name: str) -> None:
     num_grad, num_err = finite_difference_nuc_grad(exc_test, mol, rdm1)
 
     # calculate analytic result
-    veff = veff_and_expl_nuc_grad(
+    veff = _evaluate_nuclear_gradient(
         exc_test, mol, grid, rdm1, nuc_grad_feats={Feature.KIN}
     )[0]
     ana_grad = 2 * nuc_grad_from_veff(mol, veff, rdm1)
@@ -579,7 +597,7 @@ def test_cuda_kernel_memory_stability() -> None:
 
     # Warmup to avoid counting one-time allocations from CUDA runtime/libraries.
     for _ in range(2):
-        veff = veff_and_expl_nuc_grad(
+        veff = _evaluate_nuclear_gradient(
             exc_test, mol, grid, rdm1, nuc_grad_feats={Feature.GRAD}
         )[0]
         _ = 2 * nuc_grad_from_veff(mol, veff, rdm1)
@@ -590,7 +608,7 @@ def test_cuda_kernel_memory_stability() -> None:
     allocations: list[int] = []
     torch.cuda.reset_peak_memory_stats()
     for _ in range(5):
-        veff = veff_and_expl_nuc_grad(
+        veff = _evaluate_nuclear_gradient(
             exc_test, mol, grid, rdm1, nuc_grad_feats={Feature.GRAD}
         )[0]
         _ = 2 * nuc_grad_from_veff(mol, veff, rdm1)
