@@ -19,11 +19,23 @@ from skala.pyscf.gradient_core import (
 from pyscf import gto
 
 
-def test_nuclear_feature_derivatives_propagate_memory_budget(
+@pytest.mark.parametrize(
+    ("device_type", "expected_budgets"),
+    [
+        pytest.param("cpu", [321, 321], id="cpu"),
+        pytest.param("cuda", [321, None], id="cuda"),
+    ],
+)
+def test_nuclear_feature_derivatives_select_memory_budget(
     monkeypatch: pytest.MonkeyPatch,
+    device_type: str,
+    expected_budgets: list[int | None],
 ) -> None:
     observed_budgets: list[int | None] = []
     density = torch.ones(1, dtype=torch.float64)
+
+    class TestDensityMatrix:
+        device = torch.device(device_type)
 
     class TestFunctional(ExcFunctionalBase):
         features = [Feature.DENSITY]
@@ -67,11 +79,11 @@ def test_nuclear_feature_derivatives_propagate_memory_budget(
         TestFunctional(),
         cast(gto.Mole, object()),
         cast(Grid, object()),
-        torch.eye(1, dtype=torch.float64),
+        cast(torch.Tensor, TestDensityMatrix()),
         max_memory_in_mb=321,
     )
 
-    assert observed_budgets == [321, 321]
+    assert observed_budgets == expected_budgets
 
 
 def test_feature_derivatives() -> None:

@@ -98,9 +98,10 @@ class XCIntegrator:
             max_memory,
             screened=_should_screen_aos(mol),
         )
-        return feature_function.to_dict(evaluate_raw_features(dm))[Feature.DENSITY].sum(
-            0
-        )
+        density = feature_function.to_dict(evaluate_raw_features(dm))[Feature.DENSITY]
+        if dm.dim() == 2:
+            return density
+        return density.sum(0)
 
     def __call__(
         self,

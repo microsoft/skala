@@ -125,6 +125,7 @@ types-PyYAML = "*"
 
 [feature.profiling.target.linux-64.dependencies]
 memray = "*"
+py-spy = "*"
 
 [feature.benchmark.dependencies]
 jinja2 = "*"

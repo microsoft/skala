@@ -1071,15 +1071,17 @@ def test_cpu_density_dense_screened_equivalence() -> None:
     """Match dense and screened density in the original atom-major grid order."""
     mol = gto.M(atom="H 0 0 0; F 0 0 0.92", basis="sto-3g", spin=0, verbose=0)
     grids = _minimal_atom_grid(mol)
-    integrator = XCIntegrator(QuadraticFunctional())
-    dm = torch.as_tensor(dft.RKS(mol).get_init_guess())
+    numint: _NumPyNumInt = SkalaNumInt(QuadraticFunctional())
+    dm = dft.RKS(mol).get_init_guess()
 
     with force_ao_screening(False):
-        dense = integrator.density(mol, dm, grids)
+        dense = numint.get_rho(mol, dm, grids)
     with force_ao_screening(True):
-        screened = integrator.density(mol, dm, grids)
+        screened = numint.get_rho(mol, dm, grids)
 
-    torch.testing.assert_close(screened, dense, rtol=1e-10, atol=1e-11)
+    assert dense.shape == grids.weights.shape
+    assert screened.shape == grids.weights.shape
+    np.testing.assert_allclose(screened, dense, rtol=1e-10, atol=1e-11)
 
 
 @pytest.mark.parametrize(

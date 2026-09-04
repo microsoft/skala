@@ -142,7 +142,8 @@ def evaluate_nuclear_feature_derivatives(
         grid: Atom-major integration grid used for feature evaluation.
         rdm1: One-particle density matrix.
         features: Features to differentiate, defaulting to the functional inputs.
-        max_memory_in_mb: Memory limit for AO evaluation and model-gradient chunking.
+        max_memory_in_mb: Memory limit for AO evaluation and CPU model-gradient
+            chunking. CUDA model-gradient chunking probes available device memory.
 
     Returns:
         Required AO derivative order and XC derivatives by feature.
@@ -176,7 +177,7 @@ def evaluate_nuclear_feature_derivatives(
         rdm1,
         model_features,
         differentiable_features,
-        max_memory_in_mb=max_memory_in_mb,
+        max_memory_in_mb=max_memory_in_mb if rdm1.device.type == "cpu" else None,
     )
     return ao_deriv, derivatives
 
