@@ -42,11 +42,69 @@ Named compatibility environments cover Python 3.11 through 3.13, PySCF 2.14,
 PyTorch 2.12 and 2.13, GPU4PySCF 1.8.1, and CUDA 12 and 13. Keep `pixi.lock`
 synchronized with changes to `pixi.toml` or any component `pyproject.toml`.
 
-SkalaXC development uses the same root workspace. Its host environment is
-locked for Linux x86-64, Linux ARM64, and macOS ARM64:
+## SkalaXC development
+
+SkalaXC development uses the root Pixi workspace. Its host environment is
+locked for Linux x86-64, Linux ARM64, and macOS ARM64. Initialize the GauXC
+submodule and install the environment once:
 
 ```bash
+git submodule update --init SkalaXC/external/GauXC
 pixi install --locked -e skalaxc-host
+```
+
+Configure and build the native C++ and C APIs, the Fortran binding, tests, and
+consumer examples:
+
+```bash
+pixi run -e skalaxc-host cmake \
+	-S SkalaXC \
+	-B SkalaXC/build-contrib \
+	-G Ninja \
+	-DCMAKE_BUILD_TYPE=Release \
+	-DCMAKE_INSTALL_PREFIX="$PWD/SkalaXC/install-contrib" \
+	-DSKALAXC_BUILD_FORTRAN=ON \
+	-DSKALAXC_BUILD_TESTS=ON \
+	-DSKALAXC_BUILD_EXAMPLES=ON \
+	-DSKALAXC_DOWNLOAD_MODELS=ON \
+	-DSKALAXC_ENABLE_CUDA=OFF \
+	-DSKALAXC_ENABLE_MPI=OFF \
+	-DSKALAXC_ENABLE_OPENMP=ON
+pixi run -e skalaxc-host cmake --build SkalaXC/build-contrib --parallel 2
+```
+
+Run every native CTest registration, including the C and Fortran binding
+tests, then install the native package. The fixed seed makes the randomly
+generated UKS density matrices reproducible, so numerical failures can be
+replayed locally and compared directly with CI:
+
+```bash
+OMP_NUM_THREADS=4 SKALAXC_TEST_SEED=20260729 \
+	pixi run -e skalaxc-host ctest \
+	--test-dir SkalaXC/build-contrib \
+	--no-tests=error \
+	--output-on-failure
+pixi run -e skalaxc-host cmake --install SkalaXC/build-contrib
+```
+
+Build the Python binding against that exact native installation and run its
+tests. `SkalaXC_DIR` must be absolute so scikit-build cannot select another
+SkalaXC package:
+
+```bash
+pixi run -e skalaxc-host env \
+	SkalaXC_DIR="$PWD/SkalaXC/install-contrib/lib/cmake/SkalaXC" \
+	SKALAXC_PYTHON_LAYOUT=WHEEL \
+	python -m pip install SkalaXC/python \
+		--no-build-isolation --no-deps --force-reinstall
+OMP_NUM_THREADS=4 pixi run -e skalaxc-host \
+	pytest -v SkalaXC/python/tests/
+```
+
+The checked-in Pixi tasks remain the shortest way to exercise the standard
+host build and the focused static-analysis/documentation checks:
+
+```bash
 OMP_NUM_THREADS=4 pixi run -e skalaxc-host skalaxc-test-host
 pixi run -e skalaxc-host-clang skalaxc-clang-tidy
 pixi run -e skalaxc-tools skalaxc-doxygen
@@ -55,7 +113,6 @@ pixi run -e skalaxc-tools skalaxc-doxygen
 CUDA 12 and 13 use the custom platforms `linux-64-cuda12` and
 `linux-64-cuda13`; pass the matching platform with `-p` to both `pixi install`
 and `pixi run`.
-
 
 ## Model development
 
