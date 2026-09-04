@@ -128,6 +128,11 @@ types-PyYAML = "*"
 memray = "*"
 py-spy = "*"
 
+[feature.interactive.dependencies]
+ipykernel = "*"
+ipython = "*"
+matplotlib = "*"
+
 [feature.benchmark.dependencies]
 jinja2 = "*"
 markdown-it-py = "*"
@@ -296,6 +301,7 @@ skalaxc-doxygen = { cmd = "cmake -DSKALAXC_DOXYGEN_SOURCE_DIR=$PIXI_PROJECT_ROOT
 
 [environments]
 default = { features = ["python-runtime", "model-definition", "component-sources", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-213-cpu", "test", "lint", "profiling", "benchmark"], no-default-feature = true, platforms = ["linux-64", "linux-aarch64", "osx-arm64"] }
+dev = { features = ["python-runtime", "model-definition",  "component-sources", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-213-gpu", "cuda-12", "test", "lint", "profiling", "benchmark", "interactive"], no-default-feature = true, platforms = ["linux-64-cuda12"] }
 lint = { features = ["python-runtime", "model-definition", "component-sources", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-213-cpu", "test", "lint", "profiling", "benchmark"], no-default-feature = true, platforms = ["linux-64"] }
 test-py311-pyscf214-torch213 = { features = ["python-runtime", "model-assets", "python-311", "pyscf-214", "dispersion", "torch-213-cpu", "test"], no-default-feature = true, platforms = ["linux-64"] }
 test-py312-pyscf214-torch212 = { features = ["python-runtime", "component-sources", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-212-cpu", "test", "profiling", "benchmark"], no-default-feature = true, platforms = ["linux-64", "linux-aarch64", "osx-arm64"] }
