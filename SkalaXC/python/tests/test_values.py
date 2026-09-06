@@ -2,6 +2,12 @@ import pytest
 import skalaxc
 
 
+def test_supported_weight_algorithms() -> None:
+    assert skalaxc.XCWeightAlgorithm.BECKE.value == 1
+    assert skalaxc.XCWeightAlgorithm.SSF.value == 2
+    assert not hasattr(skalaxc.XCWeightAlgorithm, "LKO")
+
+
 def test_molecule_items_are_independent_values() -> None:
     molecule = skalaxc.Molecule()
     molecule.append(skalaxc.Atom(1, 1.0, 2.0, 3.0))

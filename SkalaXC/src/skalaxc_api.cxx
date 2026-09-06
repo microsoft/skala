@@ -246,8 +246,6 @@ GauXC::XCWeightAlg to_gauxc(XCWeightAlg a) {
       return GauXC::XCWeightAlg::Becke;
     case XCWeightAlg::SSF:
       return GauXC::XCWeightAlg::SSF;
-    case XCWeightAlg::LKO:
-      return GauXC::XCWeightAlg::LKO;
   }
   throw Exception("Unknown SkalaXC XCWeightAlg");
 }
@@ -471,6 +469,7 @@ MolecularWeightsFactory::MolecularWeightsFactory(
     : ex_(ex), kernel_name_(std::move(kernel_name)), settings_(settings) {}
 
 MolecularWeights MolecularWeightsFactory::get_instance() {
+  (void)to_gauxc(settings_.weight_alg);
 #ifndef SKALAXC_HAS_CUDA
   if (ex_ == ExecutionSpace::Device)
     throw Exception("SkalaXC was built without CUDA support");

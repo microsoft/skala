@@ -143,7 +143,7 @@ module skalaxc
      & skalaxc_domainbatchmode = skalaxc_domainbatchmode_enum()
 
    public :: skalaxc_xcweightalg_notpartitioned, skalaxc_xcweightalg_becke, &
-     & skalaxc_xcweightalg_ssf, skalaxc_xcweightalg_lko
+       & skalaxc_xcweightalg_ssf
    enum, bind(c)
       !> @brief Weights are not partitioned
       enumerator :: skalaxc_xcweightalg_notpartitioned
@@ -151,8 +151,6 @@ module skalaxc
       enumerator :: skalaxc_xcweightalg_becke
       !> @brief Stratmann-Scuseria-Frisch (default)
       enumerator :: skalaxc_xcweightalg_ssf
-      !> @brief Laqua-Kussmann-Ochsenfeld
-      enumerator :: skalaxc_xcweightalg_lko
    end enum
 
    !> @brief Named-constant bundle (e.g. skalaxc_xcweightalg%ssf).
@@ -160,7 +158,6 @@ module skalaxc
       integer(c_int) :: notpartitioned = skalaxc_xcweightalg_notpartitioned
       integer(c_int) :: becke = skalaxc_xcweightalg_becke
       integer(c_int) :: ssf = skalaxc_xcweightalg_ssf
-      integer(c_int) :: lko = skalaxc_xcweightalg_lko
    end type skalaxc_xcweightalg_enum
    type(skalaxc_xcweightalg_enum), parameter, public :: &
      & skalaxc_xcweightalg = skalaxc_xcweightalg_enum()

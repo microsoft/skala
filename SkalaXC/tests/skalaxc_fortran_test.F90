@@ -51,6 +51,19 @@ program skalaxc_fortran_test
    total = 0
 
    block
+      type(skalaxc_molecular_weights_t) :: weights
+      integer(c_int) :: status
+      status = weights%create(skalaxc_executionspace%host, 3_c_int)
+      if (status == SKALAXC_INVALID_ARGUMENT .and. .not. weights%is_valid()) then
+         write (*, '(A)') '[PASS] removed weight algorithm rejected'
+      else
+         write (*, '(A)') '[FAIL] removed weight algorithm rejected'
+         failures = failures + 1
+      end if
+      total = total + 1
+   end block
+
+   block
       character(len=:), allocatable :: version
       version = skalaxc_version()
       if (version == SKALAXC_EXPECTED_VERSION) then

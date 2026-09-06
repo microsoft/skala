@@ -284,6 +284,15 @@ static int run_invalid_enum_contracts(const char* path, int* total) {
                            "invalid execution space", total);
   }
   {
+    skalaxc_molecular_weights_t output = NULL;
+    status = skalaxc_molecular_weights_create(
+        SkalaXC_ExecutionSpace_Host, (enum SkalaXC_XCWeightAlg)3, &output);
+    failures +=
+        check_invalid_enum("removed weight algorithm", status, output == NULL,
+                           "invalid XC weight algorithm", total);
+    skalaxc_molecular_weights_destroy(output);
+  }
+  {
     skalaxc_molecular_weights_t output = (skalaxc_molecular_weights_t)&sentinel;
     status = skalaxc_molecular_weights_create(
         SkalaXC_ExecutionSpace_Host, (enum SkalaXC_XCWeightAlg)99, &output);

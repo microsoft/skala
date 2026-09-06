@@ -352,7 +352,9 @@ enum class PruningScheme { Unpruned, Robust, Treutler };
 enum class ExecutionSpace { Host, Device };
 
 /** @brief XC weight partitioning scheme (mirrors GauXC::XCWeightAlg). */
-enum class XCWeightAlg { NOTPARTITIONED, Becke, SSF, LKO };
+// LKO lacks nuclear weight derivatives and reorders tasks, breaking alignment
+// with SkalaXC's separately stored raw quadrature weights.
+enum class XCWeightAlg { NOTPARTITIONED = 0, Becke = 1, SSF = 2 };
 
 // ===========================================================================
 // Settings value types (mirror GauXC).

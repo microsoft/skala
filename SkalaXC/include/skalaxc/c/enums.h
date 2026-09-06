@@ -69,10 +69,9 @@ enum SkalaXC_DomainBatchMode {
  * @brief XC weight partitioning scheme (mirrors SkalaXC::XCWeightAlg).
  */
 enum SkalaXC_XCWeightAlg {
-  SkalaXC_XCWeightAlg_NOTPARTITIONED,  ///< Weights are not partitioned
-  SkalaXC_XCWeightAlg_Becke,           ///< Becke partitioning
-  SkalaXC_XCWeightAlg_SSF,             ///< Stratmann-Scuseria-Frisch (default)
-  SkalaXC_XCWeightAlg_LKO              ///< Laqua-Kussmann-Ochsenfeld
+  SkalaXC_XCWeightAlg_NOTPARTITIONED = 0,  ///< Weights are not partitioned
+  SkalaXC_XCWeightAlg_Becke = 1,           ///< Becke partitioning
+  SkalaXC_XCWeightAlg_SSF = 2  ///< Stratmann-Scuseria-Frisch (default)
 };
 
 #ifdef __cplusplus

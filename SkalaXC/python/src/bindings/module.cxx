@@ -258,8 +258,7 @@ NB_MODULE(_skalaxc, module) {
   nb::enum_<SkalaXC::XCWeightAlg>(module, "XCWeightAlgorithm")
       .value("NOT_PARTITIONED", SkalaXC::XCWeightAlg::NOTPARTITIONED)
       .value("BECKE", SkalaXC::XCWeightAlg::Becke)
-      .value("SSF", SkalaXC::XCWeightAlg::SSF)
-      .value("LKO", SkalaXC::XCWeightAlg::LKO);
+      .value("SSF", SkalaXC::XCWeightAlg::SSF);
   nb::enum_<SkalaXC::TimingStatus>(module, "TimingStatus")
       .value("UNAVAILABLE", SkalaXC::TimingStatus::Unavailable)
       .value("PENDING", SkalaXC::TimingStatus::Pending)

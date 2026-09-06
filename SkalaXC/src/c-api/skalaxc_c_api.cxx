@@ -213,8 +213,6 @@ SkalaXC::XCWeightAlg to_weight(const enum SkalaXC_XCWeightAlg& a) {
       return SkalaXC::XCWeightAlg::NOTPARTITIONED;
     case SkalaXC_XCWeightAlg_Becke:
       return SkalaXC::XCWeightAlg::Becke;
-    case SkalaXC_XCWeightAlg_LKO:
-      return SkalaXC::XCWeightAlg::LKO;
     case SkalaXC_XCWeightAlg_SSF:
       return SkalaXC::XCWeightAlg::SSF;
     default:
