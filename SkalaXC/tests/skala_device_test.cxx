@@ -150,10 +150,15 @@ TEST_CASE("Skala CUDA reproduces host semilocal nuclear gradients",
     const auto device = evaluate_gradient(
         device_runtime, SkalaXC::ExecutionSpace::Device, system.molecule,
         system.basis, model, scalar_density, spin_density, true);
-    REQUIRE(device.size() == host.size());
+    REQUIRE(host.size() == 3 * system.molecule.natoms());
+    REQUIRE(device.size() == 3 * system.molecule.natoms());
     double max_error = 0.0;
-    for (std::size_t index = 0; index < host.size(); ++index)
+    for (std::size_t index = 0; index < host.size(); ++index) {
+      INFO("gradient component=" << index);
+      REQUIRE(std::isfinite(host[index]));
+      REQUIRE(std::isfinite(device[index]));
       max_error = std::max(max_error, std::abs(device[index] - host[index]));
+    }
     INFO("maximum gradient component error=" << max_error);
     CHECK(max_error <= 1e-6);
   }
@@ -445,11 +450,16 @@ TEST_CASE("Skala CUDA uses the runtime MPI subcommunicator",
       std::get<1>(device), std::get<1>(host));
   const double spin_error = SkalaXC::test::matrix_error_per_basis(
       std::get<2>(device), std::get<2>(host));
-  REQUIRE(device_gradient.size() == host_gradient.size());
+  REQUIRE(host_gradient.size() == 3 * system.molecule.natoms());
+  REQUIRE(device_gradient.size() == 3 * system.molecule.natoms());
   double gradient_error = 0.0;
-  for (std::size_t index = 0; index < host_gradient.size(); ++index)
+  for (std::size_t index = 0; index < host_gradient.size(); ++index) {
+    INFO("gradient component=" << index);
+    REQUIRE(std::isfinite(host_gradient[index]));
+    REQUIRE(std::isfinite(device_gradient[index]));
     gradient_error = std::max(gradient_error, std::abs(device_gradient[index] -
                                                        host_gradient[index]));
+  }
 
   INFO("subcommunicator color=" << color);
   INFO("CUDA device=" << device_settings.device_id);

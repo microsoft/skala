@@ -25,6 +25,12 @@ public bindings. Positive aggressive-batching equivalence is covered at the
 private host/device and public C++ layers; it is not repeated in each language
 binding.
 
+Both language suites compare scalar and spin potentials against `/VXC_SCALAR`
+and `/VXC_Z` using the golden-host tolerances below. Output buffers start as NaN
+so unwritten elements fail the finite-value checks. Both potential channels
+must also be symmetric. These He fixtures have near-zero spin potentials, so
+they do not establish accuracy for a nonzero spin response.
+
 HDF5 support is enabled by default. With `SKALAXC_ENABLE_HDF5=OFF`, fixture-
 driven host/device tests and the C, C++, and Fortran numerical consumer tests
 are not built. Constructed-system units, traditional-functional parity, the
@@ -83,8 +89,9 @@ checks that SkalaXC always uses GauXC's master CUDA stream internally and
 restores a non-default caller Torch stream after successful and failed
 evaluations.
 
-`[gradient-numerical]` is tagged `[.slow]`, so it runs only when selected
-explicitly. Cases tagged `[mpi-only]` are excluded from single-process Catch
+`[gradient-numerical]` is tagged `[.slow]`, so direct Catch runs must select it
+explicitly. CTest discovery explicitly includes it in the normal host CI suite
+when HDF5 is enabled. Cases tagged `[mpi-only]` are excluded from single-process Catch
 discovery and are available through these MPI-enabled CTest registrations:
 
 | CTest name | Ranks | Coverage |
@@ -164,6 +171,11 @@ local diagnosis and exact replay:
 | `SKALAXC_TEST_SEED=<integer>` | Generate the same random UKS densities. |
 | `SKALAXC_TEST_DENSITY_DIR=<dir>` | Replay `density_<molecule>_{scalar,z}.mtx` files emitted after a mismatch. |
 | `SKALAXC_TEST_VERBOSE=1` | Print per-molecule/model numerical errors on rank zero. |
+
+Failure dumps use these same names in the test's working directory. Replay
+evaluates only molecules with a saved pair, so a single failed molecule is
+sufficient. An incomplete pair, invalid matrix extents, or a directory with no
+matching pairs fails the test rather than passing silently.
 
 On failure, preserve the printed seed in the issue or pull request. Store a
 replay density only when it adds a stable regression case that a seed cannot

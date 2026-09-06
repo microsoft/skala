@@ -132,6 +132,12 @@ foreach(_skalaxc_interface_property
     INTERFACE_LINK_LIBRARIES)
   get_target_property(_skalaxc_interface_value skalaxc
                       ${_skalaxc_interface_property})
+  if(_skalaxc_interface_property STREQUAL "INTERFACE_INCLUDE_DIRECTORIES")
+    list(REMOVE_ITEM _skalaxc_interface_value
+      "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>"
+      "$<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>"
+      "$<INSTALL_INTERFACE:include>")
+  endif()
   if(_skalaxc_interface_value MATCHES
       "[Gg]au[Xx][Cc]|[Tt]orch|c10|[Ee]igen|[Ee]xch[Cc][Xx]|[Ii]ntegrator[Xx][Xx]|[Nn]lohmann")
     message(FATAL_ERROR

@@ -242,7 +242,10 @@ bool caller_owned_potential_api_works(const std::string& fixture) {
   spin.setConstant(-2.0);
   const double caller_owned_exc =
       built.integrator.eval_exc_vxc(density.scalar, density.spin, scalar, spin);
-  if (std::abs(caller_owned_exc - allocated_exc) > 1e-12 ||
+  if (!std::isfinite(allocated_exc) || !std::isfinite(caller_owned_exc) ||
+      !allocated_scalar.allFinite() || !allocated_spin.allFinite() ||
+      !scalar.allFinite() || !spin.allFinite() ||
+      std::abs(caller_owned_exc - allocated_exc) > 1e-12 ||
       (scalar - allocated_scalar).cwiseAbs().maxCoeff() > 1e-12 ||
       (spin - allocated_spin).cwiseAbs().maxCoeff() > 1e-12)
     return false;
@@ -275,8 +278,12 @@ bool gradient_api_works(const std::string& fixture) {
   const auto aggressive_gradient =
       aggressive.integrator.eval_exc_grad(density.scalar, density.spin);
   if (gradient.size() != static_cast<std::size_t>(3 * natoms)) return false;
+  if (caller_owned_gradient.size() != gradient.size()) return false;
   for (std::size_t i = 0; i < gradient.size(); ++i)
-    if (std::abs(caller_owned_gradient[i] - gradient[i]) > 1e-12) return false;
+    if (!std::isfinite(caller_owned_gradient[i]) ||
+        !std::isfinite(gradient[i]) ||
+        std::abs(caller_owned_gradient[i] - gradient[i]) > 1e-12)
+      return false;
   if (aggressive_gradient.size() != gradient.size()) return false;
 
   std::vector<double> invalid_gradient(gradient.size() + 1, 19.0);

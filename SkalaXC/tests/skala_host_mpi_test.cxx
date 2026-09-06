@@ -91,12 +91,17 @@ TEST_CASE("Skala host evaluation uses the runtime MPI subcommunicator",
       subcomm_result.scalar_potential, self_result.scalar_potential);
   const double spin_error = SkalaXC::test::matrix_error_per_basis(
       subcomm_result.spin_potential, self_result.spin_potential);
-  REQUIRE(subcomm_result.gradient.size() == self_result.gradient.size());
+  REQUIRE(subcomm_result.gradient.size() == 3 * system.molecule.natoms());
+  REQUIRE(self_result.gradient.size() == 3 * system.molecule.natoms());
   double gradient_error = 0.0;
-  for (std::size_t index = 0; index < self_result.gradient.size(); ++index)
+  for (std::size_t index = 0; index < self_result.gradient.size(); ++index) {
+    INFO("gradient component=" << index);
+    REQUIRE(std::isfinite(subcomm_result.gradient[index]));
+    REQUIRE(std::isfinite(self_result.gradient[index]));
     gradient_error = std::max(
         gradient_error,
         std::abs(subcomm_result.gradient[index] - self_result.gradient[index]));
+  }
 
   INFO("subcommunicator color=" << color);
   CHECK(exc_error <= 1e-10);

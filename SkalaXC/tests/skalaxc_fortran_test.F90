@@ -13,7 +13,7 @@
 
 program skalaxc_fortran_test
    use, intrinsic :: iso_c_binding
-   use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
+   use, intrinsic :: ieee_arithmetic, only: ieee_is_finite, ieee_value, ieee_quiet_nan
    use skalaxc
 #ifdef SKALAXC_HAS_MPI
    use mpi
@@ -462,7 +462,9 @@ contains
       type(skalaxc_functional_t)          :: func
       type(skalaxc_xc_integrator_t)       :: xc
       real(c_double), allocatable :: Ps(:), Pz(:), VXCs(:), VXCz(:), one(:)
+      real(c_double), allocatable :: VXCs_ref(:), VXCz_ref(:)
       real(c_double) :: exc, exc_ref, rel_err, denom, sym_err, d
+      real(c_double) :: vxcs_error, vxcz_error
       integer(c_int) :: status
       integer(c_int64_t) :: nbf, n2, i, j
       integer(hid_t) :: file_id
@@ -490,13 +492,23 @@ contains
       end if
 
       nbf = xc%nbf()
+      if (nbf <= 0) then
+         write (*, '(A,A,A)') '[FAIL] ', trim(name), ' : nbf <= 0'
+         return
+      end if
       n2 = nbf*nbf
-      allocate (Ps(n2), Pz(n2), VXCs(n2), VXCz(n2), one(1))
+      allocate (Ps(n2), Pz(n2), VXCs(n2), VXCz(n2), one(1), &
+                VXCs_ref(n2), VXCz_ref(n2))
+      exc = ieee_value(0.0_c_double, ieee_quiet_nan)
+      VXCs = exc
+      VXCz = exc
 
       call h5fopen_f(path, H5F_ACC_RDONLY_F, file_id, e)
       ok = (e == 0)
       if (ok) ok = read_dset(file_id, '/DENSITY_SCALAR', Ps, [int(n2, hsize_t)])
       if (ok) ok = read_dset(file_id, '/DENSITY_Z', Pz, [int(n2, hsize_t)])
+      if (ok) ok = read_dset(file_id, '/VXC_SCALAR', VXCs_ref, [int(n2, hsize_t)])
+      if (ok) ok = read_dset(file_id, '/VXC_Z', VXCz_ref, [int(n2, hsize_t)])
       if (ok) ok = read_dset(file_id, '/EXC', one, [1_hsize_t])
       if (e == 0) call h5fclose_f(file_id, e)
       if (.not. ok) then
@@ -511,6 +523,18 @@ contains
             trim(skalaxc_last_error())
          return
       end if
+
+      if (.not. ieee_is_finite(exc) .or. .not. ieee_is_finite(exc_ref) .or. &
+          .not. all(ieee_is_finite(VXCs)) .or. &
+          .not. all(ieee_is_finite(VXCz)) .or. &
+          .not. all(ieee_is_finite(VXCs_ref)) .or. &
+          .not. all(ieee_is_finite(VXCz_ref))) then
+         write (*, '(A,A,A)') '[FAIL] ', trim(name), &
+            ' : non-finite energy, potential, or reference'
+         return
+      end if
+      vxcs_error = sqrt(sum((VXCs - VXCs_ref)**2))/real(nbf, c_double)
+      vxcz_error = sqrt(sum((VXCz - VXCz_ref)**2))/real(nbf, c_double)
 
       if (timing_enabled) then
          status = xc%diagnostics(diagnostics)
@@ -571,20 +595,24 @@ contains
          do i = 1, nbf
             d = abs(VXCs((j - 1)*nbf + i) - VXCs((i - 1)*nbf + j))
             if (d > sym_err) sym_err = d
+            d = abs(VXCz((j - 1)*nbf + i) - VXCz((i - 1)*nbf + j))
+            if (d > sym_err) sym_err = d
          end do
       end do
 
       denom = max(1.0_c_double, abs(exc_ref))
       rel_err = abs(exc - exc_ref)/denom
 
-      if (rel_err < 1e-5_c_double .and. sym_err < 1e-10_c_double) then
-         write (*, '(A,A,A,I0,A,ES20.10,A,ES10.2,A,ES10.2)') '[PASS] ', &
+      if (rel_err < 1e-5_c_double .and. sym_err < 1e-10_c_double .and. &
+          vxcs_error < 1e-7_c_double .and. vxcz_error < 1e-10_c_double) then
+         write (*, '(A,A,A,I0,A,ES20.10,4(A,ES10.2))') '[PASS] ', &
             trim(name), ' : nbf=', nbf, ' EXC=', exc, ' rel=', rel_err, &
-            ' sym=', sym_err
+            ' sym=', sym_err, ' vxcs=', vxcs_error, ' vxcz=', vxcz_error
          rc = 0
       else
-         write (*, '(A,A,A,ES20.10,A,ES10.2,A,ES10.2)') '[FAIL] ', trim(name), &
-            ' : EXC=', exc, ' rel=', rel_err, ' sym=', sym_err
+         write (*, '(A,A,A,ES20.10,4(A,ES10.2))') '[FAIL] ', trim(name), &
+            ' : EXC=', exc, ' rel=', rel_err, ' sym=', sym_err, &
+            ' vxcs=', vxcs_error, ' vxcz=', vxcz_error
       end if
 
    end function run_case

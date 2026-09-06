@@ -147,7 +147,7 @@ target_compile_definitions(skalaxc_unit_test PRIVATE
 # `skalaxc_unit_test "[skala][gradient-numerical]"`.
 catch_discover_tests(skalaxc_unit_test
   TEST_PREFIX "skalaxc_unit."
-  TEST_SPEC "~[mpi-only]"
+  TEST_SPEC "~[mpi-only],[gradient-numerical]"
   PROPERTIES ENVIRONMENT "SKALAXC_MODEL_PATH=${SKALAXC_MODEL_PATH}")
 
 # The traditional-integration test is written to validate the replicated MPI path
@@ -250,6 +250,9 @@ endif()
 if(SKALAXC_HAS_HDF5 AND HDF5_FOUND AND HDF5_C_LIBRARIES)
   add_executable(skalaxc_c_api_test skalaxc_c_api_test.c)
   target_link_libraries(skalaxc_c_api_test PRIVATE skalaxc ${HDF5_C_LIBRARIES})
+  if(UNIX)
+    target_link_libraries(skalaxc_c_api_test PRIVATE m)
+  endif()
   target_include_directories(skalaxc_c_api_test PRIVATE ${HDF5_INCLUDE_DIRS})
   if(SKALAXC_ENABLE_MPI)
     find_package(MPI REQUIRED COMPONENTS C)

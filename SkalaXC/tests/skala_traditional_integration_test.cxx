@@ -59,7 +59,10 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
+#include <limits>
+#include <optional>
 #include <random>
 #include <stdexcept>
 #include <string>
@@ -198,21 +201,49 @@ struct DensityPair {
   Eigen::MatrixXd Ps, Pz;
 };
 
+std::string density_file_base(const std::filesystem::path& directory,
+                              const std::string& name) {
+  return (directory / ("density_" + name)).string();
+}
+
+void save_density(const std::filesystem::path& directory,
+                  const std::string& name, const DensityPair& density) {
+  const auto base = density_file_base(directory, name);
+  if (!density.Ps.allFinite() || !density.Pz.allFinite())
+    throw std::runtime_error("Cannot save non-finite densities to " + base);
+  if (!Eigen::saveMarketDense(density.Ps, base + "_scalar.mtx") ||
+      !Eigen::saveMarketDense(density.Pz, base + "_z.mtx"))
+    throw std::runtime_error("Failed to save densities to " + base +
+                             "_{scalar,z}.mtx");
+}
+
 /**
  * @brief Generate (or replay from disk) the density pair for one molecule.
  * @param name Molecule label used for replay/dump file names.
  * @param nbf Number of AO basis functions.
  * @param rng Seeded generator (advanced only when generating).
  * @param replay_dir If non-null, load densities from this directory instead.
+ * @return No value if neither replay file exists for this molecule.
  */
-DensityPair make_density(const std::string& name, int nbf, std::mt19937_64& rng,
-                         const char* replay_dir) {
+std::optional<DensityPair> make_density(const std::string& name, int nbf,
+                                        std::mt19937_64& rng,
+                                        const char* replay_dir) {
   DensityPair d;
   if (replay_dir) {
-    const std::string base = std::string(replay_dir) + "/density_" + name;
+    const auto base = density_file_base(replay_dir, name);
+    const bool has_scalar = std::filesystem::exists(base + "_scalar.mtx");
+    const bool has_spin = std::filesystem::exists(base + "_z.mtx");
+    if (!has_scalar && !has_spin) return std::nullopt;
+    if (!has_scalar || !has_spin)
+      throw std::runtime_error("Incomplete replay density pair: " + base +
+                               "_{scalar,z}.mtx");
     if (!Eigen::loadMarketDense(d.Ps, base + "_scalar.mtx") ||
         !Eigen::loadMarketDense(d.Pz, base + "_z.mtx"))
       throw std::runtime_error("Failed to load replay densities from " + base +
+                               "_{scalar,z}.mtx");
+    if (d.Ps.rows() != nbf || d.Ps.cols() != nbf || d.Pz.rows() != nbf ||
+        d.Pz.cols() != nbf || !d.Ps.allFinite() || !d.Pz.allFinite())
+      throw std::runtime_error("Invalid replay density matrices: " + base +
                                "_{scalar,z}.mtx");
     return d;
   }
@@ -348,6 +379,85 @@ std::uint64_t choose_seed(const GauXC::RuntimeEnvironment& rt) {
 
 }  // namespace
 
+TEST_CASE("Traditional density dumps support partial replay",
+          "[skala][density-replay]") {
+  struct TemporaryDirectory {
+    std::filesystem::path path;
+
+    TemporaryDirectory() {
+      std::random_device random;
+      do {
+        path = std::filesystem::temp_directory_path() /
+               ("skalaxc-density-replay-" + std::to_string(random()));
+      } while (!std::filesystem::create_directory(path));
+    }
+
+    ~TemporaryDirectory() {
+      std::error_code error;
+      std::filesystem::remove_all(path, error);
+    }
+  } temporary;
+
+  const auto directory = temporary.path.string();
+  std::mt19937_64 rng(20260729);
+  const auto generated = make_density("hcn", 3, rng, nullptr);
+  REQUIRE(generated.has_value());
+  const auto rng_before_replay = rng;
+
+  SECTION("missing molecules do not generate replacement densities") {
+    CHECK_FALSE(make_density("h2o", 3, rng, directory.c_str()).has_value());
+  }
+
+  SECTION("a failure dump can be replayed without other molecules") {
+    save_density(temporary.path, "hcn", *generated);
+    REQUIRE(std::filesystem::exists(temporary.path / "density_hcn_scalar.mtx"));
+    REQUIRE(std::filesystem::exists(temporary.path / "density_hcn_z.mtx"));
+    CHECK_FALSE(make_density("h2o", 3, rng, directory.c_str()).has_value());
+    const auto replayed = make_density("hcn", 3, rng, directory.c_str());
+    REQUIRE(replayed.has_value());
+    CHECK(replayed->Ps.isApprox(generated->Ps, 1e-14));
+    CHECK(replayed->Pz.isApprox(generated->Pz, 1e-14));
+    CHECK_FALSE(make_density("hcl", 3, rng, directory.c_str()).has_value());
+  }
+
+  SECTION("a missing scalar or spin file is rejected") {
+    save_density(temporary.path, "hcn", *generated);
+    SECTION("missing scalar") {
+      REQUIRE(
+          std::filesystem::remove(temporary.path / "density_hcn_scalar.mtx"));
+    }
+    SECTION("missing spin") {
+      REQUIRE(std::filesystem::remove(temporary.path / "density_hcn_z.mtx"));
+    }
+    CHECK_THROWS_AS(make_density("hcn", 3, rng, directory.c_str()),
+                    std::runtime_error);
+  }
+
+  SECTION("wrong matrix extents are rejected before evaluation") {
+    DensityPair invalid = *generated;
+    SECTION("scalar extent") { invalid.Ps = Eigen::MatrixXd::Zero(2, 3); }
+    SECTION("spin extent") { invalid.Pz = Eigen::MatrixXd::Zero(3, 2); }
+    save_density(temporary.path, "hcn", invalid);
+    CHECK_THROWS_AS(make_density("hcn", 3, rng, directory.c_str()),
+                    std::runtime_error);
+  }
+
+  SECTION("non-finite densities are rejected before writing") {
+    DensityPair invalid = *generated;
+    SECTION("NaN scalar density") {
+      invalid.Ps(0, 0) = std::numeric_limits<double>::quiet_NaN();
+    }
+    SECTION("infinite spin density") {
+      invalid.Pz(0, 0) = std::numeric_limits<double>::infinity();
+    }
+    CHECK_THROWS_AS(save_density(temporary.path, "hcn", invalid),
+                    std::runtime_error);
+    CHECK(std::filesystem::is_empty(temporary.path));
+  }
+
+  CHECK(rng == rng_before_replay);
+}
+
 TEST_CASE("SkalaXC baselines reproduce GauXC traditional functionals",
           "[skala][traditional-integration]") {
   // The reference path uses GauXC's runtime; the Skala path uses SkalaXC's own
@@ -411,14 +521,18 @@ TEST_CASE("SkalaXC baselines reproduce GauXC traditional functionals",
   const double vxc_tol = 2e-5;
   const double grad_tol = 1e-4;
 
+  std::size_t evaluated_molecules = 0;
   for (const auto& mol_case : molecules) {
     const GauXC::Molecule mol = make_molecule(mol_case.atoms);
     GauXC::BasisSet<double> basis =
         GauXC::parse_basis(mol, basis_path, GauXC::SphericalType(true));
     const int nbf = static_cast<int>(basis.nbf());
 
-    const DensityPair density =
+    const auto selected_density =
         make_density(mol_case.name, nbf, rng, replay_dir);
+    if (!selected_density) continue;
+    const DensityPair& density = *selected_density;
+    ++evaluated_molecules;
 
     // A positive semidefinite scalar density guarantees a nonnegative on-grid
     // density; verify it explicitly rather than trusting diagonal dominance.
@@ -437,13 +551,27 @@ TEST_CASE("SkalaXC baselines reproduce GauXC traditional functionals",
       const ReferenceResult ref = evaluate_reference(
           rt, mol, mg, basis, fun_case.exchcxx_id, density.Ps, density.Pz);
 
+      INFO("molecule=" << mol_case.name
+                       << " functional=" << fun_case.skala_model
+                       << " nbf=" << nbf << " seed=" << seed);
+      REQUIRE(std::isfinite(skala.exc));
+      REQUIRE(std::isfinite(ref.exc));
+      REQUIRE(skala.vxc_scalar.allFinite());
+      REQUIRE(ref.vxc_scalar.allFinite());
+      REQUIRE(skala.vxc_z.allFinite());
+      REQUIRE(ref.vxc_z.allFinite());
+
       const double exc_err = rel_err(skala.exc, ref.exc);
       const double vxcs_err = matrix_rel_err(skala.vxc_scalar, ref.vxc_scalar);
       const double vxcz_err = matrix_rel_err(skala.vxc_z, ref.vxc_z);
 
       double grad_abs_err = 0.0, grad_max = 0.0;
-      REQUIRE(skala.gradient.size() == ref.gradient.size());
+      REQUIRE(skala.gradient.size() == 3 * mol.size());
+      REQUIRE(ref.gradient.size() == 3 * mol.size());
       for (std::size_t i = 0; i < ref.gradient.size(); ++i) {
+        INFO("gradient component=" << i);
+        REQUIRE(std::isfinite(skala.gradient[i]));
+        REQUIRE(std::isfinite(ref.gradient[i]));
         grad_abs_err = std::max(grad_abs_err,
                                 std::abs(skala.gradient[i] - ref.gradient[i]));
         grad_max = std::max(grad_max, std::abs(ref.gradient[i]));
@@ -461,10 +589,8 @@ TEST_CASE("SkalaXC baselines reproduce GauXC traditional functionals",
       const bool ok = exc_err < exc_tol && vxcs_err < vxc_tol &&
                       vxcz_err < vxc_tol && grad_err < grad_tol;
       if (!ok && is_root && !replay_dir) {
-        const std::string base =
-            std::string("skalaxc_integration_fail_density_") + mol_case.name;
-        Eigen::saveMarketDense(density.Ps, base + "_scalar.mtx");
-        Eigen::saveMarketDense(density.Pz, base + "_z.mtx");
+        const auto base = density_file_base(".", mol_case.name);
+        save_density(".", mol_case.name, density);
         std::cerr << "[skala][traditional-integration] MISMATCH for "
                   << mol_case.name << " / " << fun_case.skala_model
                   << ". Reproduce with SKALAXC_TEST_SEED=" << seed
@@ -472,9 +598,6 @@ TEST_CASE("SkalaXC baselines reproduce GauXC traditional functionals",
                   << base << "_{scalar,z}.mtx\n";
       }
 
-      INFO("molecule=" << mol_case.name
-                       << " functional=" << fun_case.skala_model
-                       << " nbf=" << nbf << " seed=" << seed);
       INFO("EXC_skala=" << skala.exc << " EXC_ref=" << ref.exc);
       INFO("exc_rel_err=" << exc_err << " vxcs_rel_err=" << vxcs_err
                           << " vxcz_rel_err=" << vxcz_err
@@ -485,4 +608,7 @@ TEST_CASE("SkalaXC baselines reproduce GauXC traditional functionals",
       CHECK(grad_err < grad_tol);
     }
   }
+  INFO("No matching replay density pairs in "
+       << (replay_dir ? replay_dir : ""));
+  REQUIRE(evaluated_molecules > 0);
 }

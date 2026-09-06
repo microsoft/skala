@@ -546,9 +546,11 @@ static int run_case(const char* path, const char* model, const char* name,
   skalaxc_functional_t func = NULL;
   skalaxc_xc_integrator_t xc = NULL;
   double *Ps = NULL, *Pz = NULL, *VXCs = NULL, *VXCz = NULL;
-  double exc_ref = 0.0, exc = 0.0, sym_err = 0.0, denom, rel_err;
+  double *VXCs_ref = NULL, *VXCz_ref = NULL;
+  double exc_ref = 0.0, exc = NAN, sym_err = 0.0, denom, rel_err;
+  double vxcs_error = 0.0, vxcz_error = 0.0;
   int64_t nbf = 0, i, j;
-  size_t n2 = 0;
+  size_t n2 = 0, index;
   hid_t file = -1;
   int rc = 1;
   skalaxc_status_t st;
@@ -571,14 +573,22 @@ static int run_case(const char* path, const char* model, const char* name,
   Pz = (double*)calloc(n2, sizeof(double));
   VXCs = (double*)calloc(n2, sizeof(double));
   VXCz = (double*)calloc(n2, sizeof(double));
-  if (!Ps || !Pz || !VXCs || !VXCz) {
+  VXCs_ref = (double*)calloc(n2, sizeof(double));
+  VXCz_ref = (double*)calloc(n2, sizeof(double));
+  if (!Ps || !Pz || !VXCs || !VXCz || !VXCs_ref || !VXCz_ref) {
     printf("[FAIL] %s : out of memory\n", name);
     goto cleanup;
+  }
+  for (index = 0; index < n2; ++index) {
+    VXCs[index] = NAN;
+    VXCz[index] = NAN;
   }
 
   file = H5Fopen(path, H5F_ACC_RDONLY, H5P_DEFAULT);
   if (file < 0 || read_doubles(file, "/DENSITY_SCALAR", Ps) ||
       read_doubles(file, "/DENSITY_Z", Pz) ||
+      read_doubles(file, "/VXC_SCALAR", VXCs_ref) ||
+      read_doubles(file, "/VXC_Z", VXCz_ref) ||
       read_doubles(file, "/EXC", &exc_ref)) {
     printf("[FAIL] %s : HDF5 read failed\n", name);
     goto cleanup;
@@ -592,22 +602,50 @@ static int run_case(const char* path, const char* model, const char* name,
     goto cleanup;
   }
 
+  if (!isfinite(exc) || !isfinite(exc_ref)) {
+    printf("[FAIL] %s : non-finite energy or reference\n", name);
+    goto cleanup;
+  }
+  for (index = 0; index < n2; ++index) {
+    double scalar_difference, spin_difference;
+    if (!isfinite(VXCs[index]) || !isfinite(VXCz[index]) ||
+        !isfinite(VXCs_ref[index]) || !isfinite(VXCz_ref[index])) {
+      printf("[FAIL] %s : non-finite potential or reference at index %zu\n",
+             name, index);
+      goto cleanup;
+    }
+    scalar_difference = VXCs[index] - VXCs_ref[index];
+    spin_difference = VXCz[index] - VXCz_ref[index];
+    vxcs_error += scalar_difference * scalar_difference;
+    vxcz_error += spin_difference * spin_difference;
+  }
+  vxcs_error = sqrt(vxcs_error) / (double)nbf;
+  vxcz_error = sqrt(vxcz_error) / (double)nbf;
+
   for (i = 0; i < nbf; ++i)
     for (j = 0; j < nbf; ++j) {
       double d = fabs(VXCs[i * nbf + j] - VXCs[j * nbf + i]);
+      if (d > sym_err) sym_err = d;
+      d = fabs(VXCz[i * nbf + j] - VXCz[j * nbf + i]);
       if (d > sym_err) sym_err = d;
     }
 
   denom = fabs(exc_ref) > 1.0 ? fabs(exc_ref) : 1.0;
   rel_err = fabs(exc - exc_ref) / denom;
 
-  if (rel_err < 1e-5 && sym_err < 1e-10) {
-    printf("[PASS] %s : nbf=%lld EXC=%.10f (ref %.10f, rel %.2e) sym=%.2e\n",
-           name, (long long)nbf, exc, exc_ref, rel_err, sym_err);
+  if (rel_err < 1e-5 && sym_err < 1e-10 && vxcs_error < 1e-7 &&
+      vxcz_error < 1e-10) {
+    printf(
+        "[PASS] %s : nbf=%lld EXC=%.10f (ref %.10f, rel %.2e) sym=%.2e "
+        "vxcs=%.2e vxcz=%.2e\n",
+        name, (long long)nbf, exc, exc_ref, rel_err, sym_err, vxcs_error,
+        vxcz_error);
     rc = 0;
   } else {
-    printf("[FAIL] %s : EXC=%.10f ref=%.10f rel=%.2e sym=%.2e\n", name, exc,
-           exc_ref, rel_err, sym_err);
+    printf(
+        "[FAIL] %s : EXC=%.10f ref=%.10f rel=%.2e sym=%.2e "
+        "vxcs=%.2e vxcz=%.2e\n",
+        name, exc, exc_ref, rel_err, sym_err, vxcs_error, vxcz_error);
     rc = 1;
   }
 
@@ -617,6 +655,8 @@ cleanup:
   free(Pz);
   free(VXCs);
   free(VXCz);
+  free(VXCs_ref);
+  free(VXCz_ref);
   skalaxc_xc_integrator_destroy(xc);
   skalaxc_functional_destroy(func);
   skalaxc_molecular_weights_destroy(mw);
