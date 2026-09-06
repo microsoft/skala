@@ -100,6 +100,7 @@ discovery and are available through these MPI-enabled CTest registrations:
 | `skalaxc_unit_mpi.host_subcommunicator` | 4 | Full host TPSS EXC/VXC/gradient isolation between two communicators. |
 | `skalaxc_unit_mpi.atomic_domain_ownership` | 3 | Exactly one owner per complete atomic domain. |
 | `skalaxc_unit_mpi.model_broadcast` | 3 | Runtime-rank-zero model loading, broadcast, and error propagation. |
+| `skalaxc_unit_mpi.evaluation_errors` | 3 | Idle-rank evaluation failures, error messages, and communicator reuse, including split communicators; 60-second timeout. |
 | `skalaxc_unit_mpi.traditional_integration` | 3 | Replicated SkalaXC/GauXC parity. |
 | `skalaxc_unit_mpi.cuda_idle_rank` | 3 | CUDA evaluation when one rank owns no atomic domain. |
 | `skalaxc_unit_mpi.cuda_subcommunicator` | 4 | CUDA isolation between two runtime communicators. |
@@ -113,7 +114,8 @@ OMP_NUM_THREADS=4 pixi run -e skalaxc-host ctest \
   -R '^skalaxc_unit_mpi\.host_subcommunicator$' --output-on-failure
 ```
 
-Multi-rank registrations set `OMP_NUM_THREADS=1` to avoid oversubscription.
+Multi-rank registrations generally set `OMP_NUM_THREADS=1` to avoid oversubscription.
+The focused evaluation-error regression uses `OMP_NUM_THREADS=4`.
 Use the project's normal OpenMP thread setting for serial tests.
 
 ## Fixtures and provenance

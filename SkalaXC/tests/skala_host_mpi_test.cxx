@@ -8,6 +8,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
+#include <string>
 #include <tuple>
 #include <vector>
 
@@ -53,6 +55,67 @@ HostEvaluation evaluate_host(const SkalaXC::RuntimeEnvironment& runtime,
 }
 
 }  // namespace
+
+TEST_CASE("Host evaluation errors reach idle ranks",
+          "[skala][mpi][host-evaluation-errors]") {
+#ifdef SKALAXC_HAS_MPI
+  MPI_Comm communicator = MPI_COMM_WORLD;
+  SECTION("world communicator") {}
+  SECTION("split communicator") {
+    int world_rank = 0;
+    MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
+    MPI_Comm_split(MPI_COMM_WORLD, world_rank % 2, -world_rank, &communicator);
+  }
+#endif
+  {
+    SkalaXC::RuntimeEnvironment runtime{SKALAXC_MPI_CODE(communicator)};
+    auto system = SkalaXC::test::make_rotated_h2_sto3g_system(0.0);
+    system.molecule.resize(1);
+    system.basis.resize(1);
+    auto grid = SkalaXC::test::make_molgrid(
+        system.molecule, SkalaXC::AtomicGridSizeDefault::FineGrid);
+    auto load_balancer =
+        SkalaXC::LoadBalancerFactory(SkalaXC::ExecutionSpace::Host)
+            .get_instance(runtime, system.molecule, grid, system.basis);
+    SkalaXC::MolecularWeightsFactory(SkalaXC::ExecutionSpace::Host, "Default",
+                                     {})
+        .get_instance()
+        .modify_weights(load_balancer);
+    auto integrator =
+        SkalaXC::XCIntegratorFactory<Matrix>(SkalaXC::ExecutionSpace::Host)
+            .get_instance(SkalaXC::functional_type("LDA"), load_balancer);
+    const Matrix invalid =
+        Matrix::Constant(1, 1, std::numeric_limits<double>::quiet_NaN());
+    const Matrix spin = Matrix::Zero(1, 1);
+    for (const bool gradient : {false, true}) {
+      std::string error;
+      try {
+        if (gradient)
+          (void)integrator.eval_exc_grad(invalid, spin);
+        else
+          (void)integrator.eval_exc_vxc(invalid, spin);
+      } catch (const SkalaXC::Exception& exception) {
+        error = exception.what();
+      }
+      CHECK(error.find("NaN") != std::string::npos);
+#ifdef SKALAXC_HAS_MPI
+      int failures = error.empty() ? 0 : 1;
+      MPI_Allreduce(MPI_IN_PLACE, &failures, 1, MPI_INT, MPI_SUM, communicator);
+      CHECK(failures == runtime.comm_size());
+#endif
+    }
+    const Matrix valid = Matrix::Constant(1, 1, 0.5);
+    CHECK(std::isfinite(std::get<0>(integrator.eval_exc_vxc(valid, spin))));
+    const auto gradient = integrator.eval_exc_grad(valid, spin);
+    const bool finite_gradient =
+        std::all_of(gradient.begin(), gradient.end(),
+                    [](double value) { return std::isfinite(value); });
+    CHECK(finite_gradient);
+  }
+#ifdef SKALAXC_HAS_MPI
+  if (communicator != MPI_COMM_WORLD) MPI_Comm_free(&communicator);
+#endif
+}
 
 TEST_CASE("Skala host evaluation uses the runtime MPI subcommunicator",
           "[skala][mpi][host-subcomm][mpi-only]") {

@@ -9,6 +9,7 @@
  * is never reordered (atom ordering is applied through an index permutation).
  */
 #include "skala_host_driver.hpp"
+#include "collective_error.hpp"
 #include "component_matrix_map.hpp"
 #include "exceptions.hpp"
 #include "model_grid_exchange.hpp"
@@ -388,55 +389,58 @@ double SkalaHostDriver::eval_exc_vxc_uks(ConstColMajorMatrixMap scalar_density,
   auto& tasks = lb_.get_tasks();
   auto rt = lb_.runtime();
   double N_EL = 0.0;
-
-  const auto& feature_keys = model_->feature_keys();
-  const bool is_gga = model_->is_gga();
-  const bool is_mgga = model_->is_mgga();
-
-  // Local features: collocation -> xmat -> uvvar.
-  {
-    detail::HostTimingScope timer(diagnostics_,
-                                  TimingMetric::FeatureConstruction);
-    pre_skala_local_work_(basis, scalar_density, spin_density, N_EL, is_gga,
-                          is_mgga, false);
-  }
-
   double EXC = 0.0;
-  for (const auto& batch : model_grid_exchange_->local_batches()) {
-    FeatureDict features_dict;
-    {
-      detail::HostTimingScope timer(diagnostics_,
-                                    TimingMetric::ModelBatchPacking);
-      features_dict = model_grid_exchange_->prepare_local_features(
-          batch, tasks, task_features_, raw_weights_, lb_.molecule(),
-          feature_keys);
-    }
-    diagnostics_.record_model_batch(types::DomainCount{batch.atoms.size()});
-    at::Tensor exc;
-    {
-      detail::HostTimingScope timer(diagnostics_, TimingMetric::ModelForward);
-      exc = evaluate_model_energy(*model_, features_dict,
-                                  c10::Device(c10::DeviceType::CPU));
-      validate_model_tensor_finite(exc, "host model energy");
-    }
-    {
-      detail::HostTimingScope timer(diagnostics_, TimingMetric::ModelBackward);
-      exc.backward();
-    }
-    EXC += exc.item().to<double>();
-    {
-      detail::HostTimingScope timer(diagnostics_,
-                                    TimingMetric::PotentialMapping);
-      model_grid_exchange_->distribute_local_potentials(
-          batch, is_gga || is_mgga, is_mgga, features_dict, task_potentials_);
-    }
-  }
 
-  {
-    detail::HostTimingScope timer(diagnostics_, TimingMetric::AOAssembly);
-    post_skala_local_work_(basis, scalar_potential, spin_potential, is_gga,
-                           is_mgga, false);
-  }
+  mpi::collective_try(rt, [&] {
+    const auto& feature_keys = model_->feature_keys();
+    const bool is_gga = model_->is_gga();
+    const bool is_mgga = model_->is_mgga();
+
+    // Local features: collocation -> xmat -> uvvar.
+    {
+      detail::HostTimingScope timer(diagnostics_,
+                                    TimingMetric::FeatureConstruction);
+      pre_skala_local_work_(basis, scalar_density, spin_density, N_EL, is_gga,
+                            is_mgga, false);
+    }
+
+    for (const auto& batch : model_grid_exchange_->local_batches()) {
+      FeatureDict features_dict;
+      {
+        detail::HostTimingScope timer(diagnostics_,
+                                      TimingMetric::ModelBatchPacking);
+        features_dict = model_grid_exchange_->prepare_local_features(
+            batch, tasks, task_features_, raw_weights_, lb_.molecule(),
+            feature_keys);
+      }
+      diagnostics_.record_model_batch(types::DomainCount{batch.atoms.size()});
+      at::Tensor exc;
+      {
+        detail::HostTimingScope timer(diagnostics_, TimingMetric::ModelForward);
+        exc = evaluate_model_energy(*model_, features_dict,
+                                    c10::Device(c10::DeviceType::CPU));
+        validate_model_tensor_finite(exc, "host model energy");
+      }
+      {
+        detail::HostTimingScope timer(diagnostics_,
+                                      TimingMetric::ModelBackward);
+        exc.backward();
+      }
+      EXC += exc.item().to<double>();
+      {
+        detail::HostTimingScope timer(diagnostics_,
+                                      TimingMetric::PotentialMapping);
+        model_grid_exchange_->distribute_local_potentials(
+            batch, is_gga || is_mgga, is_mgga, features_dict, task_potentials_);
+      }
+    }
+
+    {
+      detail::HostTimingScope timer(diagnostics_, TimingMetric::AOAssembly);
+      post_skala_local_work_(basis, scalar_potential, spin_potential, is_gga,
+                             is_mgga, false);
+    }
+  });
 
 #ifdef GAUXC_HAS_MPI
   if (rt.comm_size() > 1) {
@@ -478,88 +482,92 @@ void SkalaHostDriver::eval_exc_grad_uks(ConstColMajorMatrixMap scalar_density,
                                       TimingMetric::TotalEXCGradient);
   diagnostics_.increment_exc_gradient_calls();
 
-  const auto& feature_keys = model_->feature_keys();
-  const bool is_gga = model_->is_gga();
-  const bool is_mgga = model_->is_mgga();
-
   double N_EL = 0.0;
-  {
-    detail::HostTimingScope timer(diagnostics_,
-                                  TimingMetric::FeatureConstruction);
-    pre_skala_local_work_(basis, scalar_density, spin_density, N_EL, is_gga,
-                          is_mgga, false);
-  }
+  mpi::collective_try(rt, [&] {
+    const auto& feature_keys = model_->feature_keys();
+    const bool is_gga = model_->is_gga();
+    const bool is_mgga = model_->is_mgga();
 
-  gradient.setZero();
-  for (const auto& batch : model_grid_exchange_->local_batches()) {
-    FeatureDict features_dict;
     {
       detail::HostTimingScope timer(diagnostics_,
-                                    TimingMetric::ModelBatchPacking);
-      features_dict = model_grid_exchange_->prepare_local_features(
-          batch, tasks, task_features_, raw_weights_, lb_.molecule(),
-          feature_keys);
-    }
-    diagnostics_.record_model_batch(types::DomainCount{batch.atoms.size()});
-    const auto points_key = feat_map().at(SKALA_FEATURE::POINTS);
-    const auto coords_key = feat_map().at(SKALA_FEATURE::COORDS);
-    const auto weights_key = feat_map().at(SKALA_FEATURE::WEIGHTS);
-    if (features_dict.find(points_key) != features_dict.end())
-      features_dict.at(points_key).requires_grad_(true);
-    if (features_dict.find(coords_key) != features_dict.end())
-      features_dict.at(coords_key).requires_grad_(true);
-    features_dict.at(weights_key).requires_grad_(true);
-
-    at::Tensor exc;
-    {
-      detail::HostTimingScope timer(diagnostics_, TimingMetric::ModelForward);
-      exc = evaluate_model_energy(*model_, features_dict,
-                                  c10::Device(c10::DeviceType::CPU));
-      validate_model_tensor_finite(exc, "host model energy");
-    }
-    {
-      detail::HostTimingScope timer(diagnostics_, TimingMetric::ModelBackward);
-      exc.backward();
+                                    TimingMetric::FeatureConstruction);
+      pre_skala_local_work_(basis, scalar_density, spin_density, N_EL, is_gga,
+                            is_mgga, false);
     }
 
-    auto dE_dw_cpu = validated_model_gradient(features_dict.at(weights_key),
-                                              "host model dE/dw");
-    validate_model_tensor_finite(dE_dw_cpu, "host model dE/dw");
-    std::vector<double> dE_dw_values(
-        static_cast<std::size_t>(batch.point_count.raw()));
-    std::memcpy(dE_dw_values.data(), dE_dw_cpu.data_ptr<double>(),
-                dE_dw_values.size() * sizeof(double));
+    gradient.setZero();
+    for (const auto& batch : model_grid_exchange_->local_batches()) {
+      FeatureDict features_dict;
+      {
+        detail::HostTimingScope timer(diagnostics_,
+                                      TimingMetric::ModelBatchPacking);
+        features_dict = model_grid_exchange_->prepare_local_features(
+            batch, tasks, task_features_, raw_weights_, lb_.molecule(),
+            feature_keys);
+      }
+      diagnostics_.record_model_batch(types::DomainCount{batch.atoms.size()});
+      const auto points_key = feat_map().at(SKALA_FEATURE::POINTS);
+      const auto coords_key = feat_map().at(SKALA_FEATURE::COORDS);
+      const auto weights_key = feat_map().at(SKALA_FEATURE::WEIGHTS);
+      if (features_dict.find(points_key) != features_dict.end())
+        features_dict.at(points_key).requires_grad_(true);
+      if (features_dict.find(coords_key) != features_dict.end())
+        features_dict.at(coords_key).requires_grad_(true);
+      features_dict.at(weights_key).requires_grad_(true);
+
+      at::Tensor exc;
+      {
+        detail::HostTimingScope timer(diagnostics_, TimingMetric::ModelForward);
+        exc = evaluate_model_energy(*model_, features_dict,
+                                    c10::Device(c10::DeviceType::CPU));
+        validate_model_tensor_finite(exc, "host model energy");
+      }
+      {
+        detail::HostTimingScope timer(diagnostics_,
+                                      TimingMetric::ModelBackward);
+        exc.backward();
+      }
+
+      auto dE_dw_cpu = validated_model_gradient(features_dict.at(weights_key),
+                                                "host model dE/dw");
+      validate_model_tensor_finite(dE_dw_cpu, "host model dE/dw");
+      std::vector<double> dE_dw_values(
+          static_cast<std::size_t>(batch.point_count.raw()));
+      std::memcpy(dE_dw_values.data(), dE_dw_cpu.data_ptr<double>(),
+                  dE_dw_values.size() * sizeof(double));
+
+      {
+        detail::HostTimingScope timer(diagnostics_,
+                                      TimingMetric::GradientAssembly);
+        if (features_dict.find(points_key) != features_dict.end()) {
+          auto point_grad = features_dict.at(points_key).grad();
+          model_grid_exchange_->accumulate_local_point_gradient(
+              batch, point_grad, gradient);
+        }
+
+        if (features_dict.find(coords_key) != features_dict.end()) {
+          auto coords_grad = features_dict.at(coords_key).grad();
+          model_grid_exchange_->accumulate_local_coordinate_gradient(
+              batch, coords_grad, gradient);
+        }
+      }
+      {
+        detail::HostTimingScope timer(diagnostics_,
+                                      TimingMetric::PotentialMapping);
+        model_grid_exchange_->distribute_local_potentials(
+            batch, is_gga || is_mgga, is_mgga, features_dict, task_potentials_);
+        model_grid_exchange_->distribute_local_dE_dw(
+            batch, std::move(dE_dw_values), task_potentials_);
+      }
+    }
 
     {
       detail::HostTimingScope timer(diagnostics_,
                                     TimingMetric::GradientAssembly);
-      if (features_dict.find(points_key) != features_dict.end()) {
-        auto point_grad = features_dict.at(points_key).grad();
-        model_grid_exchange_->accumulate_local_point_gradient(batch, point_grad,
-                                                              gradient);
-      }
-
-      if (features_dict.find(coords_key) != features_dict.end()) {
-        auto coords_grad = features_dict.at(coords_key).grad();
-        model_grid_exchange_->accumulate_local_coordinate_gradient(
-            batch, coords_grad, gradient);
-      }
+      exc_grad_local_work_(scalar_density, spin_density, gradient, is_gga,
+                           is_mgga);
     }
-    {
-      detail::HostTimingScope timer(diagnostics_,
-                                    TimingMetric::PotentialMapping);
-      model_grid_exchange_->distribute_local_potentials(
-          batch, is_gga || is_mgga, is_mgga, features_dict, task_potentials_);
-      model_grid_exchange_->distribute_local_dE_dw(
-          batch, std::move(dE_dw_values), task_potentials_);
-    }
-  }
-
-  {
-    detail::HostTimingScope timer(diagnostics_, TimingMetric::GradientAssembly);
-    exc_grad_local_work_(scalar_density, spin_density, gradient, is_gga,
-                         is_mgga);
-  }
+  });
 
 #ifdef GAUXC_HAS_MPI
   if (rt.comm_size() > 1) {

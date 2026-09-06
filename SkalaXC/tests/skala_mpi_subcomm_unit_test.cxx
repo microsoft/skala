@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include "collective_error.hpp"
 #include "model_grid_exchange.hpp"
 #include "mpi_wrapper.hpp"
 #include "skala_util.hpp"
@@ -10,7 +11,77 @@
 #include <torch/torch.h>
 
 #include <cstdint>
+#include <stdexcept>
+#include <string>
 #include <vector>
+
+TEST_CASE("Collective evaluation errors preserve communicator agreement",
+          "[skala][mpi][collective-errors]") {
+#ifdef GAUXC_HAS_MPI
+  MPI_Comm communicator = MPI_COMM_WORLD;
+  SECTION("world communicator") {}
+  SECTION("split communicator") {
+    int world_rank = 0;
+    MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
+    MPI_Comm_split(MPI_COMM_WORLD, world_rank % 2, -world_rank, &communicator);
+  }
+#endif
+  {
+    GauXC::RuntimeEnvironment runtime{GAUXC_MPI_CODE(communicator)};
+    int calls = 0;
+    SkalaXC::mpi::collective_try(runtime, [&] { ++calls; });
+    REQUIRE(calls == 1);
+    for (const std::string scenario :
+         {"non-root", "all-ranks", "long", "unknown"}) {
+      INFO("scenario=" << scenario);
+      const int failing_rank =
+          scenario == "all-ranks" ? 0 : runtime.comm_size() - 1;
+      std::string message;
+      bool caught_standard = false;
+      bool caught_unknown = false;
+      try {
+        SkalaXC::mpi::collective_try(runtime, [&] {
+          if (scenario != "all-ranks" && runtime.comm_rank() != failing_rank)
+            return;
+          if (scenario == "unknown") throw std::uint64_t{42};
+          throw std::runtime_error(
+              scenario == "long"
+                  ? std::string(4096, 'x')
+                  : "failure-" + std::to_string(runtime.comm_rank()));
+        });
+      } catch (const std::exception& error) {
+        caught_standard = true;
+        message = error.what();
+      } catch (std::uint64_t value) {
+        caught_unknown = value == 42;
+      }
+      if (runtime.comm_size() > 1) {
+        const auto detail = scenario == "unknown" ? "unknown error"
+                            : scenario == "long"
+                                ? std::string(2047, 'x')
+                                : "failure-" + std::to_string(failing_rank);
+        REQUIRE(caught_standard);
+        REQUIRE(message == "Runtime rank " + std::to_string(failing_rank) +
+                               " evaluation failed: " + detail);
+      } else if (scenario == "unknown") {
+        REQUIRE(caught_unknown);
+      } else {
+        REQUIRE(caught_standard);
+        REQUIRE(message ==
+                (scenario == "long" ? std::string(4096, 'x') : "failure-0"));
+      }
+#ifdef GAUXC_HAS_MPI
+      int participants = 1;
+      MPI_Allreduce(MPI_IN_PLACE, &participants, 1, MPI_INT, MPI_SUM,
+                    communicator);
+      REQUIRE(participants == runtime.comm_size());
+#endif
+    }
+  }
+#ifdef GAUXC_HAS_MPI
+  if (communicator != MPI_COMM_WORLD) MPI_Comm_free(&communicator);
+#endif
+}
 
 TEST_CASE("Eigen MPI collectives use runtime communicator",
           "[skala][mpi][subcomm][mpi-wrapper][mpi-only]") {

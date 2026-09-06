@@ -100,9 +100,20 @@ MPI rank. That rank constructs its features, runs its own model and autograd,
 maps the derivatives back to local tasks, and assembles local AO or
 nuclear-gradient contributions. OpenMP parallelizes atomic-grid generation and
 screening; the CUDA backend keeps collocation and assembly work on the selected
-device. MPI communication is reserved for the final EXC, VXC, electron-count,
-and gradient reductions; model inputs and derivatives are not gathered or
-scattered.
+device. MPI communication during evaluation consists of a failure-status
+agreement followed by the final EXC, VXC, electron-count, and gradient reductions;
+model inputs and derivatives are not gathered or scattered.
+
+All ranks, including idle ranks, participate in the failure-status agreement
+after local work. If a rank-local exception reaches the evaluation handler, the
+lowest failing runtime rank broadcasts its error message (up to 2047 bytes), and
+every rank reports failure instead of entering the numerical reductions. Outputs
+from a failed evaluation must not be used. In serial execution, the original
+exception propagates through the usual public API error translation.
+Callers must invoke the same evaluation on every rank with valid integrator
+handles, buffer layouts, and extents: argument errors raised before the handler
+remain rank-local. This mechanism does not recover from process crashes, MPI
+failures, or exceptions escaping OpenMP worker regions.
 
 During integrator construction, rank zero of the runtime communicator resolves
 and reads the selected TorchScript archive. SkalaXC broadcasts the archive

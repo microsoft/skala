@@ -156,6 +156,15 @@ catch_discover_tests(skalaxc_unit_test
 # on a four-slot CI runner without oversubscription.
 if(SKALAXC_ENABLE_MPI)
   find_package(MPI REQUIRED COMPONENTS CXX)
+  add_test(NAME skalaxc_unit_mpi.evaluation_errors
+    COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 3
+      ${MPIEXEC_PREFLAGS} $<TARGET_FILE:skalaxc_unit_test>
+      "[host-evaluation-errors],[collective-errors]" --order lex --rng-seed 12345
+      ${MPIEXEC_POSTFLAGS})
+  set_tests_properties(skalaxc_unit_mpi.evaluation_errors PROPERTIES
+    TIMEOUT 60
+    ENVIRONMENT
+      "OMP_NUM_THREADS=4;SKALAXC_MODEL_PATH=${SKALAXC_MODEL_PATH}")
   add_test(NAME skalaxc_unit_mpi.subcommunicator
     COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 3
       ${MPIEXEC_PREFLAGS} $<TARGET_FILE:skalaxc_unit_test>
