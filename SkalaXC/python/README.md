@@ -32,6 +32,18 @@ library was built with `SKALAXC_ENABLE_HDF5=ON` (the default), reported as
 `skalaxc.HDF5_ENABLED`. HDF5-disabled builds construct molecules and basis sets
 through `Atom`, `Shell`, and `append()` instead.
 
+Indexing a `Molecule` or `BasisSet` returns an independent value, which remains
+valid after appending elements or deleting the container. Replace an element
+explicitly with item assignment; modifying a retrieved atom does not modify
+the molecule:
+
+```python
+atom = molecule[0]
+atom.x = new_x
+molecule[0] = atom
+basis[0] = replacement_shell
+```
+
 ```python
 import h5py
 import numpy as np

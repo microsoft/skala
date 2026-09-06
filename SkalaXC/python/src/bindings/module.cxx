@@ -357,13 +357,18 @@ NB_MODULE(_skalaxc, module) {
              molecule.push_back(atom);
            })
       .def("__len__", &SkalaXC::Molecule::natoms)
-      .def(
-          "__getitem__",
-          [](SkalaXC::Molecule& molecule, std::size_t index) -> SkalaXC::Atom& {
-            if (index >= molecule.size()) throw nb::index_error();
-            return molecule[index];
-          },
-          nb::rv_policy::reference_internal)
+      .def("__getitem__",
+           [](const SkalaXC::Molecule& molecule,
+              std::size_t index) -> SkalaXC::Atom {
+             if (index >= molecule.size()) throw nb::index_error();
+             return molecule[index];
+           })
+      .def("__setitem__",
+           [](SkalaXC::Molecule& molecule, std::size_t index,
+              const SkalaXC::Atom& atom) {
+             if (index >= molecule.size()) throw nb::index_error();
+             molecule[index] = atom;
+           })
       .def_prop_ro("natoms", &SkalaXC::Molecule::natoms);
 
   nb::class_<Shell>(module, "Shell")
@@ -428,13 +433,18 @@ NB_MODULE(_skalaxc, module) {
                         const Shell& shell) { basis.push_back(shell); })
       .def("__len__",
            [](const SkalaXC::BasisSet<double>& basis) { return basis.size(); })
-      .def(
-          "__getitem__",
-          [](SkalaXC::BasisSet<double>& basis, std::size_t index) -> Shell& {
-            if (index >= basis.size()) throw nb::index_error();
-            return basis[index];
-          },
-          nb::rv_policy::reference_internal)
+      .def("__getitem__",
+           [](const SkalaXC::BasisSet<double>& basis,
+              std::size_t index) -> Shell {
+             if (index >= basis.size()) throw nb::index_error();
+             return basis[index];
+           })
+      .def("__setitem__",
+           [](SkalaXC::BasisSet<double>& basis, std::size_t index,
+              const Shell& shell) {
+             if (index >= basis.size()) throw nb::index_error();
+             basis[index] = shell;
+           })
       .def_prop_ro("nshells", &SkalaXC::BasisSet<double>::nshells)
       .def_prop_ro("nbf", &SkalaXC::BasisSet<double>::nbf)
       .def_prop_ro("nbf_cart", &SkalaXC::BasisSet<double>::nbf_cart)
