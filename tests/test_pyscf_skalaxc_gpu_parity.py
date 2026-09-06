@@ -32,10 +32,10 @@ pytest.importorskip("cupy", reason="CuPy is not available")
 pytest.importorskip("gpu4pyscf", reason="GPU4PySCF is not available")
 DEVICE_EXECUTION_SPACE = skalaxc.ExecutionSpace.DEVICE
 
-from skala.gpu4pyscf.gradients import (  # noqa: E402
-    nuc_grad_from_veff,
-    veff_and_expl_nuc_grad,
-)
+import cupy as cp  # noqa: E402
+from gpu4pyscf import dft as gpu_dft  # noqa: E402
+from skala.gpu4pyscf import SkalaKS  # noqa: E402
+from skala.gpu4pyscf.gradients import SkalaUKSGradient  # noqa: E402
 from skala.gpu4pyscf.grids import SkalaGrids  # noqa: E402
 from skala.pyscf.xc_integrator import XCIntegrator  # noqa: E402
 
@@ -74,15 +74,36 @@ def molecule() -> gto.Mole:
 
 
 @pytest.fixture(scope="module")
-def density(molecule: gto.Mole) -> npt.NDArray[np.float64]:
+def reference_mean_field(molecule: gto.Mole) -> scf.uhf.UHF:
     mean_field = scf.UHF(molecule)
     mean_field.chkfile = None
     mean_field.conv_tol = 1e-12
     mean_field.kernel()
     assert mean_field.converged
-    result = np.asarray(mean_field.make_rdm1(), dtype=np.float64)
+    return mean_field
+
+
+@pytest.fixture(scope="module")
+def density(
+    molecule: gto.Mole, reference_mean_field: scf.uhf.UHF
+) -> npt.NDArray[np.float64]:
+    result = np.asarray(reference_mean_field.make_rdm1(), dtype=np.float64)
     assert result.shape == (2, molecule.nao_nr(), molecule.nao_nr())
     return result
+
+
+@pytest.fixture(scope="module")
+def hartree_gradient(
+    molecule: gto.Mole, reference_mean_field: scf.uhf.UHF
+) -> npt.NDArray[np.float64]:
+    mean_field = gpu_dft.UKS(molecule)
+    mean_field.xc = "0*LDA"
+    mean_field.mo_coeff = cp.asarray(reference_mean_field.mo_coeff)
+    mean_field.mo_occ = cp.asarray(reference_mean_field.mo_occ)
+    mean_field.mo_energy = cp.asarray(reference_mean_field.mo_energy)
+    return np.asarray(
+        cp.asnumpy(mean_field.nuc_grad_method().kernel()), dtype=np.float64
+    )
 
 
 @pytest.fixture(scope="module")
@@ -129,21 +150,16 @@ def _fixed_density_xc_gradient(
     functional: ExcFunctionalBase,
     molecule: gto.Mole,
     grid: SkalaGrids,
-    density: npt.NDArray[np.float64],
+    reference_mean_field: scf.uhf.UHF,
+    hartree_gradient: npt.NDArray[np.float64],
 ) -> npt.NDArray[np.float64]:
-    density_tensor = torch.as_tensor(density, device="cuda:0")
-    effective_potential, explicit_gradient = veff_and_expl_nuc_grad(
-        functional,
-        molecule,
-        grid,
-        density_tensor,
-    )
-    contracted_gradient = 2 * nuc_grad_from_veff(
-        molecule,
-        effective_potential,
-        density_tensor,
-    )
-    return (contracted_gradient + explicit_gradient).detach().cpu().numpy()
+    mean_field = SkalaKS(molecule, functional, with_dftd3=False)
+    mean_field.grids = grid
+    mean_field.mo_coeff = cp.asarray(reference_mean_field.mo_coeff)
+    mean_field.mo_occ = cp.asarray(reference_mean_field.mo_occ)
+    mean_field.mo_energy = cp.asarray(reference_mean_field.mo_energy)
+    total_gradient = SkalaUKSGradient(mean_field).kernel()
+    return np.asarray(cp.asnumpy(total_gradient), dtype=np.float64) - hartree_gradient
 
 
 def _release_torch_cache() -> None:
@@ -211,12 +227,15 @@ def test_gpu_exc_gradient_parity(
     molecule: gto.Mole,
     density: npt.NDArray[np.float64],
     gpu4pyscf_grid: SkalaGrids,
+    reference_mean_field: scf.uhf.UHF,
+    hartree_gradient: npt.NDArray[np.float64],
 ) -> None:
     gpu4pyscf_gradient = _fixed_density_xc_gradient(
         functional_case.functional,
         molecule,
         gpu4pyscf_grid,
-        density,
+        reference_mean_field,
+        hartree_gradient,
     )
     _release_torch_cache()
 

@@ -12,7 +12,8 @@ import skalaxc
 import torch
 from skala.functional import FunctionalArtifact, load_functional
 from skala.functional.base import ExcFunctionalBase
-from skala.pyscf.gradients import veff_and_expl_nuc_grad
+from skala.pyscf import SkalaKS
+from skala.pyscf.gradients import SkalaUKSGradient
 from skala.pyscf.grids import SkalaGrids
 from skala.pyscf.xc_integrator import XCIntegrator
 
@@ -55,15 +56,34 @@ def molecule() -> gto.Mole:
 
 
 @pytest.fixture(scope="module")
-def density(molecule: gto.Mole) -> npt.NDArray[np.float64]:
+def reference_mean_field(molecule: gto.Mole) -> scf.uhf.UHF:
     mean_field = scf.UHF(molecule)
     mean_field.chkfile = None
     mean_field.conv_tol = 1e-12
     mean_field.kernel()
     assert mean_field.converged
-    result = np.asarray(mean_field.make_rdm1(), dtype=np.float64)
+    return mean_field
+
+
+@pytest.fixture(scope="module")
+def density(
+    molecule: gto.Mole, reference_mean_field: scf.uhf.UHF
+) -> npt.NDArray[np.float64]:
+    result = np.asarray(reference_mean_field.make_rdm1(), dtype=np.float64)
     assert result.shape == (2, molecule.nao_nr(), molecule.nao_nr())
     return result
+
+
+@pytest.fixture(scope="module")
+def hartree_gradient(
+    molecule: gto.Mole, reference_mean_field: scf.uhf.UHF
+) -> npt.NDArray[np.float64]:
+    mean_field = dft.UKS(molecule)
+    mean_field.xc = "0*LDA"
+    mean_field.mo_coeff = reference_mean_field.mo_coeff
+    mean_field.mo_occ = reference_mean_field.mo_occ
+    mean_field.mo_energy = reference_mean_field.mo_energy
+    return np.asarray(mean_field.nuc_grad_method().kernel(), dtype=np.float64)
 
 
 @pytest.fixture(scope="module")
@@ -120,28 +140,16 @@ def _fixed_density_xc_gradient(
     functional: ExcFunctionalBase,
     molecule: gto.Mole,
     grid: SkalaGrids,
-    density: npt.NDArray[np.float64],
+    reference_mean_field: scf.uhf.UHF,
+    hartree_gradient: npt.NDArray[np.float64],
 ) -> npt.NDArray[np.float64]:
-    density_tensor = torch.from_numpy(density.copy())
-    effective_potential, explicit_gradient = veff_and_expl_nuc_grad(
-        functional,
-        molecule,
-        grid,
-        density_tensor,
-    )
-    contracted_gradient = torch.empty(
-        (molecule.natm, 3), dtype=effective_potential.dtype
-    )
-    for atom_index, (_, _, ao_start, ao_end) in enumerate(molecule.aoslice_by_atom()):
-        contracted_gradient[atom_index] = (
-            torch.einsum(
-                "...xij,...ij->x",
-                effective_potential[..., ao_start:ao_end, :],
-                density_tensor[..., ao_start:ao_end, :],
-            )
-            * 2
-        )
-    return (contracted_gradient + explicit_gradient).numpy()
+    mean_field = SkalaKS(molecule, functional, with_dftd3=False)
+    mean_field.grids = grid
+    mean_field.mo_coeff = reference_mean_field.mo_coeff
+    mean_field.mo_occ = reference_mean_field.mo_occ
+    mean_field.mo_energy = reference_mean_field.mo_energy
+    total_gradient = SkalaUKSGradient(mean_field).kernel()
+    return np.asarray(total_gradient, dtype=np.float64) - hartree_gradient
 
 
 def test_pyscf_conversion_matches_skalaxc_layout(molecule: gto.Mole) -> None:
@@ -199,12 +207,15 @@ def test_exc_gradient_parity(
     molecule: gto.Mole,
     density: npt.NDArray[np.float64],
     pyscf_grid: SkalaGrids,
+    reference_mean_field: scf.uhf.UHF,
+    hartree_gradient: npt.NDArray[np.float64],
 ) -> None:
     pyscf_gradient = _fixed_density_xc_gradient(
         functional_case.functional,
         molecule,
         pyscf_grid,
-        density,
+        reference_mean_field,
+        hartree_gradient,
     )
 
     scalar_density, spin_density = uks_density_channels(density)
