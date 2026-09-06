@@ -310,6 +310,47 @@ TEST_CASE("Skala model loading validates paths and metadata",
   CHECK_THROWS(SkalaXC::SkalaModel(unsupported_features.string()));
 }
 
+TEST_CASE("Kinetic-density models must also declare density gradients",
+          "[skala][model-loading][kinetic-model-contract]") {
+  TempModelDirectory temporary;
+  torch::jit::script::Module module("KineticDensityFunctional");
+  module.define(R"JIT(
+def get_exc(self, mol: Dict[str, Tensor]) -> Tensor:
+    return ((mol["density"] + mol["kin"]).sum(0) * mol["grid_weights"]).sum()
+)JIT");
+  const auto path = temporary.path() / "kinetic.fun";
+
+  SECTION("kinetic-only metadata is rejected") {
+    save_with_metadata(module, path, "2",
+                       R"(["density", "kin", "grid_weights"])");
+    REQUIRE_THROWS_WITH(
+        SkalaXC::SkalaModel(path.string()),
+        Catch::Matchers::ContainsSubstring(
+            "Models requesting 'kin' must also declare 'grad'"));
+  }
+
+  SECTION("both features are accepted regardless of order") {
+    for (const std::string metadata :
+         {R"(["density", "kin", "grad", "grid_weights"])",
+          R"(["density", "grad", "kin", "grid_weights"])"}) {
+      save_with_metadata(module, path, "2", metadata);
+      const SkalaXC::SkalaModel model(path.string());
+      REQUIRE(model.is_mgga());
+      REQUIRE_FALSE(model.is_gga());
+    }
+  }
+
+  SECTION("bundled meta-GGA models remain supported") {
+    for (const auto* filename : {"tpss.fun", "skala-1.1.fun"}) {
+      const auto model_path =
+          std::filesystem::path(SKALAXC_MODEL_PATH) / filename;
+      const SkalaXC::SkalaModel model(model_path.string());
+      REQUIRE(model.is_mgga());
+      REQUIRE_FALSE(model.is_gga());
+    }
+  }
+}
+
 TEST_CASE("Bundled models expose integrated energy and dE/dw",
           "[skala][model-integrated-energy]") {
   const auto model_directory = std::filesystem::path(SKALAXC_MODEL_PATH);

@@ -12,6 +12,10 @@ The complete validated capability is **host (CPU)** evaluation of the
 LDA, GGA, and kinetic-energy-dependent meta-GGA Skala models. An optional CUDA
 backend is available with the limitations described below.
 
+Model archives declaring the kinetic-density feature `kin` must also declare
+the density-gradient feature `grad`. Kinetic-only models are rejected during
+integrator construction; the bundled TPSS and Skala models declare both.
+
 Host molecular weights support Becke and SSF (the default); CUDA supports SSF.
 LKO is not exposed: GauXC lacks its nuclear weight derivatives and reorders
 tasks in a way that invalidates SkalaXC's raw-weight indexing.

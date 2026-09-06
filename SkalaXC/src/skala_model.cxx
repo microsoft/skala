@@ -123,6 +123,10 @@ struct SkalaModel::Impl {
       if (key == feat_map().at(SKALA_FEATURE::TAU)) is_mgga = true;
       if (key == feat_map().at(SKALA_FEATURE::DDEN)) is_gga = true;
     }
+    if (is_mgga && !is_gga)
+      SKALAXC_EXCEPTION(
+          "Models requesting 'kin' must also declare 'grad'; "
+          "kinetic-only models are not currently supported");
     if (is_mgga) is_gga = false;
 
     module.eval();
