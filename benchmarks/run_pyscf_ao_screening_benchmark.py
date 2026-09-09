@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib
 import importlib.metadata
 import inspect
 import json
@@ -39,9 +40,22 @@ EXPECTED_AO_COUNTS = (
     1347,
     1464,
 )
-MODES = ("cpu", "cpu_dense", "gpu")
+SKALA_MODES = ("cpu", "cpu_dense", "gpu")
+SKALAXC_MODES = ("cpu", "gpu")
+MODES = SKALA_MODES
+IMPLEMENTATION_MODES = {
+    "skala": SKALA_MODES,
+    "skalaxc": SKALAXC_MODES,
+}
 MEASUREMENTS = ("runtime", "memory")
-TERMINAL_STATUSES = {"ok", "timeout", "oom", "error", "skipped_after_resource_failure"}
+TERMINAL_STATUSES = {
+    "ok",
+    "timeout",
+    "oom",
+    "error",
+    "unsupported",
+    "skipped_after_resource_failure",
+}
 WORKER_RESULT_PREFIX = "SKALA_BENCHMARK_RESULT="
 THREAD_ENVIRONMENT_VARIABLES = (
     "OMP_NUM_THREADS",
@@ -89,6 +103,7 @@ class BenchmarkConfig:
     results_dir: Path
     run_label: str
     functional: str = "skala-1.1"
+    skalaxc_grid_size: str = "GM3"
     basis: str = "def2-qzvpp"
     grid_level: int = 1
     grid_alignment: int = 1
@@ -308,6 +323,13 @@ def verify_skala_import(source_root: Path) -> str:
     return str(imported_path)
 
 
+def module_path(module: Any) -> Path:
+    module_file = getattr(module, "__file__", None)
+    if module_file is None:
+        raise RuntimeError(f"Module {module.__name__} has no filesystem path")
+    return Path(module_file).resolve()
+
+
 def collect_environment(payload: dict[str, Any]) -> dict[str, Any]:
     import torch
 
@@ -319,6 +341,26 @@ def collect_environment(payload: dict[str, Any]) -> dict[str, Any]:
     gpu_name = torch.cuda.get_device_name(0) if cuda_available else None
     cupy_version = package_version("cupy-cuda12x") or package_version("cupy")
     torch_cuda_version = getattr(getattr(torch, "version", None), "cuda", None)
+    try:
+        skalaxc = importlib.import_module("skalaxc")
+
+        skalaxc_environment: dict[str, Any] = {
+            "available": True,
+            "module": str(module_path(skalaxc)),
+            "version": skalaxc.__version__,
+            "native_version": skalaxc.native_version(),
+            "cuda_enabled": bool(skalaxc.CUDA_ENABLED),
+            "cuda_toolkit_version": skalaxc.CUDA_TOOLKIT_VERSION,
+            "mpi_enabled": bool(skalaxc.MPI_ENABLED),
+            "openmp_enabled": bool(skalaxc.OPENMP_ENABLED),
+            "hdf5_enabled": getattr(skalaxc, "HDF5_ENABLED", None),
+            "model_dir": str(Path(skalaxc.MODEL_DIR).resolve()),
+        }
+    except (ImportError, OSError) as error:
+        skalaxc_environment = {
+            "available": False,
+            "error": f"{type(error).__name__}: {error}",
+        }
     return {
         "python": sys.version,
         "python_executable": sys.executable,
@@ -336,7 +378,9 @@ def collect_environment(payload: dict[str, Any]) -> dict[str, Any]:
             "torch": torch.__version__,
             "cupy": cupy_version,
             "memray": package_version("memray"),
+            "skalaxc": package_version("skalaxc"),
         },
+        "skalaxc": skalaxc_environment,
         "cuda": {
             "available": cuda_available,
             "torch_cuda_version": torch_cuda_version,
@@ -456,7 +500,240 @@ def route_metadata(numint: Any, mol: Any, forced_dense: bool) -> dict[str, Any]:
     }
 
 
+def _enum_name(value: Any) -> str:
+    name = getattr(value, "name", None)
+    return str(name) if name is not None else str(value).rsplit(".", 1)[-1]
+
+
+def _pyscf_to_skalaxc(pyscf_molecule: Any, skalaxc: Any) -> tuple[Any, Any]:
+    molecule = skalaxc.Molecule()
+    coordinates = pyscf_molecule.atom_coords(unit="Bohr")
+    for atomic_number, center in zip(
+        pyscf_molecule.atom_charges(), coordinates, strict=True
+    ):
+        molecule.append(
+            skalaxc.Atom(
+                int(atomic_number),
+                float(center[0]),
+                float(center[1]),
+                float(center[2]),
+            )
+        )
+
+    basis = skalaxc.BasisSet()
+    for atom_index, (atom_label, _) in enumerate(pyscf_molecule._atom):
+        center = coordinates[atom_index].tolist()
+        for pyscf_shell in pyscf_molecule._basis[atom_label]:
+            angular_momentum = int(pyscf_shell[0])
+            primitives = pyscf_shell[1:]
+            exponents = [float(primitive[0]) for primitive in primitives]
+            for contraction_index in range(1, len(primitives[0])):
+                coefficients = [
+                    float(primitive[contraction_index]) for primitive in primitives
+                ]
+                basis.append(
+                    skalaxc.Shell(
+                        angular_momentum,
+                        not pyscf_molecule.cart and angular_momentum != 1,
+                        exponents,
+                        coefficients,
+                        center,
+                        normalize=True,
+                    )
+                )
+    return molecule, basis
+
+
+def _closed_shell_density_channels(density: Any) -> tuple[Any, Any]:
+    import numpy as np
+
+    scalar_density = np.asfortranarray(density, dtype=np.float64)
+    if scalar_density.ndim != 2 or scalar_density.shape[0] != scalar_density.shape[1]:
+        raise ValueError(
+            f"Expected a square RKS density matrix, got {scalar_density.shape}"
+        )
+    return scalar_density, np.zeros_like(scalar_density, order="F")
+
+
+def _resolve_skalaxc_model(functional: str, skalaxc: Any) -> str:
+    if functional.lower() in {"lda", "pbe", "tpss"}:
+        return functional.upper()
+    model_path = Path(skalaxc.MODEL_DIR) / f"{functional}.fun"
+    if not model_path.is_file():
+        raise FileNotFoundError(
+            f"SkalaXC model for {functional!r} was not found at {model_path}"
+        )
+    return str(model_path)
+
+
+def _resolve_skalaxc_grid_size(name: str, skalaxc: Any) -> Any:
+    normalized = name.upper().replace("-", "_")
+    try:
+        return getattr(skalaxc.AtomicGridSize, normalized)
+    except AttributeError as error:
+        choices = ("FINE", "ULTRA_FINE", "SUPER_FINE", "GM3", "GM5")
+        raise ValueError(
+            f"Unknown SkalaXC grid size {name!r}; choose from {', '.join(choices)}"
+        ) from error
+
+
+def _skalaxc_diagnostics(integrator: Any) -> dict[str, Any]:
+    diagnostics = integrator.diagnostics()
+    return {
+        "backend": _enum_name(diagnostics.backend),
+        "rank": int(diagnostics.rank),
+        "communicator_size": int(diagnostics.communicator_size),
+        "device_id": int(diagnostics.device_id),
+        "openmp_threads": int(diagnostics.openmp_threads),
+        "device_memory_fraction": float(diagnostics.device_memory_fraction),
+        "exc_vxc_calls": int(diagnostics.exc_vxc_calls),
+        "model_batches": int(diagnostics.model_batches),
+        "domains": int(diagnostics.domains),
+        "tasks": int(diagnostics.tasks),
+        "points": int(diagnostics.points),
+        "local_atoms": int(diagnostics.local_atoms),
+    }
+
+
+def _build_skalaxc_case(payload: dict[str, Any]) -> dict[str, Any]:
+    import numpy as np
+    import torch
+    from skala.pyscf.grids import SkalaGrids
+
+    from pyscf import dft, gto, lib
+
+    source_root = Path(payload["source_root"]).resolve()
+    skalaxc = importlib.import_module("skalaxc")
+    imported_skala = verify_skala_import(source_root)
+    thread_count = int(payload["cpu_threads"])
+    lib.num_threads(thread_count)
+    torch.set_num_threads(thread_count)
+
+    molecule_spec = payload["molecule"]
+    mol = gto.M(
+        atom=molecule_spec["atom_text"],
+        basis=payload["basis"],
+        charge=0,
+        spin=0,
+        unit="Angstrom",
+        cart=False,
+        verbose=0,
+    )
+    initial_density = dft.RKS(mol).get_init_guess()
+    scalar_density, spin_density = _closed_shell_density_channels(initial_density)
+
+    reference_grid = SkalaGrids(mol)
+    reference_grid.level = int(payload["grid_level"])
+    reference_grid.alignment = int(payload["grid_alignment"])
+    reference_grid.build(sort_grids=False)
+    if reference_grid.weights is None:
+        raise RuntimeError("PySCF reference grid construction did not produce weights")
+    pyscf_grid_points = int(reference_grid.weights.size)
+
+    backend = payload["backend"]
+    if backend == "cpu":
+        execution_space = skalaxc.ExecutionSpace.HOST
+
+        def synchronize() -> None:
+            return None
+
+    elif backend == "gpu":
+        if not bool(skalaxc.CUDA_ENABLED):
+            raise RuntimeError("SkalaXC was built without CUDA support")
+        execution_space = skalaxc.ExecutionSpace.DEVICE
+        synchronize = torch.cuda.synchronize
+    else:
+        raise ValueError(f"Unknown backend: {backend}")
+
+    molecule, basis = _pyscf_to_skalaxc(mol, skalaxc)
+    grid_size = _resolve_skalaxc_grid_size(payload["skalaxc_grid_size"], skalaxc)
+    grid = skalaxc.MolGridFactory.create_default(
+        molecule,
+        pruning_scheme=skalaxc.PruningScheme.UNPRUNED,
+        radial_quad=skalaxc.RadialQuad.MURA_KNOWLES,
+        grid_size=grid_size,
+    )
+
+    if backend == "gpu":
+        device_settings = skalaxc.DeviceRuntimeSettings()
+        if skalaxc.MPI_ENABLED:
+            MPI = importlib.import_module("mpi4py").MPI
+
+            runtime = skalaxc.RuntimeEnvironment(MPI.COMM_SELF, device_settings)
+        else:
+            runtime = skalaxc.RuntimeEnvironment(device_settings)
+    elif skalaxc.MPI_ENABLED:
+        MPI = importlib.import_module("mpi4py").MPI
+
+        runtime = skalaxc.RuntimeEnvironment(MPI.COMM_SELF)
+    else:
+        runtime = skalaxc.RuntimeEnvironment()
+
+    load_balancer = skalaxc.LoadBalancerFactory(execution_space).get_instance(
+        runtime, molecule, grid, basis
+    )
+    weights = skalaxc.MolecularWeightsFactory(execution_space).get_instance()
+    weights.modify_weights(load_balancer)
+    model = _resolve_skalaxc_model(payload["functional"], skalaxc)
+    integrator = skalaxc.XCIntegratorFactory(execution_space).get_instance(
+        skalaxc.Functional(model), load_balancer
+    )
+    initial_diagnostics = _skalaxc_diagnostics(integrator)
+    skalaxc_grid_points = int(initial_diagnostics["points"])
+
+    def evaluate() -> tuple[Any, Any, Any]:
+        return cast(
+            tuple[Any, Any, Any],
+            integrator.eval_exc_vxc(scalar_density, spin_density),
+        )
+
+    def make_fingerprint(result: tuple[Any, Any, Any]) -> dict[str, float]:
+        xc_energy, scalar_potential, spin_potential = result
+        scalar_matrix = np.asarray(scalar_potential, dtype=np.float64)
+        spin_matrix = np.asarray(spin_potential, dtype=np.float64)
+        return {
+            "xc_energy": float(xc_energy),
+            "vxc_sum": float(scalar_matrix.sum()),
+            "vxc_trace": float(np.trace(scalar_matrix)),
+            "vxc_frobenius_norm": float(np.linalg.norm(scalar_matrix)),
+            "vxc_max_abs": float(np.max(np.abs(scalar_matrix))),
+            "spin_vxc_frobenius_norm": float(np.linalg.norm(spin_matrix)),
+        }
+
+    point_difference = skalaxc_grid_points - pyscf_grid_points
+    system = {
+        "formula": molecule_spec["formula"],
+        "carbon_count": int(molecule_spec["carbon_count"]),
+        "electron_count": int(mol.nelectron),
+        "actual_aos": int(mol.nao_nr()),
+        "grid_points": skalaxc_grid_points,
+        "pyscf_grid_points": pyscf_grid_points,
+        "grid_point_difference": point_difference,
+        "grid_point_ratio": skalaxc_grid_points / pyscf_grid_points,
+        "grid_size": _enum_name(grid_size),
+        "coordinate_sha256": molecule_spec["coordinate_sha256"],
+        "imported_skala": imported_skala,
+        "imported_skalaxc": str(module_path(skalaxc)),
+        "skalaxc_model": model,
+    }
+    return {
+        "backend": backend,
+        "evaluate": evaluate,
+        "make_fingerprint": make_fingerprint,
+        "synchronize": synchronize,
+        "route": None,
+        "diagnostics": lambda: _skalaxc_diagnostics(integrator),
+        "system": system,
+    }
+
+
 def build_case(payload: dict[str, Any]) -> dict[str, Any]:
+    implementation = payload.get("implementation", "skala")
+    if implementation == "skalaxc":
+        return _build_skalaxc_case(payload)
+    if implementation != "skala":
+        raise ValueError(f"Unknown implementation: {implementation}")
+
     import numpy as np
     import torch
 
@@ -512,6 +789,19 @@ def build_case(payload: dict[str, Any]) -> dict[str, Any]:
     numint = ks._numint
     forced_dense = bool(payload["forced_dense"])
     route = route_metadata(numint, mol, forced_dense)
+
+    def evaluate() -> tuple[Any, Any, Any]:
+        return numint.nr_rks(
+            mol,
+            ks.grids,
+            None,
+            dm,
+            max_memory=int(payload["max_memory_mb"]),
+        )
+
+    def make_fingerprint(result: tuple[Any, Any, Any]) -> dict[str, float]:
+        return fingerprint(result, to_numpy)
+
     system = {
         "formula": molecule["formula"],
         "carbon_count": int(molecule["carbon_count"]),
@@ -527,6 +817,8 @@ def build_case(payload: dict[str, Any]) -> dict[str, Any]:
         "dm": dm,
         "numint": numint,
         "backend": backend,
+        "evaluate": evaluate,
+        "make_fingerprint": make_fingerprint,
         "synchronize": synchronize,
         "to_numpy": to_numpy,
         "route": route,
@@ -552,32 +844,38 @@ def fingerprint(result: tuple[Any, Any, Any], to_numpy: Any) -> dict[str, float]
 def run_measurement(payload: dict[str, Any]) -> dict[str, Any]:
     import torch
 
+    if (
+        payload.get("implementation", "skala") == "skalaxc"
+        and payload["measurement"] == "memory"
+        and payload["backend"] == "gpu"
+    ):
+        return {
+            "status": "unsupported",
+            "implementation": "skalaxc",
+            "measurement": "memory",
+            "mode": payload["mode"],
+            "error": (
+                "PyTorch allocator counters do not observe native "
+                "SkalaXC/GauXC CUDA allocations"
+            ),
+        }
+
     case = build_case(payload)
-    numint = case["numint"]
     dense_route_override: AbstractContextManager[Any]
     if not payload["forced_dense"]:
         dense_route_override = nullcontext()
     else:
-        dense_route_override = force_dense_route(numint)
-
-    def evaluate() -> tuple[Any, Any, Any]:
-        return numint.nr_rks(
-            case["mol"],
-            case["grids"],
-            None,
-            case["dm"],
-            max_memory=int(payload["max_memory_mb"]),
-        )
+        dense_route_override = force_dense_route(case["numint"])
 
     result: tuple[Any, Any, Any] | None = None
     with dense_route_override:
         measurement = payload["measurement"]
         if measurement == "runtime":
             for _ in range(int(payload["runtime_warmup_runs"])):
-                evaluate()
+                case["evaluate"]()
             case["synchronize"]()
             started = time.perf_counter()
-            result = evaluate()
+            result = case["evaluate"]()
             case["synchronize"]()
             elapsed_seconds = time.perf_counter() - started
             measurement_data = {"runtime_seconds": elapsed_seconds}
@@ -587,7 +885,7 @@ def run_measurement(payload: dict[str, Any]) -> dict[str, Any]:
             with tempfile.TemporaryDirectory() as temp_dir:
                 profile_path = Path(temp_dir) / "allocations.bin"
                 with memray.Tracker(profile_path):
-                    result = evaluate()
+                    result = case["evaluate"]()
                 peak_bytes = int(memray.FileReader(profile_path).metadata.peak_memory)
             measurement_data = {"incremental_peak_bytes": peak_bytes}
         elif measurement == "memory" and case["backend"] == "gpu":
@@ -596,7 +894,7 @@ def run_measurement(payload: dict[str, Any]) -> dict[str, Any]:
             case["synchronize"]()
             baseline_bytes = torch.cuda.memory_allocated()
             torch.cuda.reset_peak_memory_stats()
-            result = evaluate()
+            result = case["evaluate"]()
             case["synchronize"]()
             peak_bytes = max(0, torch.cuda.max_memory_allocated() - baseline_bytes)
             measurement_data = {
@@ -607,15 +905,19 @@ def run_measurement(payload: dict[str, Any]) -> dict[str, Any]:
             raise ValueError(f"Unknown measurement: {measurement}")
 
     assert result is not None
-    return {
+    response = {
         "status": "ok",
+        "implementation": payload.get("implementation", "skala"),
         "measurement": payload["measurement"],
         "mode": payload["mode"],
         "route": case["route"],
         "system": case["system"],
-        "fingerprint": fingerprint(result, case["to_numpy"]),
+        "fingerprint": case["make_fingerprint"](result),
         **measurement_data,
     }
+    if "diagnostics" in case:
+        response["diagnostics"] = case["diagnostics"]()
+    return response
 
 
 def classify_exception(error: Exception) -> str:
@@ -651,6 +953,7 @@ def worker_main() -> None:
                 "error_type": type(error).__name__,
                 "error": str(error),
                 "traceback": traceback.format_exc()[-12000:],
+                "implementation": payload.get("implementation", "skala"),
                 "measurement": payload.get("measurement"),
                 "mode": payload.get("mode"),
             }
@@ -711,6 +1014,7 @@ def execute_worker(payload: dict[str, Any], config: BenchmarkConfig) -> dict[str
     except subprocess.TimeoutExpired as error:
         return {
             "status": "timeout",
+            "implementation": payload.get("implementation", "skala"),
             "measurement": payload.get("measurement"),
             "mode": payload.get("mode"),
             "error": f"Worker exceeded {config.worker_timeout_seconds} seconds",
@@ -724,7 +1028,7 @@ def execute_worker(payload: dict[str, Any], config: BenchmarkConfig) -> dict[str
         if line.startswith(WORKER_RESULT_PREFIX)
     ]
     if marker_lines:
-        record = json.loads(marker_lines[-1])
+        record = cast(dict[str, Any], json.loads(marker_lines[-1]))
         if record["status"] != "ok":
             record["stderr_tail"] = completed.stderr[-4000:]
         return record
@@ -737,6 +1041,7 @@ def execute_worker(payload: dict[str, Any], config: BenchmarkConfig) -> dict[str
     )
     return {
         "status": status,
+        "implementation": payload.get("implementation", "skala"),
         "measurement": payload.get("measurement"),
         "mode": payload.get("mode"),
         "error": f"Worker exited with code {completed.returncode} without a result record",
@@ -802,19 +1107,26 @@ def worker_payload(
     molecule: MoleculeSpec,
     mode: str,
     measurement: str,
+    implementation: str = "skala",
 ) -> dict[str, Any]:
+    if implementation not in IMPLEMENTATION_MODES:
+        raise ValueError(f"Unknown implementation: {implementation}")
+    if mode not in IMPLEMENTATION_MODES[implementation]:
+        raise ValueError(f"Mode {mode!r} is not valid for {implementation}")
     backend = "gpu" if mode.startswith("gpu") else "cpu"
     return {
         "operation": "measure",
+        "implementation": implementation,
         "source_root": str(config.source_root),
         "functional": config.functional,
+        "skalaxc_grid_size": config.skalaxc_grid_size,
         "basis": config.basis,
         "grid_level": config.grid_level,
         "grid_alignment": config.grid_alignment,
         "max_memory_mb": config.max_memory_mb,
         "cpu_threads": config.cpu_threads,
         "backend": backend,
-        "forced_dense": mode.endswith("_dense"),
+        "forced_dense": implementation == "skala" and mode.endswith("_dense"),
         "mode": mode,
         "measurement": measurement,
         "runtime_warmup_runs": config.runtime_warmup_runs,
@@ -834,8 +1146,20 @@ def new_result_document(
     environment: dict[str, Any],
 ) -> dict[str, Any]:
     created_at = utc_now()
+
+    def molecule_records(modes: tuple[str, ...]) -> dict[str, Any]:
+        return {
+            molecule.formula: {
+                **molecule.as_json(),
+                "observed": None,
+                "modes": {mode: {} for mode in modes},
+            }
+            for molecule in molecules
+        }
+
     return {
-        "schema_version": 1,
+        "schema_version": 2,
+        "benchmark": "pyscf_ao_screening",
         "created_at": created_at,
         "updated_at": created_at,
         "run_label": config.run_label,
@@ -844,13 +1168,12 @@ def new_result_document(
         "configuration": config.as_json(),
         "geometry": GEOMETRY_PARAMETERS,
         "worker_sha256": runner_sha256(),
-        "molecules": {
-            molecule.formula: {
-                **molecule.as_json(),
-                "observed": None,
-                "modes": {mode: {} for mode in MODES},
+        "implementations": {
+            implementation: {
+                "modes": list(modes),
+                "molecules": molecule_records(modes),
             }
-            for molecule in molecules
+            for implementation, modes in IMPLEMENTATION_MODES.items()
         },
     }
 
@@ -858,8 +1181,8 @@ def new_result_document(
 def validate_resume_document(
     document: dict[str, Any], config: BenchmarkConfig, source: dict[str, Any]
 ) -> None:
-    if document.get("schema_version") != 1:
-        raise ValueError("Cannot resume a result file with a different schema version")
+    if document.get("schema_version") != 2:
+        raise ValueError("Cannot resume a result file that is not schema version 2")
     if document.get("worker_sha256") != runner_sha256():
         raise ValueError(
             "Cannot resume results created by a different runner implementation"
@@ -904,7 +1227,7 @@ def result_path(config: BenchmarkConfig, source: dict[str, Any]) -> Path:
         raise ValueError("The run label must contain a filename-safe character")
     return (
         config.results_dir
-        / f"skala-pyscf-ao-screening-{safe_label}-{source['commit'][:12]}.json"
+        / f"skala-pyscf-ao-screening-{safe_label}-{source['commit'][:12]}-v2.json"
     )
 
 
@@ -914,7 +1237,7 @@ def run_worker_preflight(config: BenchmarkConfig) -> dict[str, Any]:
     )
     if result["status"] != "ok":
         raise RuntimeError(f"Benchmark preflight failed: {result}")
-    environment = result["environment"]
+    environment = cast(dict[str, Any], result["environment"])
     imported_path = Path(environment["imported_skala"])
     imported_path.relative_to(config.source_root / "src")
     required_packages = ("skala", "pyscf", "torch", "memray")
@@ -923,7 +1246,22 @@ def run_worker_preflight(config: BenchmarkConfig) -> dict[str, Any]:
     ]
     if missing:
         raise RuntimeError(f"Worker environment is missing packages: {missing}")
+    if not environment["skalaxc"]["available"]:
+        raise RuntimeError(
+            "SkalaXC is unavailable in the worker environment: "
+            f"{environment['skalaxc'].get('error', 'unknown import error')}"
+        )
     return environment
+
+
+def _gpu_available(
+    implementation: str, environment: dict[str, Any]
+) -> tuple[bool, str]:
+    if not bool(environment["cuda"]["available"]):
+        return False, "CUDA is not available in the worker environment"
+    if implementation == "skalaxc" and not bool(environment["skalaxc"]["cuda_enabled"]):
+        return False, "SkalaXC was built without CUDA support"
+    return True, ""
 
 
 def atom_distance(left: Atom, right: Atom) -> float:
@@ -989,54 +1327,69 @@ def run_benchmark(
         document = new_result_document(config, molecules, source, environment)
         atomic_write_json(output_path, document)
 
-    cuda_available = bool(document["environment"]["cuda"]["available"])
-    for mode in MODES:
-        backend = "gpu" if mode.startswith("gpu") else "cpu"
-        for measurement in MEASUREMENTS:
-            blocked_by: dict[str, Any] | None = None
-            for molecule in molecules:
-                molecule_record = document["molecules"][molecule.formula]
-                existing = molecule_record["modes"][mode].get(measurement)
-                if existing and existing.get("status") in TERMINAL_STATUSES:
-                    if existing["status"] in {"oom", "timeout"}:
+    for implementation, modes in IMPLEMENTATION_MODES.items():
+        implementation_record = document["implementations"][implementation]
+        for mode in modes:
+            backend = "gpu" if mode.startswith("gpu") else "cpu"
+            for measurement in MEASUREMENTS:
+                blocked_by: dict[str, Any] | None = None
+                for molecule in molecules:
+                    molecule_record = implementation_record["molecules"][
+                        molecule.formula
+                    ]
+                    existing = molecule_record["modes"][mode].get(measurement)
+                    if existing and existing.get("status") in TERMINAL_STATUSES:
+                        if existing["status"] in {"oom", "timeout"}:
+                            blocked_by = {
+                                "formula": molecule.formula,
+                                "status": existing["status"],
+                            }
+                        continue
+
+                    result: dict[str, Any]
+                    gpu_available, gpu_error = _gpu_available(
+                        implementation, document["environment"]
+                    )
+                    if backend == "gpu" and not gpu_available:
+                        result = {
+                            "status": "error",
+                            "implementation": implementation,
+                            "mode": mode,
+                            "measurement": measurement,
+                            "error": gpu_error,
+                        }
+                    elif blocked_by is not None:
+                        result = {
+                            "status": "skipped_after_resource_failure",
+                            "implementation": implementation,
+                            "mode": mode,
+                            "measurement": measurement,
+                            "blocked_by": blocked_by,
+                        }
+                    else:
+                        result = execute_measurement(
+                            worker_payload(
+                                config,
+                                molecule,
+                                mode,
+                                measurement,
+                                implementation,
+                            ),
+                            config,
+                        )
+
+                    merge_worker_result(molecule_record, mode, measurement, result)
+                    document["updated_at"] = utc_now()
+                    atomic_write_json(output_path, document)
+                    if result["status"] in {"oom", "timeout"}:
                         blocked_by = {
                             "formula": molecule.formula,
-                            "status": existing["status"],
+                            "status": result["status"],
                         }
-                    continue
-
-                result: dict[str, Any]
-                if backend == "gpu" and not cuda_available:
-                    result = {
-                        "status": "error",
-                        "mode": mode,
-                        "measurement": measurement,
-                        "error": "CUDA is not available in the worker environment",
-                    }
-                elif blocked_by is not None:
-                    result = {
-                        "status": "skipped_after_resource_failure",
-                        "mode": mode,
-                        "measurement": measurement,
-                        "blocked_by": blocked_by,
-                    }
-                else:
-                    result = execute_measurement(
-                        worker_payload(config, molecule, mode, measurement), config
+                    print(
+                        f"{implementation:7s} {mode:9s} {measurement:7s} "
+                        f"{molecule.formula:8s} {result['status']}"
                     )
-
-                merge_worker_result(molecule_record, mode, measurement, result)
-                document["updated_at"] = utc_now()
-                atomic_write_json(output_path, document)
-                if result["status"] in {"oom", "timeout"}:
-                    blocked_by = {
-                        "formula": molecule.formula,
-                        "status": result["status"],
-                    }
-                print(
-                    f"{mode:9s} {measurement:7s} {molecule.formula:8s} "
-                    f"{result['status']}"
-                )
     return output_path
 
 
@@ -1063,6 +1416,13 @@ def parse_arguments(argv: list[str]) -> argparse.Namespace:
         help="Directory for commit-labelled JSON output.",
     )
     parser.add_argument("--functional", default="skala-1.1")
+    parser.add_argument(
+        "--skalaxc-grid-size",
+        type=lambda value: value.upper().replace("-", "_"),
+        choices=("FINE", "ULTRA_FINE", "SUPER_FINE", "GM3", "GM5"),
+        default="GM3",
+        help="SkalaXC atomic grid preset; GM3 is closest to PySCF level 1.",
+    )
     parser.add_argument("--basis", default="def2-qzvpp")
     parser.add_argument("--grid-level", type=int, default=1)
     parser.add_argument("--max-memory-mb", type=int, default=2000)
@@ -1100,6 +1460,7 @@ def config_from_arguments(arguments: argparse.Namespace) -> BenchmarkConfig:
         results_dir=arguments.results_dir.expanduser().resolve(),
         run_label=arguments.label,
         functional=arguments.functional,
+        skalaxc_grid_size=arguments.skalaxc_grid_size,
         basis=arguments.basis,
         grid_level=arguments.grid_level,
         max_memory_mb=arguments.max_memory_mb,
@@ -1119,6 +1480,7 @@ def main(argv: list[str] | None = None) -> int:
     print("Benchmark configuration:")
     print(json.dumps(config.as_json(), indent=2, sort_keys=True))
     print(f"Skala import: {environment['imported_skala']}")
+    print(f"SkalaXC: {environment['skalaxc']}")
     print(f"Python: {environment['python_executable']}")
     print(f"CUDA: {environment['cuda']}")
     if arguments.preflight_only:

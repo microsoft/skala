@@ -15,11 +15,17 @@ import re
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
-import run_pyscf_ao_screening_benchmark as benchmark
+import run_pyscf_ao_screening_benchmark as benchmark  # type: ignore[import-not-found]
 
-MODES = ("gpu", "cpu_dense", "cpu_screened")
+SKALA_MODES = ("gpu", "cpu_dense", "cpu_screened")
+SKALAXC_MODES = benchmark.SKALAXC_MODES
+MODES = SKALA_MODES
+IMPLEMENTATION_MODES = {
+    "skala": SKALA_MODES,
+    "skalaxc": SKALAXC_MODES,
+}
 MEASUREMENTS = ("runtime", "memory")
 BASE_MOLECULE = benchmark.make_molecule_spec(7)
 
@@ -41,7 +47,7 @@ class Orientation:
 
 
 @dataclass(frozen=True)
-class RotationBenchmarkConfig(benchmark.BenchmarkConfig):
+class RotationBenchmarkConfig(benchmark.BenchmarkConfig):  # type: ignore[misc]
     azimuth_step_degrees: int = 30
     polar_step_degrees: int = 30
 
@@ -74,7 +80,10 @@ class RotationBenchmarkConfig(benchmark.BenchmarkConfig):
         data["polar_angles_degrees"] = list(self.polar_angles)
         data["orientation_count"] = len(self.orientations)
         data["full_orientation_count"] = len(self.full_orientations)
-        data["modes"] = list(MODES)
+        data["implementation_modes"] = {
+            implementation: list(modes)
+            for implementation, modes in IMPLEMENTATION_MODES.items()
+        }
         data["measurements"] = list(MEASUREMENTS)
         data["worker_thread_environment"] = self.worker_thread_environment
         return data
@@ -158,30 +167,34 @@ def validate_rotation_grid(config: RotationBenchmarkConfig) -> None:
 
 
 def run_worker_preflight(config: RotationBenchmarkConfig) -> dict[str, Any]:
-    result = benchmark.execute_worker(
-        {"operation": "environment", "source_root": str(config.source_root)}, config
+    return cast(dict[str, Any], benchmark.run_worker_preflight(config))
+
+
+def worker_payload(
+    config: RotationBenchmarkConfig,
+    molecule: benchmark.MoleculeSpec,
+    mode: str,
+    measurement: str,
+    implementation: str,
+) -> dict[str, Any]:
+    shared_mode = "cpu" if mode == "cpu_screened" else mode
+    payload = cast(
+        dict[str, Any],
+        benchmark.worker_payload(
+            config, molecule, shared_mode, measurement, implementation
+        ),
     )
-    if result["status"] != "ok":
-        raise RuntimeError(f"Benchmark preflight failed: {result}")
-    environment = result["environment"]
-    imported_path = Path(environment["imported_skala"])
-    imported_path.relative_to(config.source_root / "src")
-    required_packages = ("skala", "pyscf", "torch", "memray")
-    missing = [
-        name for name in required_packages if not environment["packages"].get(name)
-    ]
-    if missing:
-        raise RuntimeError(f"Worker environment is missing packages: {missing}")
-    return environment
+    payload["mode"] = mode
+    return payload
 
 
 def result_path(config: RotationBenchmarkConfig, source: dict[str, Any]) -> Path:
     safe_label = re.sub(r"[^A-Za-z0-9_.-]+", "-", config.run_label).strip("-.")
     if not safe_label:
         raise ValueError("The run label must contain a filename-safe character")
-    return (
-        config.results_dir
-        / f"skala-pyscf-ao-screening-rotations-{safe_label}-{source['commit'][:12]}.json"
+    return Path(config.results_dir) / (
+        "skala-pyscf-ao-screening-rotations-"
+        f"{safe_label}-{source['commit'][:12]}-v2.json"
     )
 
 
@@ -191,8 +204,21 @@ def new_result_document(
     environment: dict[str, Any],
 ) -> dict[str, Any]:
     created_at = benchmark.utc_now()
+
+    def orientation_records(modes: tuple[str, ...]) -> dict[str, Any]:
+        return {
+            orientation.key: {
+                "index": index,
+                **orientation.as_json(),
+                "coordinate_sha256": rotated_molecule(orientation).coordinate_sha256,
+                "observed": None,
+                "modes": {mode: {} for mode in modes},
+            }
+            for index, orientation in enumerate(config.orientations)
+        }
+
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "benchmark": "pyscf_ao_screening_rotations",
         "created_at": created_at,
         "updated_at": created_at,
@@ -206,15 +232,12 @@ def new_result_document(
             "rotation_convention": "active Cartesian rotation Rz(azimuth) @ Ry(polar)",
         },
         "runner_hashes": runner_hashes(),
-        "orientations": {
-            orientation.key: {
-                "index": index,
-                **orientation.as_json(),
-                "coordinate_sha256": rotated_molecule(orientation).coordinate_sha256,
-                "observed": None,
-                "modes": {mode: {} for mode in MODES},
+        "implementations": {
+            implementation: {
+                "modes": list(modes),
+                "orientations": orientation_records(modes),
             }
-            for index, orientation in enumerate(config.orientations)
+            for implementation, modes in IMPLEMENTATION_MODES.items()
         },
     }
 
@@ -224,8 +247,8 @@ def validate_resume_document(
     config: RotationBenchmarkConfig,
     source: dict[str, Any],
 ) -> None:
-    if document.get("schema_version") != 1:
-        raise ValueError("Cannot resume a result file with a different schema version")
+    if document.get("schema_version") != 2:
+        raise ValueError("Cannot resume a result file that is not schema version 2")
     if document.get("runner_hashes") != runner_hashes():
         raise ValueError(
             "Cannot resume results created by different runner implementations"
@@ -248,57 +271,74 @@ def run_benchmark(config: RotationBenchmarkConfig, environment: dict[str, Any]) 
         document = new_result_document(config, source, environment)
         benchmark.atomic_write_json(output_path, document)
 
-    cuda_available = bool(document["environment"]["cuda"]["available"])
-    for mode in MODES:
-        for measurement in MEASUREMENTS:
-            blocked_by: dict[str, Any] | None = None
-            for orientation in config.orientations:
-                orientation_record = document["orientations"][orientation.key]
-                existing = orientation_record["modes"][mode].get(measurement)
-                if existing and existing.get("status") in benchmark.TERMINAL_STATUSES:
-                    if existing["status"] in {"oom", "timeout"}:
+    for implementation, modes in IMPLEMENTATION_MODES.items():
+        implementation_record = document["implementations"][implementation]
+        for mode in modes:
+            backend = "gpu" if mode.startswith("gpu") else "cpu"
+            for measurement in MEASUREMENTS:
+                blocked_by: dict[str, Any] | None = None
+                for orientation in config.orientations:
+                    orientation_record = implementation_record["orientations"][
+                        orientation.key
+                    ]
+                    existing = orientation_record["modes"][mode].get(measurement)
+                    if (
+                        existing
+                        and existing.get("status") in benchmark.TERMINAL_STATUSES
+                    ):
+                        if existing["status"] in {"oom", "timeout"}:
+                            blocked_by = {
+                                "orientation": orientation.key,
+                                "status": existing["status"],
+                            }
+                        continue
+
+                    result: dict[str, Any]
+                    gpu_available, gpu_error = benchmark._gpu_available(
+                        implementation, document["environment"]
+                    )
+                    if backend == "gpu" and not gpu_available:
+                        result = {
+                            "status": "error",
+                            "implementation": implementation,
+                            "mode": mode,
+                            "measurement": measurement,
+                            "error": gpu_error,
+                        }
+                    elif blocked_by is not None:
+                        result = {
+                            "status": "skipped_after_resource_failure",
+                            "implementation": implementation,
+                            "mode": mode,
+                            "measurement": measurement,
+                            "blocked_by": blocked_by,
+                        }
+                    else:
+                        molecule = rotated_molecule(orientation)
+                        payload = worker_payload(
+                            config,
+                            molecule,
+                            mode,
+                            measurement,
+                            implementation,
+                        )
+                        payload["orientation"] = orientation.as_json()
+                        result = benchmark.execute_measurement(payload, config)
+
+                    benchmark.merge_worker_result(
+                        orientation_record, mode, measurement, result
+                    )
+                    document["updated_at"] = benchmark.utc_now()
+                    benchmark.atomic_write_json(output_path, document)
+                    if result["status"] in {"oom", "timeout"}:
                         blocked_by = {
                             "orientation": orientation.key,
-                            "status": existing["status"],
+                            "status": result["status"],
                         }
-                    continue
-
-                result: dict[str, Any]
-                if mode == "gpu" and not cuda_available:
-                    result = {
-                        "status": "error",
-                        "mode": mode,
-                        "measurement": measurement,
-                        "error": "CUDA is not available in the worker environment",
-                    }
-                elif blocked_by is not None:
-                    result = {
-                        "status": "skipped_after_resource_failure",
-                        "mode": mode,
-                        "measurement": measurement,
-                        "blocked_by": blocked_by,
-                    }
-                else:
-                    molecule = rotated_molecule(orientation)
-                    payload = benchmark.worker_payload(
-                        config, molecule, mode, measurement
+                    print(
+                        f"{implementation:7s} {mode:12s} {measurement:7s} "
+                        f"{orientation.key} {result['status']}"
                     )
-                    payload["orientation"] = orientation.as_json()
-                    result = benchmark.execute_measurement(payload, config)
-
-                benchmark.merge_worker_result(
-                    orientation_record, mode, measurement, result
-                )
-                document["updated_at"] = benchmark.utc_now()
-                benchmark.atomic_write_json(output_path, document)
-                if result["status"] in {"oom", "timeout"}:
-                    blocked_by = {
-                        "orientation": orientation.key,
-                        "status": result["status"],
-                    }
-                print(
-                    f"{mode:12s} {measurement:7s} {orientation.key} {result['status']}"
-                )
     return output_path
 
 
@@ -328,6 +368,13 @@ def parse_arguments(argv: list[str]) -> argparse.Namespace:
         help="Directory for commit-labelled JSON output.",
     )
     parser.add_argument("--functional", default="skala-1.1")
+    parser.add_argument(
+        "--skalaxc-grid-size",
+        type=lambda value: value.upper().replace("-", "_"),
+        choices=("FINE", "ULTRA_FINE", "SUPER_FINE", "GM3", "GM5"),
+        default="GM3",
+        help="SkalaXC atomic grid preset; GM3 is closest to PySCF level 1.",
+    )
     parser.add_argument("--basis", default="def2-qzvpp")
     parser.add_argument("--grid-level", type=int, default=1)
     parser.add_argument("--max-memory-mb", type=int, default=2000)
@@ -373,6 +420,7 @@ def config_from_arguments(
         results_dir=arguments.results_dir.expanduser().resolve(),
         run_label=arguments.label,
         functional=arguments.functional,
+        skalaxc_grid_size=arguments.skalaxc_grid_size,
         basis=arguments.basis,
         grid_level=arguments.grid_level,
         max_memory_mb=arguments.max_memory_mb,
@@ -398,6 +446,7 @@ def main(argv: list[str] | None = None) -> int:
         f"{BASE_MOLECULE.expected_aos} AOs with {config.basis}"
     )
     print(f"Skala import: {environment['imported_skala']}")
+    print(f"SkalaXC: {environment['skalaxc']}")
     print(f"Python: {environment['python_executable']}")
     print(f"CUDA: {environment['cuda']}")
     if arguments.preflight_only:
