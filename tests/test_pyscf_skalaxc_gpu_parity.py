@@ -2,6 +2,7 @@
 
 """Fixed-density parity tests between GPU4PySCF Skala and SkalaXC CUDA."""
 
+import gc
 import hashlib
 from collections.abc import Generator
 from dataclasses import dataclass
@@ -43,7 +44,6 @@ from skala.pyscf.xc_integrator import XCIntegrator  # noqa: E402
 @dataclass(frozen=True)
 class FunctionalCase:
     name: str
-    functional: ExcFunctionalBase
     model: str
     tolerances: ParityTolerances
 
@@ -59,6 +59,7 @@ FUNCTIONAL_NAMES = ("lda", "pbe", "tpss", "skala-1.1")
 # backward. Keep its EXC/VXC coverage and use neural Skala for the primary
 # kinetic-density gradient path until TPSS is retraced with a smaller kernel.
 GRADIENT_FUNCTIONAL_NAMES = ("lda", "pbe", "skala-1.1")
+GPU4PYSCF_MAX_MEMORY_MB = 512
 
 
 @pytest.fixture(scope="module")
@@ -97,13 +98,17 @@ def hartree_gradient(
     molecule: gto.Mole, reference_mean_field: scf.uhf.UHF
 ) -> npt.NDArray[np.float64]:
     mean_field = gpu_dft.UKS(molecule)
+    mean_field.max_memory = GPU4PYSCF_MAX_MEMORY_MB
     mean_field.xc = "0*LDA"
     mean_field.mo_coeff = cp.asarray(reference_mean_field.mo_coeff)
     mean_field.mo_occ = cp.asarray(reference_mean_field.mo_occ)
     mean_field.mo_energy = cp.asarray(reference_mean_field.mo_energy)
-    return np.asarray(
+    result = np.asarray(
         cp.asnumpy(mean_field.nuc_grad_method().kernel()), dtype=np.float64
     )
+    del mean_field
+    _release_gpu_memory()
+    return result
 
 
 @pytest.fixture(scope="module")
@@ -121,9 +126,6 @@ def functional_case(
     request: pytest.FixtureRequest,
 ) -> FunctionalCase:
     name = str(request.param)
-    device = torch.device("cuda:0")
-    loaded_functional = load_functional(name, device=device)
-    assert isinstance(loaded_functional, ExcFunctionalBase)
     if name == "skala-1.1":
         model_path = skalaxc.MODEL_DIR / "skala-1.1-cuda.fun"
         with model_path.open("rb") as model_file:
@@ -134,7 +136,6 @@ def functional_case(
         model = name.upper()
     return FunctionalCase(
         name,
-        loaded_functional,
         model,
         GPU_TOLERANCES[name],
     )
@@ -154,6 +155,7 @@ def _fixed_density_xc_gradient(
     hartree_gradient: npt.NDArray[np.float64],
 ) -> npt.NDArray[np.float64]:
     mean_field = SkalaKS(molecule, functional, with_dftd3=False)
+    mean_field.max_memory = GPU4PYSCF_MAX_MEMORY_MB
     mean_field.grids = grid
     mean_field.mo_coeff = cp.asarray(reference_mean_field.mo_coeff)
     mean_field.mo_occ = cp.asarray(reference_mean_field.mo_occ)
@@ -162,16 +164,17 @@ def _fixed_density_xc_gradient(
     return np.asarray(cp.asnumpy(total_gradient), dtype=np.float64) - hartree_gradient
 
 
-def _release_torch_cache() -> None:
+def _release_gpu_memory() -> None:
+    gc.collect()
     torch.cuda.synchronize()
     torch.cuda.empty_cache()
 
 
 @pytest.fixture(autouse=True)
-def release_torch_cache_after_test() -> Generator[None, None, None]:
+def release_gpu_memory_after_test() -> Generator[None, None, None]:
     """Release unused CUDA allocator blocks between parameterized cases."""
     yield
-    _release_torch_cache()
+    _release_gpu_memory()
 
 
 @pytest.mark.parametrize("functional_case", FUNCTIONAL_NAMES, indirect=True)
@@ -181,15 +184,23 @@ def test_gpu_exc_vxc_parity(
     density: npt.NDArray[np.float64],
     gpu4pyscf_grid: SkalaGrids,
 ) -> None:
+    functional = load_functional(functional_case.name, device=torch.device("cuda:0"))
+    assert isinstance(functional, ExcFunctionalBase)
     density_tensor = torch.as_tensor(density, device="cuda:0")
-    gpu4pyscf_result = XCIntegrator(
-        functional_case.functional,
+    gpu4pyscf_integrator = XCIntegrator(
+        functional,
         device=torch.device("cuda:0"),
-    )(molecule, gpu4pyscf_grid, density_tensor)
+    )
+    gpu4pyscf_result = gpu4pyscf_integrator(
+        molecule,
+        gpu4pyscf_grid,
+        density_tensor,
+        max_memory=GPU4PYSCF_MAX_MEMORY_MB,
+    )
     gpu4pyscf_energy = gpu4pyscf_result.energy.item()
     gpu4pyscf_potential = gpu4pyscf_result.potential.detach().cpu().numpy()
-    del gpu4pyscf_result, density_tensor
-    _release_torch_cache()
+    del functional, gpu4pyscf_integrator, gpu4pyscf_result, density_tensor
+    _release_gpu_memory()
 
     scalar_density, spin_density = uks_density_channels(density)
     integrator = make_skalaxc_integrator(
@@ -230,14 +241,17 @@ def test_gpu_exc_gradient_parity(
     reference_mean_field: scf.uhf.UHF,
     hartree_gradient: npt.NDArray[np.float64],
 ) -> None:
+    functional = load_functional(functional_case.name, device=torch.device("cuda:0"))
+    assert isinstance(functional, ExcFunctionalBase)
     gpu4pyscf_gradient = _fixed_density_xc_gradient(
-        functional_case.functional,
+        functional,
         molecule,
         gpu4pyscf_grid,
         reference_mean_field,
         hartree_gradient,
     )
-    _release_torch_cache()
+    del functional
+    _release_gpu_memory()
 
     scalar_density, spin_density = uks_density_channels(density)
     integrator = make_skalaxc_integrator(
