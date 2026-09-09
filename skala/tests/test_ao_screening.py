@@ -5,7 +5,7 @@ from typing import Any, TypeAlias, cast
 import numpy as np
 import pytest
 import torch
-from skala.features import Feature, FeatureMap
+from skala.features import AOFeatureSpec, Feature, FeatureMap
 from skala.functional.base import ExcFunctionalBase
 from skala.pyscf import ao_evaluation as ao_evaluation_module
 from skala.pyscf import grids as grids_module
@@ -23,7 +23,10 @@ from skala.pyscf.ao_evaluation import (
 from skala.pyscf.evaluation import FeatureSpec
 from skala.pyscf.feature_math import MGGAFeatureFunction
 from skala.pyscf.grids import SkalaGrids
-from skala.pyscf.model_chunking import ModelFeatureChunk
+from skala.pyscf.model_chunking import (
+    ModelFeatureChunk,
+    ModelFeaturePlan,
+)
 from skala.pyscf.numint import SkalaNumInt
 from skala.pyscf.spatial_grid_layout import (
     SpatialGridLayout,
@@ -80,8 +83,7 @@ def test_mgga_supported_features_are_linear_in_density_matrix(
     Linearity requires the first JVP to equal direct feature evaluation on the
     tangent and the second JVP to vanish.
     """
-    feature_spec = FeatureSpec(feature_names)
-    feature_function = MGGAFeatureFunction(feature_spec)
+    feature_function = MGGAFeatureFunction(AOFeatureSpec(feature_names))
     ncomp = (expected_deriv + 1) * (expected_deriv + 2) * (expected_deriv + 3) // 6
     ao = torch.arange(1, ncomp * 2 * 3 + 1, dtype=torch.float64).reshape(ncomp, 2, 3)
     if expected_deriv == 0:
@@ -113,7 +115,6 @@ def test_mgga_supported_features_are_linear_in_density_matrix(
 
     assert feature_function.deriv == expected_deriv
     assert feature_function.nfeats == expected_nfeats
-    assert feature_function.feature_spec is feature_spec
     assert features.shape == (expected_nfeats, 3)
     assert set(feature_function.to_dict(features)) == feature_names
     torch.testing.assert_close(feature_jvp, feature_function(tangent, ao))
@@ -129,7 +130,7 @@ def test_mgga_analytic_vjp_matches_autograd(
     feature_names: tuple[Feature, ...], spin_channels: int | None
 ) -> None:
     """Match the analytic MGGA VJP to autograd for every feature and spin layout."""
-    feature_function = MGGAFeatureFunction(FeatureSpec(feature_names))
+    feature_function = MGGAFeatureFunction(AOFeatureSpec(feature_names))
     ncomp = (
         (feature_function.deriv + 1)
         * (feature_function.deriv + 2)
@@ -158,7 +159,7 @@ def test_feature_block_compiled_vjp_matches_eager(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Match compiled blockwise feature evaluation and VJP to eager execution."""
-    feature_function = MGGAFeatureFunction(FeatureSpec(_MGGA_FEATURES))
+    feature_function = MGGAFeatureFunction(AOFeatureSpec(_MGGA_FEATURES))
     generator = torch.Generator().manual_seed(0)
     block = _AOBlock(
         ao_values=torch.randn((10, 3, 5), dtype=torch.float64, generator=generator),
@@ -202,15 +203,19 @@ def test_feature_block_compiled_vjp_matches_eager(
     torch.testing.assert_close(compiled_vjp, eager_vjp)
 
 
-@pytest.mark.parametrize("feature_names", [[], [Feature.GRID_WEIGHTS]])
+@pytest.mark.parametrize(
+    ("feature_names", "message"),
+    [
+        ([], "At least one AO-derived feature must be selected"),
+        ([Feature.GRID_WEIGHTS], "Unsupported AO features: grid_weights"),
+    ],
+)
 def test_mgga_requires_at_least_one_ao_derived_feature(
-    feature_names: list[Feature],
+    feature_names: list[Feature], message: str
 ) -> None:
     """Reject MGGA feature functions that contain no AO-derived feature."""
-    with pytest.raises(
-        ValueError, match="At least one AO-derived feature must be selected"
-    ):
-        MGGAFeatureFunction(FeatureSpec(feature_names))
+    with pytest.raises(ValueError, match=message):
+        MGGAFeatureFunction(AOFeatureSpec(feature_names))
 
 
 def test_patch_ao_screening_restores_previous_decision(carbon: gto.Mole) -> None:
@@ -248,9 +253,41 @@ def test_active_cpu_ao_indices(carbon: gto.Mole) -> None:
     assert empty.size == 0
 
 
+def test_dense_model_evaluation_uses_model_chunks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Keep model chunking independent from the AO screening decision."""
+    mol = gto.M(atom="H 0 0 0; H 0 0 0.74", basis="sto-3g", verbose=0)
+    grids = _minimal_atom_grid(mol)
+    atom_grid_size = grids.weights.size // mol.natm
+    monkeypatch.setattr(
+        model_chunking_module,
+        "estimate_max_model_atoms_per_chunk",
+        lambda *args, **kwargs: {atom_grid_size: 1},
+    )
+
+    class CountingFunctional(QuadraticFunctional):
+        def __init__(self) -> None:
+            super().__init__()
+            self.calls = 0
+
+        def get_exc(self, mol: FeatureMap) -> torch.Tensor:
+            self.calls += 1
+            return super().get_exc(mol)
+
+    functional = CountingFunctional()
+    integrator = XCIntegrator(functional)
+    dm = torch.as_tensor(dft.RKS(mol).get_init_guess())
+
+    with force_ao_screening(False):
+        integrator(mol, grids, dm)
+
+    assert functional.calls == mol.natm
+
+
 def test_resolve_ao_block_size_modes(carbon: gto.Mole) -> None:
     """Resolve aligned CPU block sizes and reject explicit GPU block sizing."""
-    feature_function = MGGAFeatureFunction(FeatureSpec([Feature.DENSITY]))
+    feature_function = MGGAFeatureFunction(AOFeatureSpec([Feature.DENSITY]))
     backend_block_size = dft.gen_grid.BLKSIZE
 
     # CPU sizes are aligned locally; GPU sizing is delegated unless explicitly invalid.
@@ -450,7 +487,9 @@ def test_grid_reuses_spatial_grid_layout_across_numints(
         "prepare_spatial_grid_layout",
         fake_prepare_spatial_grid_layout,
     )
-    numint: _NumPyNumInt = SkalaNumInt(QuadraticFunctional())
+    functional = QuadraticFunctional([Feature.DENSITY, Feature.GRID_WEIGHTS])
+    assert not FeatureSpec(functional.features).supports_spatial_decomposition
+    numint: _NumPyNumInt = SkalaNumInt(functional)
     other_numint: _NumPyNumInt = SkalaNumInt(QuadraticFunctional())
 
     layout = numint.integrator._get_spatial_grid_layout(carbon, grids)
@@ -518,20 +557,13 @@ def test_first_and_second_order_use_same_screening_decision(
     routes: list[str] = []
     safety_fractions: list[float] = []
 
-    def fake_generate_features(
-        mol: gto.Mole,
+    def fake_evaluate_raw_features_auto_chunk(
         dm: torch.Tensor,
-        grids: object,
-        features: set[Feature] | None = None,
+        *args: object,
         **kwargs: object,
-    ) -> FeatureMap:
+    ) -> torch.Tensor:
         routes.append("dense")
-        density = dm.square().sum().reshape(1).expand(2, 1) / 2
-        return {
-            Feature.ATOMIC_GRID_SIZES: torch.tensor([1]),
-            Feature.DENSITY: density,
-            Feature.GRID_WEIGHTS: torch.ones(1, dtype=dm.dtype),
-        }
+        return dm.sum().reshape(1, 1)
 
     class FakeSpatialGridLayout:
         block_size = 1
@@ -577,17 +609,20 @@ def test_first_and_second_order_use_same_screening_decision(
         dm: torch.Tensor,
         grids: object,
         atom_major_raw_features: torch.Tensor,
-        feature_function: MGGAFeatureFunction,
+        feature_plan: ModelFeaturePlan,
         deriv_order: int,
         **kwargs: object,
     ) -> FakeModelFeatureChunks:
+        assert feature_plan.evaluation_feature_spec.ao_features
         safety_fraction = kwargs["safety_fraction"]
         assert isinstance(safety_fraction, float)
         safety_fractions.append(safety_fraction)
         return FakeModelFeatureChunks(atom_major_raw_features)
 
     monkeypatch.setattr(
-        xc_integrator_module, "generate_features", fake_generate_features
+        ao_evaluation_module,
+        "evaluate_raw_features_auto_chunk",
+        fake_evaluate_raw_features_auto_chunk,
     )
     monkeypatch.setattr(
         grids_module,
@@ -628,15 +663,11 @@ def test_first_and_second_order_use_same_screening_decision(
 
     assert result.shape == (carbon.nao_nr(), carbon.nao_nr())
     expected_route = "screened" if expected else "dense"
-    expected_route_count = 3 if expected else 2
-    assert routes == [expected_route] * expected_route_count
-    if expected:
-        assert safety_fractions == [
-            0.8,
-            0.8 if response_safety_fraction is None else response_safety_fraction,
-        ]
-    else:
-        assert safety_fractions == []
+    assert routes == [expected_route] * 3
+    assert safety_fractions == [
+        0.8,
+        0.8 if response_safety_fraction is None else response_safety_fraction,
+    ]
 
 
 def test_feature_block_helper_localizes_derivative_vectors() -> None:
@@ -647,7 +678,7 @@ def test_feature_block_helper_localizes_derivative_vectors() -> None:
     adjoint calculation must select only this block's grid cotangent. Comparing both
     operations with direct local formulas catches mixing up AO and grid localization.
     """
-    feature_function = MGGAFeatureFunction(FeatureSpec([Feature.DENSITY]))
+    feature_function = MGGAFeatureFunction(AOFeatureSpec([Feature.DENSITY]))
     block = _AOBlock(
         ao_values=torch.tensor([[1.0, 2.0], [3.0, 4.0]], dtype=torch.float64),
         active_ao_indices=torch.tensor([0, 2]),
@@ -688,7 +719,7 @@ def test_blockwise_ao_feature_transforms_follow_linear_operator(
 ) -> None:
     """Check spin-resolved first and second JVPs and the adjoint JVP."""
     grids = _minimal_atom_grid(carbon)
-    feature_function = MGGAFeatureFunction(FeatureSpec([Feature.DENSITY]))
+    feature_function = MGGAFeatureFunction(AOFeatureSpec([Feature.DENSITY]))
     identity = torch.eye(carbon.nao_nr(), dtype=torch.float64)
     dm = torch.stack((identity, 2 * identity))
     tangent = torch.arange(1, dm.numel() + 1, dtype=dm.dtype).reshape(dm.shape)
@@ -778,7 +809,7 @@ def test_cpu_screening_slices_and_scatters_full_derivatives(
 
     monkeypatch.setattr(dft.numint, "NumInt", FakeNumInt)
 
-    feature_function = MGGAFeatureFunction(FeatureSpec([Feature.DENSITY]))
+    feature_function = MGGAFeatureFunction(AOFeatureSpec([Feature.DENSITY]))
     dm = torch.diag(
         torch.arange(1, carbon.nao_nr() + 1, dtype=torch.float64)
     ).requires_grad_()
@@ -850,7 +881,7 @@ def test_cpu_all_active_block_uses_dense_sentinel(
                 )
 
     monkeypatch.setattr(dft.numint, "NumInt", FakeNumInt)
-    feature_function = MGGAFeatureFunction(FeatureSpec([Feature.DENSITY]))
+    feature_function = MGGAFeatureFunction(AOFeatureSpec([Feature.DENSITY]))
 
     blocks = list(_CPUAOBlockLoop(carbon, grids, feature_function, block_size))
 
@@ -884,7 +915,7 @@ def test_cpu_no_active_aos_returns_full_zero_derivatives(
             yield ao, None, grids.weights, grids.coords
 
     monkeypatch.setattr(dft.numint, "NumInt", FakeNumInt)
-    feature_function = MGGAFeatureFunction(FeatureSpec([Feature.DENSITY]))
+    feature_function = MGGAFeatureFunction(AOFeatureSpec([Feature.DENSITY]))
     dm = torch.eye(carbon.nao_nr(), dtype=torch.float64).requires_grad_()
 
     features = evaluate_ao_features_blockwise(
@@ -1034,6 +1065,23 @@ def test_cpu_quadratic_dense_screened_equivalence_heteronuclear() -> None:
             rtol=1e-10,
             atol=1e-11,
         )
+
+
+def test_cpu_density_dense_screened_equivalence() -> None:
+    """Match dense and screened density in the original atom-major grid order."""
+    mol = gto.M(atom="H 0 0 0; F 0 0 0.92", basis="sto-3g", spin=0, verbose=0)
+    grids = _minimal_atom_grid(mol)
+    numint: _NumPyNumInt = SkalaNumInt(QuadraticFunctional())
+    dm = dft.RKS(mol).get_init_guess()
+
+    with force_ao_screening(False):
+        dense = numint.get_rho(mol, dm, grids)
+    with force_ao_screening(True):
+        screened = numint.get_rho(mol, dm, grids)
+
+    assert dense.shape == grids.weights.shape
+    assert screened.shape == grids.weights.shape
+    np.testing.assert_allclose(screened, dense, rtol=1e-10, atol=1e-11)
 
 
 @pytest.mark.parametrize(

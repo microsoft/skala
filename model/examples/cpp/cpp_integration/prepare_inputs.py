@@ -6,7 +6,8 @@ from pathlib import Path
 import torch
 from pyscf.dft import gen_grid
 from skala.functional.traditional import LDA
-from skala.pyscf.features import generate_features
+from skala.pyscf.evaluation import FeatureSpec
+from skala.pyscf.model_chunking import evaluate_model_features
 from skala_model import SkalaFunctional
 
 from pyscf import dft, gto
@@ -41,8 +42,8 @@ def main() -> None:
     grid = gen_grid.Grids(molecule)
     grid.level = 3
     grid.build(sort_grids=False)
-    features = generate_features(
-        molecule, dm, grid, features=set(SkalaFunctional.features)
+    features = evaluate_model_features(
+        molecule, dm, grid, FeatureSpec(SkalaFunctional.features)
     )
 
     # Save all features as individual .pt files.
