@@ -79,7 +79,7 @@ def hartree_gradient(
     molecule: gto.Mole, reference_mean_field: scf.uhf.UHF
 ) -> npt.NDArray[np.float64]:
     mean_field = dft.UKS(molecule)
-    mean_field.xc = "0*LDA"
+    mean_field.xc = ""
     mean_field.mo_coeff = reference_mean_field.mo_coeff
     mean_field.mo_occ = reference_mean_field.mo_occ
     mean_field.mo_energy = reference_mean_field.mo_energy

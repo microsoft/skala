@@ -97,9 +97,10 @@ def density(
 def hartree_gradient(
     molecule: gto.Mole, reference_mean_field: scf.uhf.UHF
 ) -> npt.NDArray[np.float64]:
+    # GPU4PySCF 1.8.1 ignores the coefficient of a single-term ``0*LDA``.
     mean_field = gpu_dft.UKS(molecule)
     mean_field.max_memory = GPU4PYSCF_MAX_MEMORY_MB
-    mean_field.xc = "0*LDA"
+    mean_field.xc = ""
     mean_field.mo_coeff = cp.asarray(reference_mean_field.mo_coeff)
     mean_field.mo_occ = cp.asarray(reference_mean_field.mo_occ)
     mean_field.mo_energy = cp.asarray(reference_mean_field.mo_energy)
