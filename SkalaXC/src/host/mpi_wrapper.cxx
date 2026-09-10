@@ -54,17 +54,7 @@ SpinGradientRecordMatrix permute_point_records(
 }
 
 at::Tensor point_records_to_torch(const SpinGradientRecordMatrix& records) {
-  auto options =
-      torch::TensorOptions().dtype(torch::kFloat64).device(torch::kCPU);
-  if (records.rows() == 0)
-    return torch::empty({spin_dimension, direction_dimension, 0}, options)
-        .requires_grad_(true);
-  return torch::from_blob(const_cast<double*>(records.data()),
-                          {spin_dimension, direction_dimension, records.rows()},
-                          {direction_dimension, 1, spin_gradient_dimension},
-                          options)
-      .clone()
-      .requires_grad_(true);
+  return SkalaXC::spin_gradient_to_torch(unpack_point_records(records), true);
 }
 
 void validate_torch_gradient(const at::Tensor& tensor,
@@ -86,10 +76,7 @@ at::Tensor spin_gradient_to_torch(const SpinGradient& gradient) {
 SpinGradient torch_to_spin_gradient(const at::Tensor& tensor,
                                     Eigen::Index expected_points) {
   validate_torch_gradient(tensor, expected_points);
-  auto point_major = tensor.detach().cpu().permute({2, 0, 1}).contiguous();
-  Eigen::Map<const SpinGradientRecordMatrix> records(
-      point_major.data_ptr<double>(), expected_points, spin_gradient_dimension);
-  return unpack_point_records(records);
+  return SkalaXC::spin_gradient_from_torch(tensor);
 }
 
 void broadcast_string(std::string& value, const GauXC::RuntimeEnvironment& rt,
@@ -159,26 +146,20 @@ SpinGradient scatter_torch_gradient(
     throw std::invalid_argument("Local gradient point count is invalid");
   if (rt.comm_size() == 1) {
     validate_torch_gradient(root_tensor, local_points);
-    auto point_major =
-        root_tensor.detach().cpu().permute({2, 0, 1}).contiguous();
-    Eigen::Map<const SpinGradientRecordMatrix> records(
-        point_major.data_ptr<double>(), local_points, spin_gradient_dimension);
-    return unpack_point_records(
-        permute_point_records(records, atom_to_rank_permutation));
+    return unpack_point_records(permute_point_records(
+        pack_point_records(SkalaXC::spin_gradient_from_torch(root_tensor)),
+        atom_to_rank_permutation));
   }
 
 #ifdef GAUXC_HAS_MPI
   SpinGradientRecordMatrix rank_ordered_records;
-  at::Tensor point_major;
   const auto component_layout = point_layout.scaled(spin_gradient_dimension);
   if (rt.comm_rank() == root) {
     const auto global_points = point_layout.extent();
     validate_torch_gradient(root_tensor, global_points);
-    point_major = root_tensor.detach().cpu().permute({2, 0, 1}).contiguous();
-    Eigen::Map<const SpinGradientRecordMatrix> atom_ordered_records(
-        point_major.data_ptr<double>(), global_points, spin_gradient_dimension);
-    rank_ordered_records =
-        permute_point_records(atom_ordered_records, atom_to_rank_permutation);
+    rank_ordered_records = permute_point_records(
+        pack_point_records(SkalaXC::spin_gradient_from_torch(root_tensor)),
+        atom_to_rank_permutation);
   }
 
   SpinGradientRecordMatrix local_records(local_points, spin_gradient_dimension);
