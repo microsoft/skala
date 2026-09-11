@@ -25,6 +25,7 @@
 #include "device_specific/cuda_util.hpp"
 #include "spin_channels.cuh"
 #include <gauxc/util/div_ceil.hpp>
+#include <initializer_list>
 
 namespace SkalaXC {
 
@@ -43,6 +44,9 @@ using GauXC::XCDeviceTask;
  */
 __global__ void transform_skala_vxc_for_grad_kernel(
     uint32_t ntasks, XCDeviceTask* __restrict__ tasks_device) {
+  using cuda::Direction;
+  using cuda::PauliChannel;
+  using cuda::SpinChannel;
 
   const int batch_idx = blockIdx.z;
   if (batch_idx >= ntasks) return;
@@ -54,22 +58,15 @@ __global__ void transform_skala_vxc_for_grad_kernel(
   if (tid >= npts) return;
 
   // Read per-direction SkalaXC derivatives (alpha/beta)
-  const double dx_a = task.gamma_pp[tid];
-  const double dx_b = task.vgamma_pp[tid];
-  const double dy_a = task.gamma_pm[tid];
-  const double dy_b = task.vgamma_pm[tid];
-  const double dz_a = task.gamma_mm[tid];
-  const double dz_b = task.vgamma_mm[tid];
-
-  const auto dx_scalar_z = cuda::alpha_beta_to_scalar_z(dx_a, dx_b);
-  const auto dy_scalar_z = cuda::alpha_beta_to_scalar_z(dy_a, dy_b);
-  const auto dz_scalar_z = cuda::alpha_beta_to_scalar_z(dz_a, dz_b);
-  task.dden_sx[tid] = dx_scalar_z.scalar;
-  task.dden_sy[tid] = dy_scalar_z.scalar;
-  task.dden_sz[tid] = dz_scalar_z.scalar;
-  task.dden_zx[tid] = dx_scalar_z.spin_z;
-  task.dden_zy[tid] = dy_scalar_z.spin_z;
-  task.dden_zz[tid] = dz_scalar_z.spin_z;
+  for (const auto direction : {Direction::X, Direction::Y, Direction::Z}) {
+    const auto potential = cuda::alpha_beta_to_scalar_z(
+        cuda::gradient_potential(task, SpinChannel::Alpha, direction)[tid],
+        cuda::gradient_potential(task, SpinChannel::Beta, direction)[tid]);
+    cuda::density_gradient(task, PauliChannel::Scalar, direction)[tid] =
+        potential.scalar;
+    cuda::density_gradient(task, PauliChannel::SpinZ, direction)[tid] =
+        potential.spin_z;
+  }
 
   // Set vgamma coefficients so the standard kernel reproduces the SkalaXC
   // formula

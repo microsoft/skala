@@ -1,7 +1,9 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <skalaxc/skalaxc.hpp>
 
+#include "device/cuda/kernels/spin_channels.cuh"
 #include "test_utils.hpp"
 
 #include <Eigen/Core>
@@ -16,6 +18,7 @@
 #include <limits>
 #include <string>
 #include <tuple>
+#include <type_traits>
 #include <vector>
 
 #ifdef SKALAXC_HAS_MPI
@@ -26,6 +29,27 @@ namespace {
 
 using Matrix = Eigen::MatrixXd;
 using Result = std::tuple<double, Matrix, Matrix>;
+
+void require_gradient_potential_buffer(GauXC::XCDeviceTask& task,
+                                       SkalaXC::cuda::SpinChannel channel,
+                                       SkalaXC::cuda::Direction direction,
+                                       double* expected) {
+  auto* writable = SkalaXC::cuda::gradient_potential(task, channel, direction);
+  const auto& const_task = task;
+  const auto* readable =
+      SkalaXC::cuda::gradient_potential(const_task, channel, direction);
+  STATIC_REQUIRE(std::is_same_v<decltype(writable), double*>);
+  STATIC_REQUIRE(std::is_same_v<decltype(SkalaXC::cuda::gradient_potential(
+                                    const_task, channel, direction)),
+                                const double*>);
+  REQUIRE(writable == expected);
+  REQUIRE(readable == expected);
+  for (std::size_t point = 0; point < task.npts; ++point)
+    REQUIRE(readable[point] == expected[point]);
+  writable[1] = -expected[1];
+  REQUIRE(readable[1] == expected[1]);
+  REQUIRE(expected[1] < 0.0);
+}
 
 std::string cuda_skala_model() {
   return std::string(SKALAXC_MODEL_PATH) + "/skala-1.1-cuda.fun";
@@ -88,6 +112,83 @@ std::vector<double> evaluate_gradient(
 
 }  // namespace
 
+TEST_CASE("Skala CUDA gradient-potential accessors select semantic buffers",
+          "[skala][cuda][device-potential-accessors]") {
+  using SkalaXC::cuda::Direction;
+  using SkalaXC::cuda::SpinChannel;
+  std::array<std::array<double, 3>, 6> buffers{};
+  for (std::size_t component = 0; component < buffers.size(); ++component)
+    for (std::size_t point = 0; point < buffers[component].size(); ++point)
+      buffers[component][point] = 100.0 * (component + 1) + point;
+
+  GauXC::XCDeviceTask task;
+  task.npts = 3;
+  task.gamma_pp = buffers[0].data();
+  task.gamma_pm = buffers[1].data();
+  task.gamma_mm = buffers[2].data();
+  task.vgamma_pp = buffers[3].data();
+  task.vgamma_pm = buffers[4].data();
+  task.vgamma_mm = buffers[5].data();
+
+  for (const auto channel : {SpinChannel::Alpha, SpinChannel::Beta})
+    for (const auto direction : {Direction::X, Direction::Y, Direction::Z}) {
+      const auto component = static_cast<std::size_t>(channel) * 3 +
+                             static_cast<std::size_t>(direction);
+      require_gradient_potential_buffer(task, channel, direction,
+                                        buffers[component].data());
+    }
+  REQUIRE(SkalaXC::cuda::gradient_potential(task, static_cast<SpinChannel>(2),
+                                            Direction::X) == nullptr);
+  REQUIRE(SkalaXC::cuda::gradient_potential(
+              task, SpinChannel::Alpha, static_cast<Direction>(3)) == nullptr);
+}
+
+TEST_CASE("Skala CUDA directional accessors select basis and density buffers",
+          "[skala][cuda][device-potential-accessors]") {
+  using SkalaXC::cuda::Direction;
+  using SkalaXC::cuda::PauliChannel;
+  std::array<std::array<double, 3>, 9> buffers{};
+  GauXC::XCDeviceTask task;
+  task.dbfx = buffers[0].data();
+  task.dbfy = buffers[1].data();
+  task.dbfz = buffers[2].data();
+  task.dden_sx = buffers[3].data();
+  task.dden_sy = buffers[4].data();
+  task.dden_sz = buffers[5].data();
+  task.dden_zx = buffers[6].data();
+  task.dden_zy = buffers[7].data();
+  task.dden_zz = buffers[8].data();
+  const auto& const_task = task;
+
+  for (const auto direction : {Direction::X, Direction::Y, Direction::Z}) {
+    REQUIRE(SkalaXC::cuda::basis_derivative(task, direction) ==
+            buffers[static_cast<std::size_t>(direction)].data());
+    for (const auto channel : {PauliChannel::Scalar, PauliChannel::SpinZ}) {
+      const auto component = 3 + static_cast<std::size_t>(channel) * 3 +
+                             static_cast<std::size_t>(direction);
+      auto* writable =
+          SkalaXC::cuda::density_gradient(task, channel, direction);
+      const auto* readable =
+          SkalaXC::cuda::density_gradient(const_task, channel, direction);
+      STATIC_REQUIRE(std::is_same_v<decltype(writable), double*>);
+      STATIC_REQUIRE(std::is_same_v<decltype(SkalaXC::cuda::density_gradient(
+                                        const_task, channel, direction)),
+                                    const double*>);
+      REQUIRE(writable == buffers[component].data());
+      REQUIRE(readable == buffers[component].data());
+      writable[1] = static_cast<double>(component);
+      REQUIRE(buffers[component][1] == static_cast<double>(component));
+    }
+  }
+  REQUIRE(SkalaXC::cuda::basis_derivative(task, static_cast<Direction>(3)) ==
+          nullptr);
+  REQUIRE(SkalaXC::cuda::density_gradient(task, static_cast<PauliChannel>(2),
+                                          Direction::X) == nullptr);
+  REQUIRE(SkalaXC::cuda::density_gradient(task, PauliChannel::Scalar,
+                                          static_cast<Direction>(3)) ==
+          nullptr);
+}
+
 TEST_CASE("Skala CUDA reproduces host EXC and VXC",
           "[skala][cuda][device-reference-integration]") {
   const std::string fixture = std::string(SKALAXC_TEST_REF_DATA_PATH) +
@@ -95,6 +196,9 @@ TEST_CASE("Skala CUDA reproduces host EXC and VXC",
   const auto system = SkalaXC::test::load_molecular_system(fixture);
   const auto density =
       SkalaXC::test::load_uks_density(fixture, "/DENSITY_SCALAR", "/DENSITY_Z");
+  const double spin_fraction = GENERATE(0.0, 0.2);
+  const Matrix spin_density = density.spin + spin_fraction * density.scalar;
+  INFO("spin fraction=" << spin_fraction);
 
   SkalaXC::RuntimeEnvironment host_runtime{SKALAXC_MPI_CODE(MPI_COMM_WORLD)};
   SkalaXC::DeviceRuntimeSettings device_settings;
@@ -105,10 +209,10 @@ TEST_CASE("Skala CUDA reproduces host EXC and VXC",
   for (const std::string model : {"LDA", "PBE", "TPSS"}) {
     const Result host =
         evaluate(host_runtime, SkalaXC::ExecutionSpace::Host, system.molecule,
-                 system.basis, model, density.scalar, density.spin, false);
+                 system.basis, model, density.scalar, spin_density, false);
     const Result device = evaluate(
         device_runtime, SkalaXC::ExecutionSpace::Device, system.molecule,
-        system.basis, model, density.scalar, density.spin, true);
+        system.basis, model, density.scalar, spin_density, true);
 
     const double exc_error = std::abs(std::get<0>(device) - std::get<0>(host)) /
                              std::max(1.0, std::abs(std::get<0>(host)));
@@ -126,6 +230,7 @@ TEST_CASE("Skala CUDA reproduces host EXC and VXC",
     CHECK(exc_error <= 1e-10);
     CHECK(scalar_error <= 1e-7);
     CHECK(spin_error <= 1e-10);
+    if (spin_fraction != 0.0) REQUIRE(std::get<2>(host).norm() > 1e-6);
   }
 }
 
@@ -134,7 +239,9 @@ TEST_CASE("Skala CUDA reproduces host semilocal nuclear gradients",
   const auto system = SkalaXC::test::make_rotated_h2_sto3g_system();
   Matrix scalar_density(2, 2);
   scalar_density << 0.5, 0.5, 0.5, 0.5;
-  const Matrix spin_density = Matrix::Zero(2, 2);
+  const double spin_fraction = GENERATE(0.0, 0.2);
+  const Matrix spin_density = spin_fraction * scalar_density;
+  INFO("spin fraction=" << spin_fraction);
 
   SkalaXC::RuntimeEnvironment host_runtime{SKALAXC_MPI_CODE(MPI_COMM_WORLD)};
   SkalaXC::RuntimeEnvironment device_runtime{

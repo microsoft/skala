@@ -62,16 +62,9 @@ FeatureDict ModelGridExchange::prepare_local_features(
     if (has_density_gradient) {
       if (features.density_gradient.points() != block_point_count)
         SKALAXC_EXCEPTION("Invalid task density-gradient dimensions");
-      for (Eigen::Index point = 0; point < block_point_count; ++point)
-        for (Eigen::Index direction = 0; direction < direction_dimension;
-             ++direction)
-          for (Eigen::Index spin = 0; spin < spin_dimension; ++spin)
-            density_gradient(static_cast<Direction>(direction),
-                             block_offset + point,
-                             static_cast<SpinChannel>(spin)) =
-                features.density_gradient(static_cast<Direction>(direction),
-                                          point,
-                                          static_cast<SpinChannel>(spin));
+      copy_points(
+          features.density_gradient,
+          density_gradient.point_slice(block_offset, block_point_count));
     }
   }
 
@@ -198,15 +191,8 @@ void ModelGridExchange::distribute_local_potentials(
         density_potential.middleRows(block_offset, block_point_count);
     if (has_density_gradient) {
       potentials.density_gradient.resize(block_point_count);
-      for (Eigen::Index point = 0; point < block_point_count; ++point)
-        for (Eigen::Index direction = 0; direction < direction_dimension;
-             ++direction)
-          for (Eigen::Index spin = 0; spin < spin_dimension; ++spin)
-            potentials.density_gradient(static_cast<Direction>(direction),
-                                        point, static_cast<SpinChannel>(spin)) =
-                density_gradient(static_cast<Direction>(direction),
-                                 block_offset + point,
-                                 static_cast<SpinChannel>(spin));
+      copy_points(density_gradient.point_slice(block_offset, block_point_count),
+                  potentials.density_gradient);
     }
     if (has_kinetic)
       potentials.kinetic =

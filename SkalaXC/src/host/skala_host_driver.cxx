@@ -11,6 +11,7 @@
 #include "skala_host_driver.hpp"
 #include "collective_error.hpp"
 #include "component_matrix_map.hpp"
+#include "derivative_component_map.hpp"
 #include "exceptions.hpp"
 #include "model_grid_exchange.hpp"
 #include "mpi_wrapper.hpp"
@@ -50,137 +51,149 @@ class GauXCTaskAdapter {
 
   void eval_collocation(ComponentMatrixMap& basis_components,
                         bool needs_gradient) const {
+    BasisComponentView basis_values(basis_components);
     if (needs_gradient) {
-      driver_.eval_collocation_gradient(npts_, nshells_, nbe_,
-                                        task_.points.data()->data(), basis_,
-                                        task_.bfn_screening.shell_list.data(),
-                                        basis_components.component_data(0),
-                                        basis_components.component_data(1),
-                                        basis_components.component_data(2),
-                                        basis_components.component_data(3));
+      driver_.eval_collocation_gradient(
+          npts_, nshells_, nbe_, task_.points.data()->data(), basis_,
+          task_.bfn_screening.shell_list.data(), basis_values.value().data(),
+          basis_values.first_derivative(X).data(),
+          basis_values.first_derivative(Y).data(),
+          basis_values.first_derivative(Z).data());
     } else {
-      driver_.eval_collocation(npts_, nshells_, nbe_,
-                               task_.points.data()->data(), basis_,
-                               task_.bfn_screening.shell_list.data(),
-                               basis_components.component_data(0));
+      driver_.eval_collocation(
+          npts_, nshells_, nbe_, task_.points.data()->data(), basis_,
+          task_.bfn_screening.shell_list.data(), basis_values.value().data());
     }
   }
 
   void eval_collocation_hessian(ComponentMatrixMap& basis_components) const {
+    BasisComponentView basis_values(basis_components);
     driver_.eval_collocation_hessian(
         npts_, nshells_, nbe_, task_.points.data()->data(), basis_,
-        task_.bfn_screening.shell_list.data(),
-        basis_components.component_data(0), basis_components.component_data(1),
-        basis_components.component_data(2), basis_components.component_data(3),
-        basis_components.component_data(4), basis_components.component_data(5),
-        basis_components.component_data(6), basis_components.component_data(7),
-        basis_components.component_data(8), basis_components.component_data(9));
+        task_.bfn_screening.shell_list.data(), basis_values.value().data(),
+        basis_values.first_derivative(X).data(),
+        basis_values.first_derivative(Y).data(),
+        basis_values.first_derivative(Z).data(),
+        basis_values.hessian(X, X).data(), basis_values.hessian(X, Y).data(),
+        basis_values.hessian(X, Z).data(), basis_values.hessian(Y, Y).data(),
+        basis_values.hessian(Y, Z).data(), basis_values.hessian(Z, Z).data());
   }
 
   void eval_xmat(std::size_t point_components, std::size_t nbf,
                  const GauXC::LocalHostWorkDriver::submat_map_t& submat_map,
                  ConstColMajorMatrixMap density,
                  const ComponentMatrixMap& basis_components,
-                 ComponentMatrixMap& x_components, Eigen::Index x_component,
+                 ComponentMatrixMap& x_components, PauliChannel channel,
                  std::vector<double>& scratch) const {
-    driver_.eval_xmat(
-        point_components * npts_, nbf, nbe_, submat_map, 1.0, density.data(),
-        density.outerStride(), basis_components.component_data(0), nbe_,
-        x_components.component_data(x_component), nbe_, scratch.data());
+    const BasisComponentView basis_values(basis_components);
+    PauliComponentView xmat(x_components);
+    driver_.eval_xmat(point_components * npts_, nbf, nbe_, submat_map, 1.0,
+                      density.data(), density.outerStride(),
+                      basis_values.value().data(), nbe_,
+                      xmat.value(channel).data(), nbe_, scratch.data());
   }
 
   void eval_lda_model_features_uks(const ComponentMatrixMap& basis_components,
                                    const ComponentMatrixMap& x_components,
-                                   Eigen::Index spin_component,
                                    AlphaBetaMatrix& alpha_beta_density) const {
-    driver_.eval_uvvar_lda_uks(npts_, nbe_, basis_components.component_data(0),
-                               x_components.component_data(0), nbe_,
-                               x_components.component_data(spin_component),
-                               nbe_, alpha_beta_density.data());
+    const BasisComponentView basis_values(basis_components);
+    const PauliComponentView xmat(x_components);
+    driver_.eval_uvvar_lda_uks(
+        npts_, nbe_, basis_values.value().data(), xmat.value(Scalar).data(),
+        nbe_, xmat.value(SpinZ).data(), nbe_, alpha_beta_density.data());
   }
 
   void eval_gga_model_features_uks(const ComponentMatrixMap& basis_components,
                                    const ComponentMatrixMap& x_components,
-                                   Eigen::Index spin_component,
                                    AlphaBetaMatrix& alpha_beta_density,
                                    SpinGradient& alpha_beta_density_gradient,
                                    std::vector<double>& gamma,
                                    ScalarZGradient& scalar_z_scratch) const {
+    const BasisComponentView basis_values(basis_components);
+    const PauliComponentView xmat(x_components);
     scalar_z_scratch.resize(npts_);
     driver_.eval_uvvar_gga_uks(
-        npts_, nbe_, basis_components.component_data(0),
-        basis_components.component_data(1), basis_components.component_data(2),
-        basis_components.component_data(3), x_components.component_data(0),
-        nbe_, x_components.component_data(spin_component), nbe_,
-        alpha_beta_density.data(), scalar_z_scratch.direction_data(X),
-        scalar_z_scratch.direction_data(Y), scalar_z_scratch.direction_data(Z),
-        gamma.data());
+        npts_, nbe_, basis_values.value().data(),
+        basis_values.first_derivative(X).data(),
+        basis_values.first_derivative(Y).data(),
+        basis_values.first_derivative(Z).data(), xmat.value(Scalar).data(),
+        nbe_, xmat.value(SpinZ).data(), nbe_, alpha_beta_density.data(),
+        scalar_z_scratch.direction_data(X), scalar_z_scratch.direction_data(Y),
+        scalar_z_scratch.direction_data(Z), gamma.data());
     convert_scalar_z_to_alpha_beta(scalar_z_scratch,
                                    alpha_beta_density_gradient);
   }
 
   void eval_mgga_model_features_uks(const ComponentMatrixMap& basis_components,
                                     const ComponentMatrixMap& x_components,
-                                    Eigen::Index spin_component,
                                     AlphaBetaMatrix& alpha_beta_density,
                                     SpinGradient& alpha_beta_density_gradient,
                                     std::vector<double>& gamma,
                                     AlphaBetaMatrix& alpha_beta_kinetic,
                                     std::vector<double>& laplacian,
                                     ScalarZGradient& scalar_z_scratch) const {
+    const BasisComponentView basis_values(basis_components);
+    const PauliComponentView xmat(x_components);
     scalar_z_scratch.resize(npts_);
     driver_.eval_uvvar_mgga_uks(
-        npts_, nbe_, basis_components.component_data(0),
-        basis_components.component_data(1), basis_components.component_data(2),
-        basis_components.component_data(3), nullptr,
-        x_components.component_data(0), nbe_,
-        x_components.component_data(spin_component), nbe_,
-        x_components.component_data(1), x_components.component_data(2),
-        x_components.component_data(3), nbe_,
-        x_components.component_data(spin_component + 1),
-        x_components.component_data(spin_component + 2),
-        x_components.component_data(spin_component + 3), nbe_,
-        alpha_beta_density.data(), scalar_z_scratch.direction_data(X),
-        scalar_z_scratch.direction_data(Y), scalar_z_scratch.direction_data(Z),
-        gamma.data(), alpha_beta_kinetic.data(), laplacian.data());
+        npts_, nbe_, basis_values.value().data(),
+        basis_values.first_derivative(X).data(),
+        basis_values.first_derivative(Y).data(),
+        basis_values.first_derivative(Z).data(), nullptr,
+        xmat.value(Scalar).data(), nbe_, xmat.value(SpinZ).data(), nbe_,
+        xmat.first_derivative(Scalar, X).data(),
+        xmat.first_derivative(Scalar, Y).data(),
+        xmat.first_derivative(Scalar, Z).data(), nbe_,
+        xmat.first_derivative(SpinZ, X).data(),
+        xmat.first_derivative(SpinZ, Y).data(),
+        xmat.first_derivative(SpinZ, Z).data(), nbe_, alpha_beta_density.data(),
+        scalar_z_scratch.direction_data(X), scalar_z_scratch.direction_data(Y),
+        scalar_z_scratch.direction_data(Z), gamma.data(),
+        alpha_beta_kinetic.data(), laplacian.data());
     convert_scalar_z_to_alpha_beta(scalar_z_scratch,
                                    alpha_beta_density_gradient);
   }
 
   void eval_zmat_lda_vxc_uks(const AlphaBetaMatrix& density_potential,
                              const ComponentMatrixMap& basis_components,
-                             ComponentMatrixMap& zmat_components,
-                             Eigen::Index spin_component) const {
+                             ComponentMatrixMap& zmat_components) const {
+    const BasisComponentView basis_values(basis_components);
+    PauliComponentView zmat(zmat_components);
     driver_.eval_zmat_lda_vxc_uks(
-        npts_, nbe_, density_potential.data(),
-        basis_components.component_data(0), zmat_components.component_data(0),
-        nbe_, zmat_components.component_data(spin_component), nbe_);
+        npts_, nbe_, density_potential.data(), basis_values.value().data(),
+        zmat.value(Scalar).data(), nbe_, zmat.value(SpinZ).data(), nbe_);
   }
 
   void eval_mmat_mgga_vxc_uks(const AlphaBetaMatrix& kinetic_potential,
                               const ComponentMatrixMap& basis_components,
-                              ComponentMatrixMap& zmat_components,
-                              Eigen::Index spin_component) const {
+                              ComponentMatrixMap& zmat_components) const {
+    const BasisComponentView basis_values(basis_components);
+    PauliComponentView zmat(zmat_components);
     driver_.eval_mmat_mgga_vxc_uks(
         npts_, nbe_, kinetic_potential.data(), nullptr,
-        basis_components.component_data(1), basis_components.component_data(2),
-        basis_components.component_data(3), zmat_components.component_data(1),
-        zmat_components.component_data(2), zmat_components.component_data(3),
-        nbe_, zmat_components.component_data(spin_component + 1),
-        zmat_components.component_data(spin_component + 2),
-        zmat_components.component_data(spin_component + 3), nbe_);
+        basis_values.first_derivative(X).data(),
+        basis_values.first_derivative(Y).data(),
+        basis_values.first_derivative(Z).data(),
+        zmat.first_derivative(Scalar, X).data(),
+        zmat.first_derivative(Scalar, Y).data(),
+        zmat.first_derivative(Scalar, Z).data(), nbe_,
+        zmat.first_derivative(SpinZ, X).data(),
+        zmat.first_derivative(SpinZ, Y).data(),
+        zmat.first_derivative(SpinZ, Z).data(), nbe_);
   }
 
   void inc_vxc(std::size_t point_components, std::size_t nbf,
                const ComponentMatrixMap& basis_components,
                const GauXC::LocalHostWorkDriver::submat_map_t& submat_map,
-               const ComponentMatrixMap& zmat_components,
-               Eigen::Index zmat_component, ColMajorMatrixMap potential,
+               const ComponentMatrixMap& zmat_components, PauliChannel channel,
+               ColMajorMatrixMap potential,
                std::vector<double>& scratch) const {
+    const BasisComponentView basis_values(basis_components);
+    const PauliComponentView zmat(zmat_components);
     driver_.inc_vxc(point_components * npts_, nbf, nbe_,
-                    basis_components.component_data(0), submat_map,
-                    zmat_components.component_data(zmat_component), nbe_,
-                    potential.data(), potential.outerStride(), scratch.data());
+                    basis_values.value().data(), submat_map,
+                    zmat.value(channel).data(), nbe_, potential.data(),
+                    potential.outerStride(), scratch.data());
   }
 
   void eval_weight_1st_deriv_contracted(
@@ -210,10 +223,10 @@ class GauXCTaskAdapter {
 void validate_zmat_inputs(const AlphaBetaMatrix& density_potential,
                           const SpinGradient& gradient_potential,
                           const ComponentMatrixMap& basis_components,
-                          const ComponentMatrixMap& zmat_components,
-                          Eigen::Index spin_component) {
-  if (basis_components.components() < 4 || spin_component < 0 ||
-      spin_component >= zmat_components.components() ||
+                          const ComponentMatrixMap& zmat_components) {
+  if (basis_components.components() < 4 ||
+      (zmat_components.components() != 2 &&
+       zmat_components.components() != 8) ||
       zmat_components.rows() != basis_components.rows() ||
       zmat_components.points() != basis_components.points())
     SKALAXC_EXCEPTION("Invalid Z-matrix dimensions");
@@ -228,15 +241,16 @@ void validate_zmat_inputs(const AlphaBetaMatrix& density_potential,
 void eval_zmat_gga_vxc_uks(const AlphaBetaMatrix& density_potential,
                            const SpinGradient& gradient_potential,
                            const ComponentMatrixMap& basis_components,
-                           ComponentMatrixMap& zmat_components,
-                           Eigen::Index spin_component) {
+                           ComponentMatrixMap& zmat_components) {
   validate_zmat_inputs(density_potential, gradient_potential, basis_components,
-                       zmat_components, spin_component);
+                       zmat_components);
 
+  const BasisComponentView basis_values(basis_components);
+  PauliComponentView zmat(zmat_components);
   const auto density_scalar_z = alpha_beta_to_scalar_z(density_potential);
-  const auto basis_value = basis_components.component(0);
-  auto zmat_scalar = zmat_components.component(0);
-  auto zmat_spin = zmat_components.component(spin_component);
+  const auto basis_value = basis_values.value();
+  auto zmat_scalar = zmat.value(Scalar);
+  auto zmat_spin = zmat.value(SpinZ);
   zmat_scalar.array() =
       basis_value.array().rowwise() *
       (0.5 * density_scalar_z.col(PauliChannel::Scalar)).transpose().array();
@@ -244,12 +258,10 @@ void eval_zmat_gga_vxc_uks(const AlphaBetaMatrix& density_potential,
       basis_value.array().rowwise() *
       (0.5 * density_scalar_z.col(PauliChannel::SpinZ)).transpose().array();
 
-  for (Eigen::Index direction = 0; direction < direction_dimension;
-       ++direction) {
-    const auto potential =
-        gradient_potential.direction(static_cast<Direction>(direction));
+  for (const auto direction : {X, Y, Z}) {
+    const auto potential = gradient_potential.direction(direction);
     const auto gradient_scalar_z = alpha_beta_to_scalar_z(potential);
-    const auto basis_derivative = basis_components.component(direction + 1);
+    const auto basis_derivative = basis_values.first_derivative(direction);
     zmat_scalar.array() +=
         basis_derivative.array().rowwise() *
         gradient_scalar_z.col(PauliChannel::Scalar).transpose().array();
@@ -599,8 +611,6 @@ void SkalaHostDriver::exc_grad_local_work_(
   const int32_t nbf = basis.nbf();
   const auto& tasks = lb_.get_tasks();
   const size_t ntasks = tasks.size();
-  constexpr std::array<std::array<Eigen::Index, 3>, 3> hessian_components{
-      {{{4, 5, 6}}, {{5, 7, 8}}, {{6, 8, 9}}}};
 
 #ifdef _OPENMP
 #pragma omp parallel
@@ -631,7 +641,8 @@ void SkalaHostDriver::exc_grad_local_work_(
       const Eigen::Index zmat_component_count = (is_gga || is_mgga) ? 8 : 2;
       ComponentMatrixMap zmat_components(host_data.zmat.data(),
                                          zmat_component_count, nbe, npts);
-      const Eigen::Index spin_zmat_component = (is_gga || is_mgga) ? 4 : 1;
+      const BasisComponentView basis_values(basis_components);
+      const PauliComponentView xmat(zmat_components);
       std::vector<std::array<int32_t, 3>> submat_map;
       std::tie(submat_map, std::ignore) = GauXC::gen_compressed_submat_map(
           basis_map, task.bfn_screening.shell_list, nbf, nbf);
@@ -643,11 +654,11 @@ void SkalaHostDriver::exc_grad_local_work_(
 
       const int xmat_len = (is_gga || is_mgga) ? 4 : 1;
       task_work.eval_xmat(xmat_len, nbf, submat_map, scalar_density,
-                          basis_components, zmat_components, 0,
+                          basis_components, zmat_components, Scalar,
                           host_data.nbe_scr);
       task_work.eval_xmat(xmat_len, nbf, submat_map, spin_density,
-                          basis_components, zmat_components,
-                          spin_zmat_component, host_data.nbe_scr);
+                          basis_components, zmat_components, SpinZ,
+                          host_data.nbe_scr);
 
       // GauXC's contracted partition derivative expects w_i * f_i. The model
       // boundary cotangent is f_i = dE/dw_i.
@@ -687,8 +698,8 @@ void SkalaHostDriver::exc_grad_local_work_(
             .sum();
       };
 
-      const auto xN_component = zmat_components.component(0);
-      const auto xZ_component = zmat_components.component(spin_zmat_component);
+      const auto xN_component = xmat.value(Scalar);
+      const auto xZ_component = xmat.value(SpinZ);
       Eigen::Index basis_offset = 0;
       for (int32_t ish = 0; ish < nshells; ++ish) {
         const int sh_idx = task.bfn_screening.shell_list[ish];
@@ -702,10 +713,10 @@ void SkalaHostDriver::exc_grad_local_work_(
         const auto xN = xN_component.middleRows(basis_offset, shell_size);
         const auto xZ = xZ_component.middleRows(basis_offset, shell_size);
         Eigen::Vector3d shell_gradient = Eigen::Vector3d::Zero();
-        for (Eigen::Index force = 0; force < direction_dimension; ++force) {
+        for (const auto force : {X, Y, Z}) {
           const auto basis_derivative =
-              basis_components.component(force + 1).middleRows(basis_offset,
-                                                               shell_size);
+              basis_values.first_derivative(force).middleRows(basis_offset,
+                                                              shell_size);
           shell_gradient(force) =
               contract(xN, basis_derivative,
                        density_scalar_z.col(PauliChannel::Scalar)) +
@@ -713,17 +724,15 @@ void SkalaHostDriver::exc_grad_local_work_(
                        density_scalar_z.col(PauliChannel::SpinZ));
 
           if (is_gga || is_mgga) {
-            for (Eigen::Index response = 0; response < direction_dimension;
-                 ++response) {
+            for (const auto response : {X, Y, Z}) {
               const auto basis_hessian =
-                  basis_components
-                      .component(hessian_components[force][response])
+                  basis_values.hessian(force, response)
                       .middleRows(basis_offset, shell_size);
               const auto xN_derivative =
-                  zmat_components.component(response + 1)
+                  xmat.first_derivative(Scalar, response)
                       .middleRows(basis_offset, shell_size);
               const auto xZ_derivative =
-                  zmat_components.component(response + 5)
+                  xmat.first_derivative(SpinZ, response)
                       .middleRows(basis_offset, shell_size);
               shell_gradient(force) +=
                   contract(basis_hessian, xN, gradient_scalar.col(response)) +
@@ -819,25 +828,23 @@ void SkalaHostDriver::pre_skala_local_work_(
 
       task_work.eval_collocation(basis_components, needs_gradient);
       task_work.eval_xmat(mgga_component_count, nbf, submat_map, scalar_density,
-                          basis_components, zmat_components, 0,
+                          basis_components, zmat_components, Scalar,
                           host_data.nbe_scr);
       task_work.eval_xmat(mgga_component_count, nbf, submat_map, spin_density,
-                          basis_components, zmat_components,
-                          mgga_component_count, host_data.nbe_scr);
+                          basis_components, zmat_components, SpinZ,
+                          host_data.nbe_scr);
 
       if (is_mgga) {
         task_work.eval_mgga_model_features_uks(
-            basis_components, zmat_components, mgga_component_count,
-            features.density, features.density_gradient, host_data.gamma,
-            features.kinetic, host_data.lapl, scalar_z_gradient);
+            basis_components, zmat_components, features.density,
+            features.density_gradient, host_data.gamma, features.kinetic,
+            host_data.lapl, scalar_z_gradient);
       } else if (is_gga) {
         task_work.eval_gga_model_features_uks(
-            basis_components, zmat_components, mgga_component_count,
-            features.density, features.density_gradient, host_data.gamma,
-            scalar_z_gradient);
+            basis_components, zmat_components, features.density,
+            features.density_gradient, host_data.gamma, scalar_z_gradient);
       } else {
         task_work.eval_lda_model_features_uks(basis_components, zmat_components,
-                                              mgga_component_count,
                                               features.density);
       }
 
@@ -902,22 +909,20 @@ void SkalaHostDriver::post_skala_local_work_(
 
       if (needs_gradient) {
         eval_zmat_gga_vxc_uks(potentials.density, potentials.density_gradient,
-                              basis_components, zmat_components,
-                              mgga_component_count);
+                              basis_components, zmat_components);
         if (is_mgga)
           task_work.eval_mmat_mgga_vxc_uks(potentials.kinetic, basis_components,
-                                           zmat_components,
-                                           mgga_component_count);
+                                           zmat_components);
       } else {
         task_work.eval_zmat_lda_vxc_uks(potentials.density, basis_components,
-                                        zmat_components, mgga_component_count);
+                                        zmat_components);
       }
 
       task_work.inc_vxc(mgga_component_count, nbf, basis_components, submat_map,
-                        zmat_components, 0, scalar_potential,
+                        zmat_components, Scalar, scalar_potential,
                         host_data.nbe_scr);
       task_work.inc_vxc(mgga_component_count, nbf, basis_components, submat_map,
-                        zmat_components, mgga_component_count, spin_potential,
+                        zmat_components, SpinZ, spin_potential,
                         host_data.nbe_scr);
     }
   }  // omp parallel

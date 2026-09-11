@@ -12,6 +12,8 @@
 
 #include <cuda_runtime.h>
 
+#include <initializer_list>
+
 namespace SkalaXC {
 
 namespace {
@@ -23,15 +25,11 @@ __device__ cuda::AlphaBetaChannels post_uvars_density(
 
 __device__ cuda::ScalarZChannels post_uvars_density_gradient(
     const GauXC::XCDeviceTask& task, std::size_t point,
-    std::int64_t direction) {
-  switch (direction) {
-    case 0:
-      return {task.dden_sx[point], task.dden_zx[point]};
-    case 1:
-      return {task.dden_sy[point], task.dden_zy[point]};
-    default:
-      return {task.dden_sz[point], task.dden_zz[point]};
-  }
+    cuda::Direction direction) {
+  return {cuda::density_gradient(task, cuda::PauliChannel::Scalar,
+                                 direction)[point],
+          cuda::density_gradient(task, cuda::PauliChannel::SpinZ,
+                                 direction)[point]};
 }
 
 __device__ cuda::AlphaBetaChannels post_uvars_kinetic(
@@ -56,6 +54,7 @@ __global__ void pack_post_uvars_model_grid_features_kernel(
     const std::int64_t* point_offsets, std::int64_t total_points,
     double* density, double* density_gradient, double* kinetic,
     double* grid_coordinates, double* grid_weights) {
+  using cuda::Direction;
   const std::size_t task_index = blockIdx.y;
   if (task_index >= task_count) return;
 
@@ -72,14 +71,15 @@ __global__ void pack_post_uvars_model_grid_features_kernel(
     density[total_points + destination] = density_alpha_beta.beta;
   }
   if (density_gradient) {
-    for (std::int64_t direction = 0; direction < 3; ++direction) {
+    for (const auto direction : {Direction::X, Direction::Y, Direction::Z}) {
       const auto gradient_scalar_z =
           post_uvars_density_gradient(task, point, direction);
       const auto gradient_alpha_beta = cuda::scalar_z_to_alpha_beta(
           gradient_scalar_z.scalar, gradient_scalar_z.spin_z);
-      density_gradient[direction * total_points + destination] =
+      const auto component = static_cast<std::int64_t>(direction);
+      density_gradient[component * total_points + destination] =
           gradient_alpha_beta.alpha;
-      density_gradient[(3 + direction) * total_points + destination] =
+      density_gradient[(3 + component) * total_points + destination] =
           gradient_alpha_beta.beta;
     }
   }
@@ -111,6 +111,8 @@ __global__ void unpack_model_grid_potentials_kernel(
     const std::int64_t* point_offsets, std::int64_t total_points,
     const double* density_potential, const double* density_gradient_potential,
     const double* kinetic_potential) {
+  using cuda::Direction;
+  using cuda::SpinChannel;
   const std::size_t task_index = blockIdx.y;
   if (task_index >= task_count) return;
 
@@ -124,16 +126,14 @@ __global__ void unpack_model_grid_potentials_kernel(
   task.vrho_pos[point] = density_potential[source];
   task.vrho_neg[point] = density_potential[total_points + source];
   if (density_gradient_potential) {
-    task.gamma_pp[point] = density_gradient_potential[source];
-    task.gamma_pm[point] = density_gradient_potential[total_points + source];
-    task.gamma_mm[point] =
-        density_gradient_potential[2 * total_points + source];
-    task.vgamma_pp[point] =
-        density_gradient_potential[3 * total_points + source];
-    task.vgamma_pm[point] =
-        density_gradient_potential[4 * total_points + source];
-    task.vgamma_mm[point] =
-        density_gradient_potential[5 * total_points + source];
+    for (const auto channel : {SpinChannel::Alpha, SpinChannel::Beta}) {
+      for (const auto direction : {Direction::X, Direction::Y, Direction::Z}) {
+        const auto component = static_cast<std::int64_t>(channel) * 3 +
+                               static_cast<std::int64_t>(direction);
+        cuda::gradient_potential(task, channel, direction)[point] =
+            density_gradient_potential[component * total_points + source];
+      }
+    }
   }
   if (kinetic_potential) {
     task.vtau_pos[point] = kinetic_potential[source];

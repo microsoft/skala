@@ -19,6 +19,7 @@
 #include "exceptions.hpp"
 #include "spin_channels.cuh"
 #include <gauxc/util/div_ceil.hpp>
+#include <initializer_list>
 
 namespace SkalaXC {
 
@@ -78,6 +79,8 @@ __global__ void zmat_lda_vxc_skala_kernel(size_t ntasks,
 template <density_id den_selector>
 __global__ void zmat_gga_vxc_skala_kernel(size_t ntasks,
                                           XCDeviceTask* tasks_device) {
+  using cuda::Direction;
+  using cuda::SpinChannel;
 
   const int batch_idx = blockIdx.z;
   if (batch_idx >= ntasks) return;
@@ -86,17 +89,7 @@ __global__ void zmat_gga_vxc_skala_kernel(size_t ntasks,
   const auto npts = task.npts;
   const auto nbf = task.bfn_screening.nbe;
 
-  const double* dden_x_grad_a = task.gamma_pp;
-  const double* dden_x_grad_b = task.vgamma_pp;
-  const double* dden_y_grad_a = task.gamma_pm;
-  const double* dden_y_grad_b = task.vgamma_pm;
-  const double* dden_z_grad_a = task.gamma_mm;
-  const double* dden_z_grad_b = task.vgamma_mm;
-
   const auto* basis_eval_device = task.bf;
-  const auto* dbasis_x_eval_device = task.dbfx;
-  const auto* dbasis_y_eval_device = task.dbfy;
-  const auto* dbasis_z_eval_device = task.dbfz;
 
   auto* z_matrix_device = task.zmat;
 
@@ -109,29 +102,23 @@ __global__ void zmat_gga_vxc_skala_kernel(size_t ntasks,
 
     const auto density_scalar_z = cuda::alpha_beta_to_scalar_z(
         task.vrho_pos[tid_x], task.vrho_neg[tid_x]);
-    const auto x_scalar_z = cuda::alpha_beta_to_scalar_z(dden_x_grad_a[tid_x],
-                                                         dden_x_grad_b[tid_x]);
-    const auto y_scalar_z = cuda::alpha_beta_to_scalar_z(dden_y_grad_a[tid_x],
-                                                         dden_y_grad_b[tid_x]);
-    const auto z_scalar_z = cuda::alpha_beta_to_scalar_z(dden_z_grad_a[tid_x],
-                                                         dden_z_grad_b[tid_x]);
-
     double density_potential = density_scalar_z.scalar;
-    double x_fact = x_scalar_z.scalar;
-    double y_fact = y_scalar_z.scalar;
-    double z_fact = z_scalar_z.scalar;
-
-    if constexpr (den_selector == DEN_Z) {
+    if constexpr (den_selector == DEN_Z)
       density_potential = density_scalar_z.spin_z;
-      x_fact = x_scalar_z.spin_z;
-      y_fact = y_scalar_z.spin_z;
-      z_fact = z_scalar_z.spin_z;
+
+    double gradient_contribution = 0.0;
+    for (const auto direction : {Direction::X, Direction::Y, Direction::Z}) {
+      const auto potential = cuda::alpha_beta_to_scalar_z(
+          cuda::gradient_potential(task, SpinChannel::Alpha, direction)[tid_x],
+          cuda::gradient_potential(task, SpinChannel::Beta, direction)[tid_x]);
+      double factor = potential.scalar;
+      if constexpr (den_selector == DEN_Z) factor = potential.spin_z;
+      gradient_contribution +=
+          factor * cuda::basis_derivative(task, direction)[ibfoff];
     }
 
     z_matrix_device[ibfoff] =
-        x_fact * dbasis_x_eval_device[ibfoff] +
-        y_fact * dbasis_y_eval_device[ibfoff] +
-        z_fact * dbasis_z_eval_device[ibfoff] +
+        gradient_contribution +
         0.5 * density_potential * basis_eval_device[ibfoff];
   }
 }
@@ -146,6 +133,8 @@ __global__ void zmat_gga_vxc_skala_kernel(size_t ntasks,
 template <bool need_lapl, density_id den_selector>
 __global__ void zmat_mgga_vxc_skala_kernel(size_t ntasks,
                                            XCDeviceTask* tasks_device) {
+  using cuda::Direction;
+  using cuda::SpinChannel;
 
   const int batch_idx = blockIdx.z;
   if (batch_idx >= ntasks) return;
@@ -157,17 +146,7 @@ __global__ void zmat_mgga_vxc_skala_kernel(size_t ntasks,
   const double* vlapl_pos_device = task.vlapl_pos;
   const double* vlapl_neg_device = task.vlapl_neg;
 
-  const double* dden_x_grad_a = task.gamma_pp;
-  const double* dden_x_grad_b = task.vgamma_pp;
-  const double* dden_y_grad_a = task.gamma_pm;
-  const double* dden_y_grad_b = task.vgamma_pm;
-  const double* dden_z_grad_a = task.gamma_mm;
-  const double* dden_z_grad_b = task.vgamma_mm;
-
   const auto* basis_eval_device = task.bf;
-  const auto* dbasis_x_eval_device = task.dbfx;
-  const auto* dbasis_y_eval_device = task.dbfy;
-  const auto* dbasis_z_eval_device = task.dbfz;
   const auto* d2basis_lapl_eval_device = task.d2bflapl;
 
   auto* z_matrix_device = task.zmat;
@@ -181,28 +160,22 @@ __global__ void zmat_mgga_vxc_skala_kernel(size_t ntasks,
 
     const auto density_scalar_z = cuda::alpha_beta_to_scalar_z(
         task.vrho_pos[tid_x], task.vrho_neg[tid_x]);
-    const auto x_scalar_z = cuda::alpha_beta_to_scalar_z(dden_x_grad_a[tid_x],
-                                                         dden_x_grad_b[tid_x]);
-    const auto y_scalar_z = cuda::alpha_beta_to_scalar_z(dden_y_grad_a[tid_x],
-                                                         dden_y_grad_b[tid_x]);
-    const auto z_scalar_z = cuda::alpha_beta_to_scalar_z(dden_z_grad_a[tid_x],
-                                                         dden_z_grad_b[tid_x]);
-
     double density_potential = density_scalar_z.scalar;
-    double x_fact = x_scalar_z.scalar;
-    double y_fact = y_scalar_z.scalar;
-    double z_fact = z_scalar_z.scalar;
-
-    if constexpr (den_selector == DEN_Z) {
+    if constexpr (den_selector == DEN_Z)
       density_potential = density_scalar_z.spin_z;
-      x_fact = x_scalar_z.spin_z;
-      y_fact = y_scalar_z.spin_z;
-      z_fact = z_scalar_z.spin_z;
+
+    double gradient_contribution = 0.0;
+    for (const auto direction : {Direction::X, Direction::Y, Direction::Z}) {
+      const auto potential = cuda::alpha_beta_to_scalar_z(
+          cuda::gradient_potential(task, SpinChannel::Alpha, direction)[tid_x],
+          cuda::gradient_potential(task, SpinChannel::Beta, direction)[tid_x]);
+      double factor = potential.scalar;
+      if constexpr (den_selector == DEN_Z) factor = potential.spin_z;
+      gradient_contribution +=
+          factor * cuda::basis_derivative(task, direction)[ibfoff];
     }
 
-    auto val = x_fact * dbasis_x_eval_device[ibfoff] +
-               y_fact * dbasis_y_eval_device[ibfoff] +
-               z_fact * dbasis_z_eval_device[ibfoff] +
+    auto val = gradient_contribution +
                0.5 * density_potential * basis_eval_device[ibfoff];
 
     if constexpr (need_lapl) {
