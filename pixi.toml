@@ -128,6 +128,11 @@ types-PyYAML = "*"
 memray = "*"
 py-spy = "*"
 
+[feature.interactive.dependencies]
+ipykernel = "*"
+ipython = "*"
+matplotlib = "*"
+
 [feature.benchmark.dependencies]
 jinja2 = "*"
 markdown-it-py = "*"
@@ -296,6 +301,7 @@ skalaxc-doxygen = { cmd = "cmake -DSKALAXC_DOXYGEN_SOURCE_DIR=$PIXI_PROJECT_ROOT
 
 [environments]
 default = { features = ["python-runtime", "model-definition", "component-sources", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-213-cpu", "test", "lint", "profiling", "benchmark"], no-default-feature = true, platforms = ["linux-64", "linux-aarch64", "osx-arm64"] }
+dev = { features = ["python-runtime", "model-definition",  "component-sources", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-213-gpu", "cuda-12", "test", "lint", "profiling", "benchmark", "interactive"], no-default-feature = true, platforms = ["linux-64-cuda12"] }
 lint = { features = ["python-runtime", "model-definition", "component-sources", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-213-cpu", "test", "lint", "profiling", "benchmark"], no-default-feature = true, platforms = ["linux-64"] }
 test-py311-pyscf214-torch213 = { features = ["python-runtime", "model-assets", "python-311", "pyscf-214", "dispersion", "torch-213-cpu", "test"], no-default-feature = true, platforms = ["linux-64"] }
 test-py312-pyscf214-torch212 = { features = ["python-runtime", "component-sources", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-212-cpu", "test", "profiling", "benchmark"], no-default-feature = true, platforms = ["linux-64", "linux-aarch64", "osx-arm64"] }
@@ -311,9 +317,9 @@ cpp-integration = { features = ["python-runtime", "model-definition", "component
 ftorch = { features = ["python-312", "model-assets", "torch-213-cpu", "native-toolchain", "fortran"], no-default-feature = true, platforms = ["linux-64"] }
 skalaxc-host = { features = ["python-312", "torch-213-cpu", "native-toolchain", "fortran", "skalaxc-core", "skalaxc-mpi", "skalaxc-python", "test"], no-default-feature = true, platforms = ["linux-64", "linux-aarch64", "osx-arm64"] }
 skalaxc-host-clang = { features = ["python-312", "torch-213-cpu", "fortran", "skalaxc-core", "skalaxc-mpi", "skalaxc-python", "skalaxc-clang", "test"], no-default-feature = true, platforms = ["linux-64"] }
-skalaxc-cuda12 = { features = ["python-runtime", "model-assets", "python-312", "pyscf-214", "torch-213-gpu", "cuda-12", "native-toolchain", "fortran", "skalaxc-core", "skalaxc-mpi", "skalaxc-python", "skalaxc-cuda12-build", "test"], no-default-feature = true, platforms = ["linux-64-cuda12"] }
-skalaxc-cuda13 = { features = ["python-runtime", "model-assets", "python-312", "pyscf-214", "torch-213-gpu", "cuda-13", "native-toolchain", "fortran", "skalaxc-core", "skalaxc-mpi", "skalaxc-python", "skalaxc-cuda13-build", "test"], no-default-feature = true, platforms = ["linux-64-cuda13"] }
-skalaxc-cuda13-clang = { features = ["python-runtime", "model-assets", "python-312", "pyscf-214", "torch-213-gpu", "cuda-13", "fortran", "skalaxc-core", "skalaxc-mpi", "skalaxc-python", "skalaxc-cuda13-clang-build", "test"], no-default-feature = true, platforms = ["linux-64-cuda13"] }
-skalaxc-parity = { features = ["python-runtime", "model-assets", "python-312", "pyscf-214", "torch-213-cpu", "native-toolchain", "skalaxc-core", "skalaxc-python", "skalaxc-parity", "test"], no-default-feature = true, platforms = ["linux-64"] }
+skalaxc-cuda12 = { features = ["python-runtime", "model-assets", "python-312", "pyscf-214", "torch-213-gpu", "cuda-12", "native-toolchain", "fortran", "skalaxc-core", "skalaxc-mpi", "skalaxc-python", "skalaxc-cuda12-build", "test", "profiling"], no-default-feature = true, platforms = ["linux-64-cuda12"] }
+skalaxc-cuda13 = { features = ["python-runtime", "model-assets", "python-312", "pyscf-214", "torch-213-gpu", "cuda-13", "native-toolchain", "fortran", "skalaxc-core", "skalaxc-mpi", "skalaxc-python", "skalaxc-cuda13-build", "test", "profiling"], no-default-feature = true, platforms = ["linux-64-cuda13"] }
+skalaxc-cuda13-clang = { features = ["python-runtime", "model-assets", "python-312", "pyscf-214", "torch-213-gpu", "cuda-13", "fortran", "skalaxc-core", "skalaxc-mpi", "skalaxc-python", "skalaxc-cuda13-clang-build", "test", "profiling"], no-default-feature = true, platforms = ["linux-64-cuda13"] }
+skalaxc-parity = { features = ["python-runtime", "model-assets", "python-312", "pyscf-214", "torch-213-cpu", "native-toolchain", "skalaxc-core", "skalaxc-python", "skalaxc-parity", "test", "profiling"], no-default-feature = true, platforms = ["linux-64"] }
 skalaxc-tools = { features = ["python-312", "torch-213-cpu", "skalaxc-core", "skalaxc-tools"], no-default-feature = true, platforms = ["linux-64"] }
 skalaxc-package = { features = ["skalaxc-package"], no-default-feature = true, platforms = ["linux-64", "linux-aarch64", "osx-arm64"] }
