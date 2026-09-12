@@ -32,7 +32,10 @@ inline Eigen::Index hessian_component(Direction first, Direction second) {
 template <typename Map>
 class BasisComponentView {
  public:
-  /** @brief Borrow an existing map with 1, 4, or 10 basis components. */
+  /**
+   * @brief Borrow an existing map with 1, 4, or 10 basis components.
+   * @param components Map that must outlive this view.
+   */
   explicit BasisComponentView(Map& components) : components_(components) {
     const auto count = components.components();
     if (count != 1 && count != 4 && count != 10)
@@ -44,22 +47,35 @@ class BasisComponentView {
   /** @return Read-only basis-value matrix. */
   auto value() const { return std::as_const(components_).component(0); }
 
-  /** @return Non-owning derivative matrix for the requested direction. */
+  /**
+   * @param direction Cartesian derivative direction.
+   * @return Non-owning derivative matrix for the requested direction.
+   */
   auto first_derivative(Direction direction) {
     return components_.component(detail::first_derivative_component(direction));
   }
-  /** @return Read-only derivative matrix for the requested direction. */
+  /**
+   * @param direction Cartesian derivative direction.
+   * @return Read-only derivative matrix for the requested direction.
+   */
   auto first_derivative(Direction direction) const {
     return std::as_const(components_)
         .component(detail::first_derivative_component(direction));
   }
 
-  /** @return Non-owning Hessian matrix, symmetric in its direction arguments.
+  /**
+   * @param first First Cartesian derivative direction.
+   * @param second Second Cartesian derivative direction.
+   * @return Non-owning Hessian matrix, symmetric in its direction arguments.
    */
   auto hessian(Direction first, Direction second) {
     return components_.component(detail::hessian_component(first, second));
   }
-  /** @return Read-only Hessian matrix. */
+  /**
+   * @param first First Cartesian derivative direction.
+   * @param second Second Cartesian derivative direction.
+   * @return Read-only Hessian matrix.
+   */
   auto hessian(Direction first, Direction second) const {
     return std::as_const(components_)
         .component(detail::hessian_component(first, second));
@@ -73,26 +89,43 @@ class BasisComponentView {
 template <typename Map>
 class PauliComponentView {
  public:
-  /** @brief Borrow an existing map with 1 or 4 components per channel. */
+  /**
+   * @brief Borrow an existing map with 1 or 4 components per channel.
+   * @param components Map that must outlive this view.
+   */
   explicit PauliComponentView(Map& components) : components_(components) {
     if (components.components() != 2 && components.components() != 8)
       throw std::invalid_argument("Invalid Pauli component count");
   }
 
-  /** @return Non-owning value matrix for the requested Pauli channel. */
+  /**
+   * @param channel Pauli channel to select.
+   * @return Non-owning value matrix for the requested Pauli channel.
+   */
   auto value(PauliChannel channel) {
     return components_.component(channel_offset(channel));
   }
-  /** @return Read-only value matrix for the requested Pauli channel. */
+  /**
+   * @param channel Pauli channel to select.
+   * @return Read-only value matrix for the requested Pauli channel.
+   */
   auto value(PauliChannel channel) const {
     return std::as_const(components_).component(channel_offset(channel));
   }
 
-  /** @return Non-owning derivative matrix for one channel and direction. */
+  /**
+   * @param channel Pauli channel to select.
+   * @param direction Cartesian derivative direction.
+   * @return Non-owning derivative matrix for one channel and direction.
+   */
   auto first_derivative(PauliChannel channel, Direction direction) {
     return components_.component(derivative_component(channel, direction));
   }
-  /** @return Read-only derivative matrix for one channel and direction. */
+  /**
+   * @param channel Pauli channel to select.
+   * @param direction Cartesian derivative direction.
+   * @return Read-only derivative matrix for one channel and direction.
+   */
   auto first_derivative(PauliChannel channel, Direction direction) const {
     return std::as_const(components_)
         .component(derivative_component(channel, direction));
