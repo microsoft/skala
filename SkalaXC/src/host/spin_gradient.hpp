@@ -224,14 +224,22 @@ void copy_points(
   destination = source;
 }
 
-/** @brief Copy all source points into a selected destination range. */
+/**
+ * @brief Copy all source points into a selected destination range.
+ * @param source Source gradient.
+ * @param destination Writable destination point block.
+ */
 template <typename Channel>
 void copy_points(const ChannelGradient<Channel>& source,
                  SpinGradient::PointSlice destination) {
   copy_points(source.point_slice(0, source.points()), destination);
 }
 
-/** @brief Copy a selected source range into a pre-sized destination. */
+/**
+ * @brief Copy a selected source range into a pre-sized destination.
+ * @param source Source point block.
+ * @param destination Pre-sized destination gradient.
+ */
 template <typename Matrix, typename Channel>
 void copy_points(
     const Eigen::Block<Matrix, direction_dimension, Eigen::Dynamic>& source,
