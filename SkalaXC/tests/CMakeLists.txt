@@ -156,20 +156,47 @@ catch_discover_tests(skalaxc_unit_test
 # on a four-slot CI runner without oversubscription.
 if(SKALAXC_ENABLE_MPI)
   find_package(MPI REQUIRED COMPONENTS CXX)
-  add_test(NAME skalaxc_unit_mpi.evaluation_errors
+  add_test(NAME skalaxc_unit_mpi.evaluation_errors.collective
     COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 3
       ${MPIEXEC_PREFLAGS} $<TARGET_FILE:skalaxc_unit_test>
-      "[host-evaluation-errors],[collective-errors]" --order lex --rng-seed 12345
+      "Collective evaluation errors preserve communicator agreement"
       ${MPIEXEC_POSTFLAGS})
-  set_tests_properties(skalaxc_unit_mpi.evaluation_errors PROPERTIES
+  set_tests_properties(skalaxc_unit_mpi.evaluation_errors.collective PROPERTIES
     TIMEOUT 60
     ENVIRONMENT
       "OMP_NUM_THREADS=4;SKALAXC_MODEL_PATH=${SKALAXC_MODEL_PATH}")
-  add_test(NAME skalaxc_unit_mpi.subcommunicator
+  add_test(NAME skalaxc_unit_mpi.evaluation_errors.host
     COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 3
       ${MPIEXEC_PREFLAGS} $<TARGET_FILE:skalaxc_unit_test>
-      "[skala][mpi][subcomm]" ${MPIEXEC_POSTFLAGS})
-  set_tests_properties(skalaxc_unit_mpi.subcommunicator PROPERTIES
+      "Host evaluation errors reach idle ranks"
+      ${MPIEXEC_POSTFLAGS})
+  set_tests_properties(skalaxc_unit_mpi.evaluation_errors.host PROPERTIES
+    TIMEOUT 60
+    ENVIRONMENT
+      "OMP_NUM_THREADS=4;SKALAXC_MODEL_PATH=${SKALAXC_MODEL_PATH}")
+  add_test(NAME skalaxc_unit_mpi.subcommunicator.mpi_wrapper
+    COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 3
+      ${MPIEXEC_PREFLAGS} $<TARGET_FILE:skalaxc_unit_test>
+      "Eigen MPI collectives use runtime communicator"
+      ${MPIEXEC_POSTFLAGS})
+  set_tests_properties(skalaxc_unit_mpi.subcommunicator.mpi_wrapper PROPERTIES
+    ENVIRONMENT
+      "OMP_NUM_THREADS=1;SKALAXC_MODEL_PATH=${SKALAXC_MODEL_PATH}")
+  add_test(NAME skalaxc_unit_mpi.subcommunicator.gradient_wrapper
+    COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 3
+      ${MPIEXEC_PREFLAGS} $<TARGET_FILE:skalaxc_unit_test>
+      "MPI gradient wrapper transports semantic point records"
+      ${MPIEXEC_POSTFLAGS})
+  set_tests_properties(skalaxc_unit_mpi.subcommunicator.gradient_wrapper
+    PROPERTIES
+    ENVIRONMENT
+      "OMP_NUM_THREADS=1;SKALAXC_MODEL_PATH=${SKALAXC_MODEL_PATH}")
+  add_test(NAME skalaxc_unit_mpi.subcommunicator.model_grid
+    COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 3
+      ${MPIEXEC_PREFLAGS} $<TARGET_FILE:skalaxc_unit_test>
+      "Model grid layout caches subcommunicator ordering metadata"
+      ${MPIEXEC_POSTFLAGS})
+  set_tests_properties(skalaxc_unit_mpi.subcommunicator.model_grid PROPERTIES
     ENVIRONMENT
       "OMP_NUM_THREADS=1;SKALAXC_MODEL_PATH=${SKALAXC_MODEL_PATH}")
   add_test(NAME skalaxc_unit_mpi.host_subcommunicator
