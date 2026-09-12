@@ -42,7 +42,7 @@ Direct intended uses
 #. The Skala-1.1 functional is shared with the research community to facilitate reproduction of the evaluations presented in our paper.
 #. Evaluating reaction energy differences by computing the total energy of all compounds in a reaction using a self-consistent field (SCF) calculation with the Skala-1.1 exchange-correlation functional.
 #. Evaluating the total energy of a molecule using an SCF calculation with the Skala-1.1 exchange-correlation functional. Note that, as with all density functionals, energy differences are predicted much more reliably than total energies of individual molecules.
-#. The SCF implementation provided uses PySCF, which runs the functional on CPU. We also provide a traced version of the Skala-1.1 functional so that other, more optimized open-source SCF codes—including GPU-enabled ones—can integrate it into their pipelines, for instance through GauXC. A compatible fork of GauXC is included in this repository.
+#. The SCF implementation provided uses PySCF, which runs the functional on CPU. We also provide a traced version of the Skala-1.1 functional so that other, more optimized open-source SCF codes can integrate it into their pipelines. The standalone SkalaXC library provides C++, C, and Fortran integration.
 
 Out-of-scope uses
 -----------------
@@ -62,7 +62,7 @@ Recommendations
 ---------------
 
 #. In our PySCF-based SCF implementation, the largest system tested contained 180 atoms using the def2-TZVP basis set (:math:`\sim`\ 5000 orbitals) on `Eadsv5 series <https://learn.microsoft.com/en-us/azure/virtual-machines/sizes/memory-optimized/eadsv5-series?tabs=sizebasic>`__ virtual machines. Larger systems may run out of memory.
-#. For implementations optimized for memory, speed, or GPU support, we recommend integrating the functional with other open-source SCF packages, for instance through GauXC. A compatible fork of GauXC is included in this repository.
+#. For implementations optimized for memory or speed, we recommend integrating the functional through the standalone SkalaXC library.
 
 
 Training details

@@ -1,6 +1,30 @@
 # See https://pre-commit.com for more information
 # See https://pre-commit.com/hooks.html for more hooks
 repos:
+  - repo: local
+    hooks:
+      - id: fprettify
+        name: fprettify
+        entry: fprettify
+        language: python
+        additional_dependencies: [fprettify==0.3.7]
+        types: [text]
+        files: ^.*\.(f90|F90|f95|F95|f03|F03)$
+        exclude: (^|.*/)(external|build|build-[^/]*)(/|$)
+
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v21.1.8
+    hooks:
+      - id: clang-format
+        files: ^.*\.(c|cc|cpp|cxx|h|hh|hpp|hxx|cu)$
+        exclude: (^|.*/)(external|build|build-[^/]*)(/|$)
+
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.7
+    hooks:
+      - id: actionlint
+        files: ^\.github/workflows/.*\.ya?ml$
+
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: b831c3dc5d27d9da294ae4e915773b99aa24a7c5  # frozen: v0.15.10
     hooks:
@@ -29,7 +53,6 @@ repos:
           - "4"
           - skala
           - model
-          - gauxc
           - benchmark
           - website
         pass_filenames: false

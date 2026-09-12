@@ -1,0 +1,19 @@
+_skalaxc.XCIntegrator.eval_exc_vxc:
+    \import numpy as np
+    def eval_exc_vxc(
+        self,
+        scalar_density: np.ndarray[tuple[int, int], np.dtype[np.float64]],
+        spin_density: np.ndarray[tuple[int, int], np.dtype[np.float64]],
+    ) -> tuple[
+        float,
+        np.ndarray[tuple[int, int], np.dtype[np.float64]],
+        np.ndarray[tuple[int, int], np.dtype[np.float64]],
+    ]: ...
+
+_skalaxc.XCIntegrator.eval_exc_grad:
+    \import numpy as np
+    def eval_exc_grad(
+        self,
+        scalar_density: np.ndarray[tuple[int, int], np.dtype[np.float64]],
+        spin_density: np.ndarray[tuple[int, int], np.dtype[np.float64]],
+    ) -> np.ndarray[tuple[int, int], np.dtype[np.float64]]: ...

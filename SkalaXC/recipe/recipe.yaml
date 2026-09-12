@@ -1,0 +1,197 @@
+schema_version: 1
+
+context:
+  version: "0.1.0"
+  torch_min: "2.13"
+  torch_max: "2.14"
+  cuda12_gcc: "14"
+  cuda13_gcc: "15"
+
+recipe:
+  name: skalaxc-split
+  version: ${{ version }}
+
+source:
+  - path: ../..
+  - url: https://huggingface.co/microsoft/skala-baselines/resolve/main/ldax.fun
+    sha256: dd30928579ac970ffccc0c6f4ff6e2f7d7eeda3665352229a3f2678b3d0cb32e
+    file_name: ldax.fun
+    target_directory: data/skala_models
+  - url: https://huggingface.co/microsoft/skala-baselines/resolve/main/pbe.fun
+    sha256: da4da7dfed02bde938606c77b38e785283f15ad3be69159051e11cf213a97862
+    file_name: pbe.fun
+    target_directory: data/skala_models
+  - url: https://huggingface.co/microsoft/skala-baselines/resolve/main/tpss.fun
+    sha256: c2775e8c9512e399e8b35f1d4424052fdafaa8631a8e638a28ff460619999449
+    file_name: tpss.fun
+    target_directory: data/skala_models
+  - url: https://huggingface.co/microsoft/skala-1.1/resolve/main/skala-1.1-rev1.fun
+    sha256: 7f3e8622e1eb520ccd88a55464c3e359ac4d7e5ccbd1fb77a26afa1e1c20a5cd
+    file_name: skala-1.1.fun
+    target_directory: data/skala_models
+  - url: https://huggingface.co/microsoft/skala-1.1/resolve/main/skala-1.1-rev1-cuda.fun
+    sha256: f848eae769dca91741a518ae7275d10caac398ab21db649f91bc1f136872f223
+    file_name: skala-1.1-cuda.fun
+    target_directory: data/skala_models
+
+build:
+  number: 1
+
+outputs:
+  - staging:
+      name: skalaxc-native-build
+    requirements:
+      build:
+        - if: cuda == "cpu"
+          then:
+            - ${{ compiler('c') }}
+            - ${{ compiler('cxx') }}
+            - ${{ compiler('fortran') }}
+        - if: cuda == "cuda12"
+          then:
+            - gcc_linux-64 ${{ cuda12_gcc }}.*
+            - gxx_linux-64 ${{ cuda12_gcc }}.*
+            - gfortran_linux-64 ${{ cuda12_gcc }}.*
+            - cuda-compiler >=12.8,<13
+        - if: cuda == "cuda13"
+          then:
+            - gcc_linux-64 ${{ cuda13_gcc }}.*
+            - gxx_linux-64 ${{ cuda13_gcc }}.*
+            - gfortran_linux-64 ${{ cuda13_gcc }}.*
+            - cuda-compiler >=13,<14
+        - cmake >=3.21,<4
+        - git
+        - ninja
+        - pkg-config
+      host:
+        - python 3.12.*
+        - if: cuda == "cpu"
+          then: pytorch >=${{ torch_min }},<${{ torch_max }} cpu_*
+          else: pytorch-gpu >=${{ torch_min }},<${{ torch_max }}
+        - if: cuda == "cuda12"
+          then:
+            - cuda-cudart-dev >=12.8,<13
+            - cuda-nvrtc-dev >=12.8,<13
+            - cuda-version >=12.8,<13
+            - libcublas-dev >=12.8,<13
+        - if: cuda == "cuda13"
+          then:
+            - cuda-cudart-dev >=13,<14
+            - cuda-nvrtc-dev >=13,<14
+            - cuda-version >=13,<14
+            - libcublas-dev >=13,<14
+        - if: mpi == "openmpi"
+          then: openmpi
+        - eigen >=5,<6
+        - hdf5
+        - libblas
+        - liblapack
+        - nlohmann_json >=3.9
+    build:
+      script:
+        file: build-native.sh
+        env:
+          SKALAXC_MPI_VARIANT: ${{ mpi }}
+          SKALAXC_CUDA_VARIANT: ${{ cuda }}
+
+  - package:
+      name: libskalaxc
+    inherit: skalaxc-native-build
+    build:
+      string: ${{ mpi }}_${{ cuda }}_h${{ hash }}_${{ build_number }}
+      files:
+        - include/skalaxc/**
+        - lib/libskalaxc.*
+        - lib/cmake/SkalaXC/SkalaXCConfig.cmake
+        - lib/cmake/SkalaXC/SkalaXCConfigVersion.cmake
+        - lib/cmake/SkalaXC/SkalaXCCoreTargets*.cmake
+        - share/skalaxc/skala_models/*.fun
+    requirements:
+      run:
+        - if: cuda == "cpu"
+          then: pytorch >=${{ torch_min }},<${{ torch_max }} cpu_*
+          else: pytorch-gpu >=${{ torch_min }},<${{ torch_max }}
+        - if: cuda == "cuda12"
+          then:
+            - __cuda >=12
+            - cuda-version >=12,<13
+        - if: cuda == "cuda13"
+          then:
+            - __cuda >=13
+            - cuda-version >=13,<14
+        - if: mpi == "openmpi"
+          then: openmpi
+        - hdf5
+        - libblas
+        - liblapack
+    tests:
+      - script:
+          - test -d "${PREFIX}/include/skalaxc"
+          - test -f "${PREFIX}/lib/cmake/SkalaXC/SkalaXCConfig.cmake"
+          - test -f "${PREFIX}/share/skalaxc/skala_models/skala-1.1.fun"
+          - test -f "${PREFIX}/share/skalaxc/skala_models/skala-1.1-cuda.fun"
+          - 'ls "${PREFIX}"/lib/libskalaxc.* >/dev/null'
+
+  - package:
+      name: skalaxc-fortran
+    inherit:
+      from: skalaxc-native-build
+      run_exports: false
+    build:
+      string: ${{ mpi }}_${{ cuda }}_h${{ hash }}_${{ build_number }}
+      files:
+        - include/*.mod
+        - lib/libskalaxc_fortran.*
+        - lib/cmake/SkalaXC/SkalaXCFortranTargets*.cmake
+    requirements:
+      run:
+        - ${{ pin_subpackage('libskalaxc', exact=True) }}
+    tests:
+      - script:
+          - test -f "${PREFIX}/lib/cmake/SkalaXC/SkalaXCFortranTargets.cmake"
+          - 'ls "${PREFIX}"/include/*.mod >/dev/null'
+
+  - package:
+      name: skalaxc-python
+    build:
+      string: py${{ python | replace('.', '') }}_${{ mpi }}_${{ cuda }}_h${{ hash }}_${{ build_number }}
+      script:
+        file: build-python.sh
+      files:
+        - lib/python*/site-packages/skalaxc/**
+    requirements:
+      build:
+        - if: cuda == "cpu"
+          then: ${{ compiler('cxx') }}
+        - if: cuda == "cuda12"
+          then: gxx_linux-64 ${{ cuda12_gcc }}.*
+        - if: cuda == "cuda13"
+          then: gxx_linux-64 ${{ cuda13_gcc }}.*
+        - cmake >=3.21,<4
+        - ninja
+      host:
+        - ${{ pin_subpackage('libskalaxc', exact=True) }}
+        - python ${{ python }}.*
+        - pip
+        - scikit-build-core >=0.11
+        - nanobind >=2.4
+        - numpy >=1.23
+      run:
+        - ${{ pin_subpackage('libskalaxc', exact=True) }}
+        - python ${{ python }}.*
+        - numpy >=1.23
+    tests:
+      - python:
+          imports:
+            - skalaxc
+          pip_check: true
+      - script:
+          - OMP_NUM_THREADS=4 python -c "import skalaxc; assert skalaxc.PYTHON_LAYOUT == 'CONDA'; assert skalaxc.MODEL_DIR.is_dir()"
+
+about:
+  homepage: https://github.com/microsoft/skala
+  repository: https://github.com/microsoft/skala
+  documentation: https://microsoft.github.io/skala
+  license: MIT
+  license_file: LICENSE.txt
+  summary: Standalone neural-network exchange-correlation functional library
