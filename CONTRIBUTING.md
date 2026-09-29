@@ -16,28 +16,33 @@ or contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any addi
 
 ## Development setup
 
-Install Pixi 0.78, then create the default locked development environment from the repository root:
+Install Pixi 0.81, then create the locked CPU development environment from the repository root:
 
 ```bash
-pixi install --locked -e default
-pixi run -e default pre-commit install
+pixi install --locked -e dev
+pixi run -e dev pre-commit install
 ```
 
 Run the standard checks in their Pixi environments:
 
 ```bash
-OMP_NUM_THREADS=4 pixi run -e default pytest -v --doctest-modules \
+OMP_NUM_THREADS=4 pixi run -e dev pytest -v --doctest-modules \
 	--cov=skala --cov-report=xml --cov-report=term-missing --cov-report=html \
 	--durations=50 --durations-min=1.0 skala/src/skala/ skala/tests/
-OMP_NUM_THREADS=4 pixi run -e default pytest -v model/tests/test_model.py \
+OMP_NUM_THREADS=4 pixi run -e dev pytest -v model/tests/test_model.py \
 	model/tests/test_utils.py gauxc/tests/ benchmark/tests/
-pixi run -e default pre-commit run --all-files
-pixi run -e docs sphinx-build -b html website website/_build/html
-pixi run -e docs sphinx-build -b html gauxc/docs website/_build/html/gauxc
+pixi run -e dev pre-commit run --all-files
+pixi run -e dev sphinx-build -b html website website/_build/html
+pixi run -e dev sphinx-build -b html gauxc/docs website/_build/html/gauxc
 touch website/_build/html/.nojekyll
 ```
 
 Set `OMP_NUM_THREADS=4` when running tests locally to match CI.
+
+The `dev` environment includes all CPU development, documentation, profiling, packaging,
+and native integration dependencies. Use `dev-gpu` for the equivalent CUDA 12 toolchain.
+Both environments provide unconstrained `pip` and `py-spy` installations so those tools
+do not impose version requirements on the rest of the environment.
 
 Named compatibility environments cover Python 3.11 through 3.13, PySCF 2.14,
 PyTorch 2.12 and 2.13, GPU4PySCF 1.8.1, and CUDA 12 and 13. Keep `pixi.lock`
