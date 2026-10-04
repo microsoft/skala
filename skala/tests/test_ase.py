@@ -66,7 +66,10 @@ def test_ks_config() -> None:
 
     energy = atoms.get_potential_energy()
 
-    assert atoms.calc._ks.base.conv_tol == 1e-6, (
+    calculator = atoms.calc
+    assert isinstance(calculator, Skala)
+    assert calculator._ks is not None
+    assert calculator._ks.base.conv_tol == 1e-6, (
         "KS solver convergence tolerance not set correctly"
     )
 

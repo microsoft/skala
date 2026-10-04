@@ -76,6 +76,13 @@ class SkalaGrids(gen_grid.Grids):  # type: ignore[misc]
     ) -> SpatialGridLayout:
         """Return the cached spatial layout, creating it when needed."""
         if self._spatial_grid_layout is None:
+            coords = self.coords
+            weights = self.weights
+            if coords is None or weights is None:
+                raise RuntimeError(
+                    "Grid coordinates and weights must be built before preparing "
+                    "the spatial layout"
+                )
             spatial_grid_layout = prepare_spatial_grid_layout(
                 mol,
                 self,
@@ -84,7 +91,7 @@ class SkalaGrids(gen_grid.Grids):  # type: ignore[misc]
             )
             # Freeze the source arrays before publishing their derived layout.
             # Reassignment remains supported and invalidates the cache above.
-            self.coords.setflags(write=False)
-            self.weights.setflags(write=False)
+            coords.setflags(write=False)
+            weights.setflags(write=False)
             self._spatial_grid_layout = spatial_grid_layout
         return self._spatial_grid_layout

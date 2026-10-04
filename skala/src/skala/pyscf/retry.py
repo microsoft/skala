@@ -113,7 +113,7 @@ class SCFState:
     def post_kernel_callback(self, envs: dict[str, Any]) -> None:
         scf: SCF = envs["mf"]
 
-        if scf.conv_check:
+        if scf.conv_check and scf.callback is not None:
             envs["cycle"] += 1
             scf.callback(envs)
 

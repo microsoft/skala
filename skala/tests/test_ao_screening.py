@@ -274,7 +274,9 @@ def test_dense_model_evaluation_uses_model_chunks(
     """Keep model chunking independent from the AO screening decision."""
     mol = gto.M(atom="H 0 0 0; H 0 0 0.74", basis="sto-3g", verbose=0)
     grids = _minimal_atom_grid(mol)
-    atom_grid_size = grids.weights.size // mol.natm
+    weights = grids.weights
+    assert weights is not None
+    atom_grid_size = weights.size // mol.natm
 
     def estimate_chunks(*args: object, **kwargs: object) -> dict[int, int]:
         return {atom_grid_size: 1}
@@ -811,6 +813,10 @@ def test_cpu_screening_slices_and_scatters_full_derivatives(
     screen_index[1, -1] = 1
     grids.non0tab = screen_index
     active_ao_indices = _active_cpu_ao_indices(carbon, screen_index)
+    weights = grids.weights
+    coords = grids.coords
+    assert weights is not None
+    assert coords is not None
 
     class FakeNumInt:
         def block_loop(
@@ -823,8 +829,8 @@ def test_cpu_screening_slices_and_scatters_full_derivatives(
                 yield (
                     ao[grid_slice],
                     None,
-                    grids.weights[grid_slice],
-                    grids.coords[grid_slice],
+                    weights[grid_slice],
+                    coords[grid_slice],
                 )
 
     monkeypatch.setattr(dft.numint, "NumInt", FakeNumInt)
@@ -886,6 +892,10 @@ def test_cpu_all_active_block_uses_dense_sentinel(
     screen_index[1, 0] = 1
     grids.non0tab = screen_index
     ao_values = np.ones((ngrids, carbon.nao_nr()))
+    weights = grids.weights
+    coords = grids.coords
+    assert weights is not None
+    assert coords is not None
 
     class FakeNumInt:
         def block_loop(
@@ -896,8 +906,8 @@ def test_cpu_all_active_block_uses_dense_sentinel(
                 yield (
                     ao_values[grid_slice],
                     None,
-                    grids.weights[grid_slice],
-                    grids.coords[grid_slice],
+                    weights[grid_slice],
+                    coords[grid_slice],
                 )
 
     monkeypatch.setattr(dft.numint, "NumInt", FakeNumInt)
@@ -926,13 +936,17 @@ def test_cpu_no_active_aos_returns_full_zero_derivatives(
     ao = np.ones((ngrids, carbon.nao_nr()))
     screen_index = np.zeros((1, carbon.nbas), dtype=np.uint8)
     grids.non0tab = screen_index
+    weights = grids.weights
+    coords = grids.coords
+    assert weights is not None
+    assert coords is not None
 
     class FakeNumInt:
         def block_loop(
             self, *args: object, **kwargs: object
         ) -> Iterator[tuple[np.ndarray, None, np.ndarray, np.ndarray]]:
             assert kwargs["non0tab"] is screen_index
-            yield ao, None, grids.weights, grids.coords
+            yield ao, None, weights, coords
 
     monkeypatch.setattr(dft.numint, "NumInt", FakeNumInt)
     feature_function = MGGAFeatureFunction(AOFeatureSpec([Feature.DENSITY]))
@@ -1099,8 +1113,10 @@ def test_cpu_density_dense_screened_equivalence() -> None:
     with force_ao_screening(True):
         screened = numint.get_rho(mol, dm, grids)
 
-    assert dense.shape == grids.weights.shape
-    assert screened.shape == grids.weights.shape
+    weights = grids.weights
+    assert weights is not None
+    assert dense.shape == weights.shape
+    assert screened.shape == weights.shape
     np.testing.assert_allclose(screened, dense, rtol=1e-10, atol=1e-11)
 
 
@@ -1215,7 +1231,9 @@ def test_screened_ao_traversals_are_independent_of_model_chunking(
     """Keep global screened AO traversal counts independent of model chunk count."""
     mol = gto.M(atom="H 0 0 0; H 0 0 0.74", basis="sto-3g", verbose=0)
     grids = _minimal_atom_grid(mol)
-    atom_grid_size = grids.weights.size // mol.natm
+    weights = grids.weights
+    assert weights is not None
+    atom_grid_size = weights.size // mol.natm
 
     def estimate_chunks(*args: object, **kwargs: object) -> dict[int, int]:
         return {atom_grid_size: 1}

@@ -263,15 +263,19 @@ def test_gpu_screened_skala_matches_cpu_on_carbon_chain(
     gpu_grids.alignment = 1
     gpu_grids.build(sort_grids=False)
     dm = dft.RKS(mol).get_init_guess()
+    cpu_coords = cpu_grids.coords
+    cpu_weights = cpu_grids.weights
+    assert cpu_coords is not None
+    assert cpu_weights is not None
 
     np.testing.assert_allclose(
-        cpu_grids.coords,
+        cpu_coords,
         cupy.asnumpy(gpu_grids.coords),
         rtol=0.0,
         atol=0.0,
     )
     np.testing.assert_allclose(
-        cpu_grids.weights,
+        cpu_weights,
         cupy.asnumpy(gpu_grids.weights),
         rtol=1e-12,
         atol=1e-12,
