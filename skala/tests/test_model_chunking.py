@@ -139,10 +139,13 @@ def test_model_feature_chunker_builds_bound_shape_from_internal_grid_sizes(
 ) -> None:
     atomic_grid_sizes = torch.tensor([3, 1, 2, 1])
 
+    def get_grid_features(*args: object, **kwargs: object) -> FeatureMap:
+        return {Feature.ATOMIC_GRID_SIZES: atomic_grid_sizes}
+
     monkeypatch.setattr(
         model_chunking,
         "get_grid_features",
-        lambda *args, **kwargs: {Feature.ATOMIC_GRID_SIZES: atomic_grid_sizes},
+        get_grid_features,
     )
 
     evaluation_feature_spec = FeatureSpec(
@@ -202,10 +205,13 @@ def test_chunked_feature_gradients_match_unchunked(
                 mol[Feature.DENSITY].square() * mol[Feature.GRID_WEIGHTS]
             ).sum() + mol[Feature.COARSE_0_ATOMIC_COORDS].square().sum()
 
+    def estimate_chunks(**kwargs: object) -> dict[int, int]:
+        return {1: 2, 2: 1, 3: 1}
+
     monkeypatch.setattr(
         model_chunking,
         "estimate_max_model_atoms_per_chunk",
-        lambda **kwargs: {1: 2, 2: 1, 3: 1},
+        estimate_chunks,
     )
     functional = TestFunctional()
     reference = torch.autograd.grad(
@@ -257,10 +263,13 @@ def test_chunked_feature_gradients_reject_disconnected_features(
                 return mol[Feature.DENSITY].new_tensor(1.0)
             return mol[Feature.DENSITY].square().sum()
 
+    def estimate_chunks(**kwargs: object) -> dict[int, int]:
+        return {2: 1}
+
     monkeypatch.setattr(
         model_chunking,
         "estimate_max_model_atoms_per_chunk",
-        lambda **kwargs: {2: 1},
+        estimate_chunks,
     )
 
     with pytest.raises(

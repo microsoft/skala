@@ -92,16 +92,21 @@ def test_mgga_supported_features_are_linear_in_density_matrix(
     dm = torch.tensor([[2.0, 0.5], [0.5, 1.0]], dtype=torch.float64)
     tangent = torch.tensor([[0.2, -0.1], [-0.1, 0.3]], dtype=torch.float64)
 
+    def evaluate_features(value: torch.Tensor) -> torch.Tensor:
+        result = feature_function(value, ao)
+        assert isinstance(result, torch.Tensor)
+        return result
+
     features = feature_function(dm, ao)
     feature_jvp = torch.func.jvp(
-        lambda value: feature_function(value, ao),
+        evaluate_features,
         (dm,),
         (tangent,),
     )[1]
 
     def first_jvp(value: torch.Tensor) -> torch.Tensor:
         result = torch.func.jvp(
-            lambda inner: feature_function(inner, ao),
+            evaluate_features,
             (value,),
             (tangent,),
         )[1]
@@ -145,7 +150,12 @@ def test_mgga_analytic_vjp_matches_autograd(
     dm_shape = (3, 3) if spin_channels is None else (spin_channels, 3, 3)
     dm = torch.randn(dm_shape, dtype=torch.float64, generator=generator)
 
-    vjp_result = torch.func.vjp(lambda value: feature_function(value, ao), dm)
+    def evaluate_features(value: torch.Tensor) -> torch.Tensor:
+        result = feature_function(value, ao)
+        assert isinstance(result, torch.Tensor)
+        return result
+
+    vjp_result = torch.func.vjp(evaluate_features, dm)
     features = vjp_result[0]
     pullback = vjp_result[1]
     cotangent = torch.randn(features.shape, dtype=features.dtype, generator=generator)
@@ -183,10 +193,14 @@ def test_feature_block_compiled_vjp_matches_eager(
     )
 
     compile_function = torch.compile
+
+    def compile_eager(function: Callable[..., Any]) -> Callable[..., Any]:
+        return compile_function(function, backend="eager")
+
     monkeypatch.setattr(
         torch,
         "compile",
-        lambda function: compile_function(function, backend="eager"),
+        compile_eager,
     )
 
     compiled_forward = _evaluate_feature_block(
@@ -261,10 +275,14 @@ def test_dense_model_evaluation_uses_model_chunks(
     mol = gto.M(atom="H 0 0 0; H 0 0 0.74", basis="sto-3g", verbose=0)
     grids = _minimal_atom_grid(mol)
     atom_grid_size = grids.weights.size // mol.natm
+
+    def estimate_chunks(*args: object, **kwargs: object) -> dict[int, int]:
+        return {atom_grid_size: 1}
+
     monkeypatch.setattr(
         model_chunking_module,
         "estimate_max_model_atoms_per_chunk",
-        lambda *args, **kwargs: {atom_grid_size: 1},
+        estimate_chunks,
     )
 
     class CountingFunctional(QuadraticFunctional):
@@ -1198,10 +1216,14 @@ def test_screened_ao_traversals_are_independent_of_model_chunking(
     mol = gto.M(atom="H 0 0 0; H 0 0 0.74", basis="sto-3g", verbose=0)
     grids = _minimal_atom_grid(mol)
     atom_grid_size = grids.weights.size // mol.natm
+
+    def estimate_chunks(*args: object, **kwargs: object) -> dict[int, int]:
+        return {atom_grid_size: 1}
+
     monkeypatch.setattr(
         model_chunking_module,
         "estimate_max_model_atoms_per_chunk",
-        lambda *args, **kwargs: {atom_grid_size: 1},
+        estimate_chunks,
     )
 
     forward_calls = 0
