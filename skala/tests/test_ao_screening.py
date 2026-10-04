@@ -366,9 +366,8 @@ def test_decompose_grid_into_spatial_blocks_groups_interleaved_clusters() -> Non
     block_size = 3
     labels = np.tile(np.arange(4), block_size)
     offsets = np.repeat(np.arange(block_size), 4)
-    coords = np.column_stack(
-        (100.0 * labels + offsets, np.zeros(labels.size), np.zeros(labels.size))
-    )
+    coords = np.zeros((labels.size, 3), dtype=np.float64)
+    coords[:, 0] = 100.0 * labels + offsets
 
     forward, _ = _decompose_grid_into_spatial_blocks(coords, block_size)
 
