@@ -40,20 +40,20 @@ class SkalaGrids(gen_grid.Grids):  # type: ignore[misc]
         super().__setattr__("_initializing", False)
 
     @override
-    def __setattr__(self, key: str, value: Any) -> None:
+    def __setattr__(self, key: str, val: Any) -> None:
         # Alignment padding would break the exact atom-major grid layout expected
         # by Skala, so only the base-class constructor may set a non-unit value.
         if (
             key == "alignment"
-            and value != 1
+            and val != 1
             and not getattr(self, "_initializing", False)
         ):
-            raise ValueError(f"SkalaGrids alignment must be 1, got {value}")
+            raise ValueError(f"SkalaGrids alignment must be 1, got {val}")
         # The spatial permutations and screening data are derived from these
         # attributes and must be rebuilt after any assignment.
         if key in {"coords", "weights", "cutoff"}:
             super().__setattr__("_spatial_grid_layout", None)
-        super().__setattr__(key, value)
+        super().__setattr__(key, val)
 
     @override
     def build(
