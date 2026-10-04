@@ -35,6 +35,7 @@ from skala.pyscf.spatial_grid_layout import (
 )
 from skala.pyscf.xc_integrator import XCIntegrator
 from skala.typing import F64
+from typing_extensions import override
 
 from pyscf import dft, gto
 from tests.utils import QuadraticFunctional, force_ao_screening
@@ -271,6 +272,7 @@ def test_dense_model_evaluation_uses_model_chunks(
             super().__init__()
             self.calls = 0
 
+        @override
         def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             self.calls += 1
             return super().get_exc(mol)
@@ -1109,6 +1111,7 @@ def test_screened_integration_adds_bookkeeping_features(
             super().__init__()
             self.features = features
 
+        @override
         def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             return mol[energy_feature].square().sum()
 
@@ -1170,6 +1173,7 @@ def test_response_of_linear_functional_is_zero(screened: bool) -> None:
                 Feature.GRID_WEIGHTS,
             ]
 
+        @override
         def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             return (mol[Feature.DENSITY] * mol[Feature.GRID_WEIGHTS]).sum()
 

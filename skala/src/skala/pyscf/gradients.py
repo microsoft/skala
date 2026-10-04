@@ -11,6 +11,7 @@ from pyscf.grad.rhf import Gradients as RHFGradient
 from pyscf.grad.rks import grids_noresponse_cc, grids_response_cc
 from pyscf.grad.uks import Gradients as UHFGradient
 from pyscf.scf.hf import SCF
+from typing_extensions import override
 
 from pyscf import dft, gto
 from skala.dispersion import DFTD3Dispersion
@@ -93,6 +94,7 @@ class SkalaRKSGradient(RHFGradient):  # type: ignore[misc]
         self.verbose = verbose
         self.with_dftd3 = getattr(ks, "with_dftd3", None)
 
+    @override
     def get_veff(
         self,
         mol: gto.Mole | None = None,
@@ -116,6 +118,7 @@ class SkalaRKSGradient(RHFGradient):  # type: ignore[misc]
         assert isinstance(result, np.ndarray)
         return result
 
+    @override
     def grad_elec(
         self,
         mo_energy: np.ndarray | None = None,
@@ -135,6 +138,7 @@ class SkalaRKSGradient(RHFGradient):  # type: ignore[misc]
         assert isinstance(result, np.ndarray)
         return result
 
+    @override
     def grad_nuc(
         self, mol: gto.Mole | None = None, atmlst: list[int] | None = None
     ) -> np.ndarray:
@@ -148,6 +152,7 @@ class SkalaRKSGradient(RHFGradient):  # type: ignore[misc]
         nuc_g += disp_g
         return nuc_g
 
+    @override
     def extra_force(
         self, atom_id: int | None = None, envs: dict[str, Any] | None = None
     ) -> int:
@@ -177,6 +182,7 @@ class SkalaUKSGradient(UHFGradient):  # type: ignore[misc]
         self.verbose = verbose
         self.with_dftd3 = getattr(ks, "with_dftd3", None)
 
+    @override
     def get_veff(
         self,
         mol: gto.Mole | None = None,
@@ -199,6 +205,7 @@ class SkalaUKSGradient(UHFGradient):  # type: ignore[misc]
         assert isinstance(result, np.ndarray)
         return result
 
+    @override
     def grad_elec(
         self,
         mo_energy: np.ndarray | None = None,
@@ -218,6 +225,7 @@ class SkalaUKSGradient(UHFGradient):  # type: ignore[misc]
         assert isinstance(result, np.ndarray)
         return result
 
+    @override
     def grad_nuc(
         self, mol: gto.Mole | None = None, atmlst: list[int] | None = None
     ) -> np.ndarray:

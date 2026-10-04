@@ -34,3 +34,12 @@ repos:
           - website
         pass_filenames: false
         always_run: true
+      - id: pyrefly
+        name: pyrefly
+        entry: pyrefly check
+        language: system
+        args:
+          - --config
+          - pyrefly.toml
+        pass_filenames: false
+        always_run: true

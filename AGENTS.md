@@ -34,8 +34,9 @@ Skala is a neural network-based exchange-correlation (XC) functional for density
 ## Code style & linting
 
 - **Formatter/linter**: Ruff (`ruff format`, `ruff check --fix --select I`).
-- **Type checking**: mypy in strict mode. Ignore missing type information only for explicitly
-  named untyped dependencies in `pyproject.toml`; do not use global `--ignore-missing-imports`.
+- **Type checking**: mypy and Pyrefly in strict mode. Ignore missing type information only for
+  explicitly named untyped dependencies in `pyproject.toml` and `pyrefly.toml`; do not use global
+  missing-import suppression.
 - Line length: 100 characters (Black-compatible).
 - Imports sorted via Ruff's isort rules.
 - Generated build, coverage, and documentation output is excluded from static analysis.
@@ -101,7 +102,7 @@ When editing code:
 | Run runtime tests | `OMP_NUM_THREADS=4 pixi run -e dev pytest -v --doctest-modules --cov=skala --cov-report=xml --cov-report=term-missing --cov-report=html --durations=50 --durations-min=1.0 skala/src/skala/ skala/tests/` |
 | Run component tests | `OMP_NUM_THREADS=4 pixi run -e dev pytest -v model/tests/test_model.py model/tests/test_utils.py gauxc/tests/ benchmark/tests/` |
 | Build docs | `pixi run -e docs sphinx-build -b html website website/_build/html && pixi run -e docs sphinx-build -b html gauxc/docs website/_build/html/gauxc && touch website/_build/html/.nojekyll` |
-| Type check | `pixi run -e dev mypy skala/src model/src gauxc/src benchmark/src` |
+| Type check | `pixi run -e dev mypy skala/src model/src gauxc/src benchmark/src && pixi run -e dev pyrefly check` |
 
 ## Contact
 

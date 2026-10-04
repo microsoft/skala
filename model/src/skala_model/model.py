@@ -17,6 +17,7 @@ from opt_einsum_fx import jitable, optimize_einsums_full
 from skala.features import Feature, FeatureMap
 from skala.functional.base import ExcFunctionalBase, enhancement_density_inner_product
 from torch import fx, nn
+from typing_extensions import override
 
 from skala_model.layers import ScaledSigmoid
 from skala_model.utils.irreps import Irreps
@@ -67,6 +68,7 @@ class SemiLocalFeatures(nn.Module):
             persistent=False,
         )
 
+    @override
     def forward(self, mol: FeatureMap) -> tuple[torch.Tensor, torch.Tensor]:
         features = _prepare_features_raw(mol)
         features_ab = features
@@ -92,6 +94,7 @@ class ExpRadialScaleModel(nn.Module):
             "temps", 2 * torch.linspace(min_std, max_std, embedding_size) ** 2
         )
 
+    @override
     def forward(self, dist2: torch.Tensor) -> torch.Tensor:
         """Compute radial basis values.
 
@@ -299,6 +302,7 @@ class SkalaFunctional(ExcFunctionalBase):
 
         return packed_mol_feats
 
+    @override
     def get_exc(self, mol: FeatureMap) -> torch.Tensor:
         exc_density = self._get_exc_density_padded(mol).double()
         grid_weights = (
@@ -313,6 +317,7 @@ class SkalaFunctional(ExcFunctionalBase):
 
         return (exc_density * grid_weights).sum()
 
+    @override
     def get_exc_density(self, mol: FeatureMap) -> torch.Tensor:
         padded = self._get_exc_density_padded(mol)
         sizes = mol[Feature.ATOMIC_GRID_SIZES]
@@ -472,6 +477,7 @@ class NonLocalModel(nn.Module):
             nn.SiLU(),
         )
 
+    @override
     def forward(
         self,
         h: torch.Tensor,  # (num_fine, num_coarse, input_nf)
@@ -577,6 +583,7 @@ class TensorProduct(nn.Module):
             x = (6 / (num_in + num_out)) ** 0.5
             self._batched_W.data[idx].uniform_(-x, x)
 
+    @override
     def _load_from_state_dict(
         self,
         state_dict: dict[str, torch.Tensor],
@@ -778,6 +785,7 @@ class TensorProduct(nn.Module):
             out = distance_weights * out
         return out
 
+    @override
     def forward(
         self,
         x1: torch.Tensor,
@@ -877,6 +885,7 @@ class O3Linear(nn.Module):
             result.append(weight)
         return result
 
+    @override
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         result = self._o3_linear(x, *self.weight_list)
         assert isinstance(result, torch.Tensor)

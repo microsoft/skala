@@ -14,6 +14,7 @@ from torch import Tensor
 from torch.autograd import Function
 from torch.autograd.function import FunctionCtx
 from torch.utils.dlpack import from_dlpack
+from typing_extensions import override
 
 from pyscf import dft, gto
 from skala.pyscf import feature_math
@@ -370,6 +371,7 @@ class _BlockwiseAOFeatureOperator(Function):
     """
 
     @staticmethod
+    @override
     def setup_context(
         ctx: FunctionCtx,
         inputs: tuple[
@@ -398,6 +400,7 @@ class _BlockwiseAOFeatureOperator(Function):
         context.output_dtype = output.dtype
 
     @staticmethod
+    @override
     def forward(
         value: torch.Tensor,
         mol: gto.Mole,
@@ -426,6 +429,7 @@ class _BlockwiseAOFeatureOperator(Function):
         )
 
     @staticmethod
+    @override
     def jvp(
         ctx: _BlockwiseAOFeatureOperatorContext,
         *grad_inputs: torch.Tensor | None,
@@ -451,6 +455,7 @@ class _BlockwiseAOFeatureOperator(Function):
         )
 
     @staticmethod
+    @override
     def backward(
         ctx: _BlockwiseAOFeatureOperatorContext,
         *grad_outputs: torch.Tensor,

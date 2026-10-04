@@ -57,6 +57,7 @@ from typing import Any, cast
 import numpy as np
 import torch
 from pyscf.df import df_jk
+from typing_extensions import override
 
 from pyscf import dft, gto
 from skala.dispersion import DFTD3Dispersion
@@ -102,6 +103,7 @@ class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
 
         self.grids = SkalaGrids(mol)(level=self.grids.level)
 
+    @override
     def initialize_grids(
         self, mol: gto.Mole | None = None, dm: np.ndarray | None = None
     ) -> "SkalaRKS":
@@ -114,6 +116,7 @@ class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
         assert isinstance(result, SkalaRKS)
         return result
 
+    @override
     def energy_nuc(self) -> float:
         enuc = float(super().energy_nuc())
         if self.with_dftd3:
@@ -122,9 +125,11 @@ class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
             enuc += edisp
         return enuc
 
+    @override
     def Gradients(self) -> SkalaRKSGradient:
         return SkalaRKSGradient(self)
 
+    @override
     def nuc_grad_method(self) -> SkalaRKSGradient:
         return self.Gradients()
 
@@ -140,6 +145,7 @@ class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
             mo_occ = self.mo_occ
         return self._numint.gen_response(mo_coeff, mo_occ, **kwargs, ks=self)
 
+    @override
     def density_fit(
         self,
         auxbasis: str | None = None,
@@ -196,6 +202,7 @@ class SkalaUKS(dft.uks.UKS):  # type: ignore[misc]
 
         self.grids = SkalaGrids(mol)(level=self.grids.level)
 
+    @override
     def initialize_grids(
         self, mol: gto.Mole | None = None, dm: np.ndarray | None = None
     ) -> "SkalaUKS":
@@ -208,6 +215,7 @@ class SkalaUKS(dft.uks.UKS):  # type: ignore[misc]
         assert isinstance(result, SkalaUKS)
         return result
 
+    @override
     def energy_nuc(self) -> float:
         enuc = float(super().energy_nuc())
         if self.with_dftd3:
@@ -216,9 +224,11 @@ class SkalaUKS(dft.uks.UKS):  # type: ignore[misc]
             enuc += edisp
         return enuc
 
+    @override
     def Gradients(self) -> SkalaUKSGradient:
         return SkalaUKSGradient(self)
 
+    @override
     def nuc_grad_method(self) -> SkalaUKSGradient:
         return self.Gradients()
 
@@ -234,6 +244,7 @@ class SkalaUKS(dft.uks.UKS):  # type: ignore[misc]
             mo_occ = self.mo_occ
         return self._numint.gen_response(mo_coeff, mo_occ, **kwargs, ks=self)
 
+    @override
     def density_fit(
         self,
         auxbasis: str | None = None,

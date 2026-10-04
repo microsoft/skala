@@ -5,6 +5,7 @@ from typing import Any
 
 import torch
 from pyscf.dft import gen_grid
+from typing_extensions import override
 
 from pyscf import gto
 from skala.pyscf.spatial_grid_layout import (
@@ -38,6 +39,7 @@ class SkalaGrids(gen_grid.Grids):  # type: ignore[misc]
         super().__setattr__("alignment", 1)
         super().__setattr__("_initializing", False)
 
+    @override
     def __setattr__(self, key: str, value: Any) -> None:
         # Alignment padding would break the exact atom-major grid layout expected
         # by Skala, so only the base-class constructor may set a non-unit value.
@@ -53,6 +55,7 @@ class SkalaGrids(gen_grid.Grids):  # type: ignore[misc]
             super().__setattr__("_spatial_grid_layout", None)
         super().__setattr__(key, value)
 
+    @override
     def build(
         self,
         mol: gto.Mole | None = None,

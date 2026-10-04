@@ -12,6 +12,7 @@ from ase.calculators.calculator import (
     all_changes,
 )
 from ase.units import Bohr, Debye, Hartree
+from typing_extensions import override
 
 import skala.pyscf as skala_cpu
 from pyscf import grad, gto
@@ -64,6 +65,7 @@ class Skala(Calculator):
     def __init__(self, atoms: Atoms | None = None, **kwargs: Any) -> None:
         super().__init__(atoms=atoms, **kwargs)  # type: ignore[no-untyped-call]
 
+    @override
     def set(self, **kwargs: Any) -> dict[str, Any]:
         """
         Set parameters for the Skala calculator.
@@ -108,12 +110,14 @@ class Skala(Calculator):
 
         return changed_parameters
 
+    @override
     def reset(self) -> None:
         """
         Reset the calculator to its initial state.
         """
         super().reset()  # type: ignore[no-untyped-call]
 
+    @override
     def calculate(
         self,
         atoms: Atoms | None = None,

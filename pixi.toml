@@ -19,6 +19,7 @@ conda-forge = { mapping-mode = "overlay", mapping = { dftd3-python = "dftd3", py
 [feature.python-runtime.dependencies]
 ase = "*"
 numpy = "<2.5"
+typing-extensions = ">=4.16.0,<5"
 
 [feature.python-runtime.pypi-dependencies]
 skala = { path = "skala", editable = true }
@@ -116,6 +117,7 @@ pytest-timeout = "*"
 [feature.lint.dependencies]
 mypy = ">=2"
 pre-commit = "*"
+pyrefly = ">=1,<2"
 
 [feature.lint.pypi-dependencies]
 pandas-stubs = "*"

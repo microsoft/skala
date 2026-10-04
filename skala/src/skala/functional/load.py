@@ -12,6 +12,7 @@ from collections.abc import Iterable, Mapping
 from typing import IO, Any, cast
 
 import torch
+from typing_extensions import override
 
 from skala.features import Feature, FeatureMap
 from skala.functional.base import ExcFunctionalBase
@@ -50,6 +51,7 @@ class TracedFunctional(ExcFunctionalBase):
         self.features = [Feature(feature) for feature in features]
         self.expected_d3_settings = expected_d3_settings
 
+    @override
     def get_d3_settings(self) -> str | None:
         """
         Returns the D3 settings that this functional expects.
@@ -57,11 +59,13 @@ class TracedFunctional(ExcFunctionalBase):
         """
         return self.expected_d3_settings
 
+    @override
     def get_exc_density(self, mol: FeatureMap) -> torch.Tensor:
         result = self._traced_model.get_exc_density(mol)
         assert isinstance(result, torch.Tensor)
         return result
 
+    @override
     def get_exc(self, mol: FeatureMap) -> torch.Tensor:
         result = self._traced_model.get_exc(mol)
         assert isinstance(result, torch.Tensor)

@@ -13,6 +13,7 @@ from skala.pyscf.gradients import (
     _veff_and_expl_nuc_grad,
 )
 from skala.pyscf.model_chunking import evaluate_model_features
+from typing_extensions import override
 
 from pyscf import dft, gto, scf
 from tests.ridders import num_grad_ridders
@@ -81,6 +82,7 @@ def test_grid_coords_gradient(mol_name: str) -> None:
             super().__init__()
             self.features = [Feature.GRID_COORDS]
 
+        @override
         def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             """This actually calculates the total electron number"""
             return mol[Feature.GRID_COORDS].sum()
@@ -108,6 +110,7 @@ def test_coarse_0_atomic_coords_gradient(mol_name: str) -> None:
             super().__init__()
             self.features = [Feature.COARSE_0_ATOMIC_COORDS]
 
+        @override
         def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             """This actually calculates the total electron number"""
             return torch.einsum("nx->", mol[Feature.COARSE_0_ATOMIC_COORDS])
@@ -131,6 +134,7 @@ def test_grid_weights_gradient(mol_name: str) -> None:
             super().__init__()
             self.features = [Feature.GRID_WEIGHTS]
 
+        @override
         def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             """This actually calculates the total electron number"""
             return mol[Feature.GRID_WEIGHTS].sum()
@@ -196,6 +200,7 @@ def test_density_veff(mol_name: str) -> None:
             super().__init__()
             self.features = [Feature.DENSITY, Feature.GRID_WEIGHTS]
 
+        @override
         def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             """This actually calculates the total electron number"""
             return (mol[Feature.DENSITY] @ mol[Feature.GRID_WEIGHTS]).sum()
@@ -251,6 +256,7 @@ def test_grad_veff(mol_name: str) -> None:
             super().__init__()
             self.features = [Feature.GRAD, Feature.GRID_WEIGHTS]
 
+        @override
         def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             return (
                 (mol[Feature.GRAD] ** 2 @ mol[Feature.GRID_WEIGHTS])
@@ -318,6 +324,7 @@ def test_kin_veff(mol_name: str) -> None:
             super().__init__()
             self.features = [Feature.KIN, Feature.GRID_WEIGHTS]
 
+        @override
         def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             """This actually calculates the total kinetic energy number"""
             return (mol[Feature.KIN] @ mol[Feature.GRID_WEIGHTS]).sum()
@@ -441,6 +448,7 @@ def test_atomic_grid_weights_gradient(mol_name: str) -> None:
             super().__init__()
             self.features = [Feature.ATOMIC_GRID_WEIGHTS]
 
+        @override
         def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             return mol[Feature.ATOMIC_GRID_WEIGHTS].sum()
 
@@ -475,6 +483,7 @@ def test_atomic_grid_features_passthrough(mol_name: str) -> None:
                 Feature.ATOMIC_GRID_SIZE_BOUND_SHAPE,
             ]
 
+        @override
         def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             # Use density and grid_weights (differentiable) plus atomic_grid_weights (other_feat)
             n_electrons = (mol[Feature.DENSITY] @ mol[Feature.GRID_WEIGHTS]).sum()
@@ -511,6 +520,7 @@ def test_explicit_nuc_grad_feats_with_integer_features(mol_name: str) -> None:
                 Feature.ATOMIC_GRID_SIZE_BOUND_SHAPE,
             ]
 
+        @override
         def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             return (mol[Feature.DENSITY] @ mol[Feature.GRID_WEIGHTS]).sum()
 

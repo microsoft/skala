@@ -10,6 +10,7 @@ from skala.pyscf import model_chunking
 from skala.pyscf.backend import Grid
 from skala.pyscf.evaluation import FeatureSpec
 from skala.pyscf.feature_math import feature_derivatives
+from typing_extensions import override
 
 from pyscf import gto
 
@@ -194,6 +195,7 @@ def test_chunked_feature_gradients_match_unchunked(
             super().__init__()
             self.calls = 0
 
+        @override
         def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             self.calls += 1
             return (
@@ -249,6 +251,7 @@ def test_chunked_feature_gradients_reject_disconnected_features(
         if supports_spatial_decomposition:
             features.append(Feature.ATOMIC_GRID_SIZES)
 
+        @override
         def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             if constant_energy:
                 return mol[Feature.DENSITY].new_tensor(1.0)

@@ -7,6 +7,7 @@ import opt_einsum_fx
 import torch
 import torch.fx
 from e3nn import o3
+from typing_extensions import override
 
 from skala_model.utils.cg import u_matrix_real
 
@@ -52,6 +53,7 @@ class SymmetricContraction(torch.nn.Module):
             ]
         )
 
+    @override
     def forward(
         self,
         x: torch.Tensor,
@@ -183,6 +185,7 @@ class Contraction(torch.nn.Module):
     def get_u_tensor(self, nu: int) -> torch.Tensor:
         return dict(self.named_buffers())[f"u_matrix_{nu}"]
 
+    @override
     def forward(
         self,
         *xs: list[torch.Tensor],

@@ -31,6 +31,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 
+from typing_extensions import override
+
 if TYPE_CHECKING:
     import torch
     from pyscf.scf.hf import SCF
@@ -141,6 +143,7 @@ class CudaTimeline(Timeline):
         event.record()
         return event
 
+    @override
     def resolve(self) -> None:
         self._torch.cuda.synchronize()
 

@@ -1,0 +1,40 @@
+preset = "strict"
+python-version = "3.11.0"
+project-includes = [
+    "skala",
+    "model",
+    "gauxc",
+    "benchmark",
+    "website",
+]
+project-excludes = [
+    "**/build/",
+    "**/website/_build/",
+    "**/htmlcov/",
+    "**/third_party/",
+]
+search-path = [
+    "skala/src",
+    "model/src",
+    "gauxc/src",
+    "benchmark/src",
+    "skala",
+    ".",
+]
+ignore-missing-imports = [
+    "cupy",
+    "cupy.*",
+    "e3nn",
+    "e3nn.*",
+    "gpu4pyscf",
+    "gpu4pyscf.*",
+    "h5py",
+    "h5py.*",
+    "opt_einsum_fx",
+    "opt_einsum_fx.*",
+    "pyscf",
+    "pyscf.*",
+]
+check-unannotated-defs = true
+infer-return-types = "never"
+
