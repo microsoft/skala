@@ -108,7 +108,7 @@ class SkalaRKSGradient(RHFGradient):  # type: ignore[misc]
         grids = self.grids
         if grids is None:
             raise RuntimeError(
-                "UKS grids must be initialized before computing gradients"
+                "RKS grids must be initialized before computing gradients"
             )
         veff, self.veff_nuc_grad_ = _veff_and_expl_nuc_grad(
             self.functional,
@@ -198,10 +198,15 @@ class SkalaUKSGradient(UHFGradient):  # type: ignore[misc]
         if dm is None:
             dm = self.base.make_rdm1()
 
+        grids = self.grids
+        if grids is None:
+            raise RuntimeError(
+                "UKS grids must be initialized before computing gradients"
+            )
         veff, self.veff_nuc_grad_ = _veff_and_expl_nuc_grad(
             self.functional,
             mol=mol,
-            grid=self.grids,
+            grid=grids,
             rdm1=torch.from_numpy(dm),
             nuc_grad_feats=self.nuc_grad_feats,
             max_memory_in_mb=int(self.base.max_memory),
