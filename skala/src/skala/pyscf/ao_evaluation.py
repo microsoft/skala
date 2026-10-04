@@ -35,9 +35,8 @@ class _BlockwiseAOFeatureOperatorContext(Protocol):
     blksize: int | None
     compile_feature_function: bool
     adjoint: bool
-    output_shape: torch.Size
-    output_device: torch.device
-    output_dtype: torch.dtype
+    result_shape: torch.Size
+    result_options: tuple[torch.device, torch.dtype]
 
 
 def _active_cpu_ao_indices(
@@ -395,13 +394,13 @@ class _BlockwiseAOFeatureOperator(Function):
             context.compile_feature_function,
             context.adjoint,
         ) = inputs
-        context.output_shape = output.shape
-        context.output_device = output.device
-        context.output_dtype = output.dtype
+        context.result_shape = output.shape
+        context.result_options = output.device, output.dtype
 
+    # PyTorch supports this ctx-free signature when setup_context is defined separately.
     @staticmethod
     @override
-    def forward(
+    def forward(  # pyrefly: ignore[bad-override]
         value: torch.Tensor,
         mol: gto.Mole,
         grids: Grid,
@@ -436,10 +435,11 @@ class _BlockwiseAOFeatureOperator(Function):
     ) -> torch.Tensor:
         value_tangent = grad_inputs[0]
         if value_tangent is None:
+            result_device, result_dtype = ctx.result_options
             return torch.zeros(
-                ctx.output_shape,
-                device=ctx.output_device,
-                dtype=ctx.output_dtype,
+                ctx.result_shape,
+                device=result_device,
+                dtype=result_dtype,
             )
         return cast(
             Tensor,
