@@ -405,9 +405,12 @@ def _num_profiled_runs(default: int = 1) -> int:
     """
     import torch
 
+    get_num_profiled_runs = getattr(torch._C, "_jit_get_num_profiled_runs", None)
+    if not callable(get_num_profiled_runs):
+        return default
     try:
-        return max(int(torch._C._jit_get_num_profiled_runs()), 1)  # type: ignore[attr-defined]
-    except (AttributeError, TypeError, ValueError):
+        return max(int(get_num_profiled_runs()), 1)
+    except (TypeError, ValueError):
         return default
 
 
