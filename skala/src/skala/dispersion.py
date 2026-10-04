@@ -38,7 +38,7 @@ except ModuleNotFoundError as error:
     if error.name not in {"pyscf.dispersion", "pyscf.dispersion.dftd3"}:
         raise
 
-    from dftd3.pyscf import (  # type: ignore[import-not-found, unused-ignore]
+    from dftd3.pyscf import (  # type: ignore[import-not-found, unused-ignore]  # pyrefly: ignore[missing-import]
         DFTD3Dispersion as _StandaloneDFTD3Dispersion,
     )
 
