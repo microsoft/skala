@@ -13,7 +13,6 @@ from skala_model.utils.cg import u_matrix_real
 from skala_model.utils.irreps import Irreps
 
 ALPHABET = ["w", "x", "v", "n", "z", "r", "t", "y", "u", "o", "p", "s"]
-ALPHABET = ["w", "x", "v", "n", "z", "r", "t", "y", "u", "o", "p", "s"]
 
 
 def get_alphabet_string(i: int) -> str:
