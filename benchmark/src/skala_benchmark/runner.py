@@ -286,7 +286,7 @@ def _run_scf(config: RunConfig, launched_at: float | None = None) -> RunOutcome:
         )
         return RunResult(
             total_energy=energy,
-            is_converged=bool(mf.converged),
+            is_converged=mf.converged,
             num_scf_iterations=len(timing.cycles),
             num_atoms=int(mf.mol.natm),
             num_electrons=int(mf.mol.nelectron),
@@ -468,16 +468,21 @@ def _num_aux_basis_functions(mf: SCF) -> int | None:
     if df is None:
         return None
     if hasattr(df, "get_naoaux"):  # pyscf CPU DF
-        return int(df.get_naoaux())
+        count: object = df.get_naoaux()
+        if not isinstance(count, int):
+            raise TypeError(
+                f"PySCF returned a non-integer auxiliary basis count: {count!r}"
+            )
+        return count
     auxmol = getattr(df, "auxmol", None)  # gpu4pyscf DF exposes the aux Mole
-    return int(auxmol.nao_nr()) if auxmol is not None else None
+    return auxmol.nao_nr() if auxmol is not None else None
 
 
 def _build_mol(molecule: Molecule, basis: str) -> gto.Mole:
     from pyscf import gto
 
     atoms = [
-        [int(number), (float(x), float(y), float(z))]
+        [number, (float(x), float(y), float(z))]
         for number, (x, y, z) in zip(
             molecule.atomic_numbers, molecule.geometry_bohr, strict=True
         )

@@ -575,7 +575,7 @@ class TensorProduct(nn.Module):
 
     def reset_parameters(self) -> None:
         def num_elements(ins: tuple[int, int, int]) -> int:
-            return int(self.irreps_in1[ins[0]].mul * self.irreps_in2[ins[1]].mul)
+            return self.irreps_in1[ins[0]].mul * self.irreps_in2[ins[1]].mul
 
         for idx, ins in enumerate(self.instr):
             num_in = sum(num_elements(ins_) for ins_ in self.instr if ins_[2] == ins[2])
@@ -868,7 +868,7 @@ class O3Linear(nn.Module):
 
     def reset_parameters(self) -> None:
         def num_elements(ins: tuple[int, int]) -> int:
-            return int(self.irreps_in[ins[0]].mul)
+            return self.irreps_in[ins[0]].mul
 
         for ins in self.instr:
             i_in, i_out = ins

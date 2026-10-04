@@ -26,7 +26,7 @@ from __future__ import annotations
 import itertools
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Generator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol, TypeAlias, cast
@@ -195,7 +195,7 @@ class _Accumulator:
         self._intervals: list[_Interval] = []
 
     @contextmanager
-    def measure(self, cycle: int) -> Iterator[None]:
+    def measure(self, cycle: int) -> Generator[None, None, None]:
         interval = _Interval(
             cycle=cycle, start=self._timeline.mark(), opened=self._sequence()
         )
@@ -342,7 +342,7 @@ def instrument(
     *,
     device: torch.device | str,
     functional: ExcFunctionalBase | str | None = None,
-) -> Iterator[ScfInstrumentation]:
+) -> Generator[ScfInstrumentation, None, None]:
     """Instrument ``mf`` in place for the duration of the context.
 
     Wraps the effective-potential and numerical-integration entry points and,

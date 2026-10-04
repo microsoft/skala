@@ -84,7 +84,7 @@ def estimate_max_model_atoms_per_chunk(
                 )
         available_memory = int(free_bytes * safety_fraction)
     else:
-        free_bytes = int(max_memory_in_mb * 1000**2)
+        free_bytes = max_memory_in_mb * 1000**2
         available_memory = int(free_bytes * safety_fraction)
         available_memory -= estimate_global_screened_buffer_memory(
             dm, nfeatures, atomic_grid_sizes, func_deriv
