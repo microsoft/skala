@@ -5,6 +5,7 @@ from typing import Any, TypeAlias, cast
 import numpy as np
 import pytest
 import torch
+from pyscf.dft.numint import NumInt
 from skala.features import AOFeatureSpec, Feature, FeatureMap
 from skala.functional.base import ExcFunctionalBase
 from skala.pyscf import ao_evaluation as ao_evaluation_module
@@ -565,6 +566,21 @@ def test_call_rejects_second_order_evaluation(carbon: gto.Mole) -> None:
             torch.eye(carbon.nao_nr(), dtype=torch.float64),
             second_order=True,
         )
+
+
+def test_numint_implements_pyscf_contract() -> None:
+    assert isinstance(SkalaNumInt(QuadraticFunctional()), NumInt)
+
+
+def test_numint_rejects_unsupported_pyscf_modes(carbon: gto.Mole) -> None:
+    numint: _NumPyNumInt = SkalaNumInt(QuadraticFunctional())
+    grids = _minimal_atom_grid(carbon)
+    dm = np.eye(carbon.nao_nr())
+
+    with pytest.raises(NotImplementedError, match="Relativistic"):
+        numint.nr_rks(carbon, grids, None, dm, relativity=1)
+    with pytest.raises(NotImplementedError, match="Hermitian"):
+        numint.nr_rks(carbon, grids, None, dm, hermi=0)
 
 
 @pytest.mark.parametrize("expected", [False, True])

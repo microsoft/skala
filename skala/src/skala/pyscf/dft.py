@@ -69,15 +69,22 @@ from skala.pyscf.utils import pyscf_version_newer_than_2_10
 from skala.typing import F64
 
 
+def _require_skala_numint(
+    ks: object,
+) -> SkalaNumInt[np.ndarray[Any, F64]]:
+    numint = getattr(ks, "_numint", None)
+    if not isinstance(numint, SkalaNumInt):
+        raise TypeError(
+            "Skala Kohn-Sham calculators require skala.pyscf.numint.SkalaNumInt"
+        )
+    return cast(SkalaNumInt[np.ndarray[Any, F64]], numint)
+
+
 class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
     """Restricted Kohn-Sham method with support for Skala functional."""
 
     xc: str
-
-    grids: SkalaGrids
-    """Numerical integration grids."""
-
-    _numint: SkalaNumInt[np.ndarray[Any, F64]]
+    grids: dft.Grids
 
     with_dftd3: DFTD3Dispersion | None = None
     """DFT-D3 dispersion correction."""
@@ -143,7 +150,9 @@ class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
             mo_coeff = self.mo_coeff
         if mo_occ is None:
             mo_occ = self.mo_occ
-        return self._numint.gen_response(mo_coeff, mo_occ, **kwargs, ks=self)
+        return _require_skala_numint(self).gen_response(
+            mo_coeff, mo_occ, **kwargs, ks=self
+        )
 
     @override
     def density_fit(
@@ -172,11 +181,7 @@ class SkalaUKS(dft.uks.UKS):  # type: ignore[misc]
     """Unrestricted Kohn-Sham method with support for Skala functional."""
 
     xc: str
-
-    grids: SkalaGrids
-    """Numerical integration grids."""
-
-    _numint: SkalaNumInt[np.ndarray[Any, F64]]
+    grids: dft.Grids
 
     with_dftd3: DFTD3Dispersion | None = None
     """DFT-D3 dispersion correction."""
@@ -242,7 +247,9 @@ class SkalaUKS(dft.uks.UKS):  # type: ignore[misc]
             mo_coeff = self.mo_coeff
         if mo_occ is None:
             mo_occ = self.mo_occ
-        return self._numint.gen_response(mo_coeff, mo_occ, **kwargs, ks=self)
+        return _require_skala_numint(self).gen_response(
+            mo_coeff, mo_occ, **kwargs, ks=self
+        )
 
     @override
     def density_fit(
