@@ -37,4 +37,4 @@ ignore-missing-imports = [
 ]
 check-unannotated-defs = true
 infer-return-types = "never"
-
+type-ignore-unknown-tag-behavior = "no-effect"
