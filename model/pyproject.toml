@@ -9,7 +9,7 @@ description = "Trainable model definition for the Skala exchange-correlation fun
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
 dependencies = [
-    "e3nn",
+    "e3nn>=0.5,<0.7",
     "opt_einsum_fx",
     "skala>=2026.9,<2027",
     "torch>=2.12,<2.14",

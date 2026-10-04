@@ -25,7 +25,7 @@ typing-extensions = ">=4.16.0,<5"
 skala = { path = "skala", editable = true }
 
 [feature.model-definition.dependencies]
-e3nn = "*"
+e3nn = ">=0.5,<0.7"
 opt_einsum_fx = "*"
 
 [feature.model-definition.pypi-dependencies]
