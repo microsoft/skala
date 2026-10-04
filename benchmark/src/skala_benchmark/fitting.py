@@ -261,7 +261,7 @@ def _continuous_convex_lines(
 
 
 def _forbid_downward_jumps(
-    coefficients: list[tuple[float, float] | None],
+    coefficients: list[tuple[float, float]],
     boundaries: list[float],
 ) -> None:
     """Raise segment intercepts so the fit never steps down at a breakpoint.
@@ -273,7 +273,6 @@ def _forbid_downward_jumps(
     for index in range(len(coefficients) - 1):
         left = coefficients[index]
         right = coefficients[index + 1]
-        assert left is not None and right is not None
         boundary = boundaries[index + 1]
         end_left = left[0] * boundary + left[1]
         start_right = right[0] * boundary + right[1]
@@ -282,7 +281,7 @@ def _forbid_downward_jumps(
 
 
 def _enforce_increasing_slopes(
-    coefficients: list[tuple[float, float] | None],
+    coefficients: list[tuple[float, float]],
     x: FloatArray,
     y: FloatArray,
     indices: NDArray[np.int64],
@@ -299,7 +298,6 @@ def _enforce_increasing_slopes(
     running_slope = 0.0
     for index in range(len(coefficients)):
         coefficient = coefficients[index]
-        assert coefficient is not None
         slope = coefficient[0]
         if slope < running_slope:
             slope = running_slope
@@ -338,22 +336,29 @@ def _fit_discontinuous(x: FloatArray, y: FloatArray, knots: list[float]) -> _Mod
             neighbor = min(
                 valid_indices, key=lambda valid_index: abs(valid_index - index)
             )
-            slope = max(coefficients[neighbor][0], 0.0)  # type: ignore[index]
+            neighbor_coefficient = coefficients[neighbor]
+            assert neighbor_coefficient is not None
+            slope = max(neighbor_coefficient[0], 0.0)
         else:
             slope = 0.0
         coefficients[index] = (slope, mean_y - slope * mean_x)
 
+    resolved_coefficients: list[tuple[float, float]] = []
+    for coefficient in coefficients:
+        assert coefficient is not None
+        resolved_coefficients.append(coefficient)
+
     boundaries = [float(np.min(x)), *knots, float(np.max(x))]
-    _enforce_increasing_slopes(coefficients, x, y, indices)
-    _forbid_downward_jumps(coefficients, boundaries)
+    _enforce_increasing_slopes(resolved_coefficients, x, y, indices)
+    _forbid_downward_jumps(resolved_coefficients, boundaries)
     segments = [
         _LogSegment(
             boundaries[index],
             boundaries[index + 1],
-            coefficients[index][0],  # type: ignore[index]
-            coefficients[index][1],  # type: ignore[index]
+            resolved_coefficients[index][0],
+            resolved_coefficients[index][1],
         )
-        for index in range(len(coefficients))
+        for index in range(len(resolved_coefficients))
     ]
     return _Model(segments=segments, knots=knots, continuous=False)
 
