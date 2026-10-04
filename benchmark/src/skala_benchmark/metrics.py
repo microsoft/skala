@@ -343,8 +343,11 @@ def metric_value(row: Row, metric: str) -> float | None:
         return None
 
     if metric == "iterations":
+        raw_count = row.get("num_scf_iterations")
+        if raw_count is None:
+            return None
         try:
-            count = int(row.get("num_scf_iterations"))  # type: ignore[arg-type]
+            count = int(raw_count)
         except (TypeError, ValueError):
             return None
         return float(count) if count > 0 else None
