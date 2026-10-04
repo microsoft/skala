@@ -397,7 +397,8 @@ class _BlockwiseAOFeatureOperator(Function):
         context.result_shape = output.shape
         context.result_options = output.device, output.dtype
 
-    # PyTorch supports this ctx-free signature when setup_context is defined separately.
+    # Custom Functions intentionally specialize PyTorch's variadic forward signature;
+    # setup_context additionally requires this override to remain ctx-free.
     @staticmethod
     @override
     def forward(  # pyrefly: ignore[bad-override]
