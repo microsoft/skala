@@ -405,12 +405,14 @@ def _num_profiled_runs(default: int = 1) -> int:
     """
     import torch
 
-    get_num_profiled_runs = getattr(torch._C, "_jit_get_num_profiled_runs", None)
-    if not callable(get_num_profiled_runs):
-        return default
     try:
-        return max(int(get_num_profiled_runs()), 1)
-    except (TypeError, ValueError):
+        return max(
+            int(
+                torch._C._jit_get_num_profiled_runs()  # type: ignore[attr-defined]  # pyrefly: ignore[missing-attribute]
+            ),
+            1,
+        )
+    except (AttributeError, TypeError, ValueError):
         return default
 
 

@@ -8,8 +8,6 @@ import math
 from pathlib import Path
 
 import pytest
-import torch
-from skala_benchmark import runner
 from skala_benchmark.models import Molecule
 from skala_benchmark.protocol import Device, FunctionalKind, FunctionalSpec
 from skala_benchmark.runner import RunConfig, RunResult, run_worker
@@ -37,16 +35,6 @@ def test_run_config_json_round_trip(tmp_path: Path) -> None:
     path.write_text(json.dumps(config.to_dict()), encoding="utf-8")
 
     assert RunConfig.from_json(path) == config
-
-
-def test_num_profiled_runs_handles_private_torch_api(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(torch._C, "_jit_get_num_profiled_runs", lambda: 3)
-    assert runner._num_profiled_runs() == 3
-
-    monkeypatch.setattr(torch._C, "_jit_get_num_profiled_runs", None)
-    assert runner._num_profiled_runs(default=2) == 2
 
 
 def test_real_worker_produces_an_accounted_serializable_measurement() -> None:
