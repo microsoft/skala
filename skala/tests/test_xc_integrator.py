@@ -1,3 +1,5 @@
+from collections.abc import Iterator
+
 import pytest
 import torch
 from skala.features import Feature
@@ -113,7 +115,7 @@ def test_xc_integrator_returns_tensors_and_xc_only_response(
         ) -> None:
             self.raw_features = atom_major_raw_features
 
-        def __iter__(self) -> object:
+        def __iter__(self) -> Iterator[ModelFeatureChunk]:
             yield ModelFeatureChunk(
                 grid_indices=torch.zeros(1, dtype=torch.int64),
                 raw_features=self.raw_features,

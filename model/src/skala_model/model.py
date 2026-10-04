@@ -841,7 +841,7 @@ class O3Linear(nn.Module):
         self.reset_parameters()
         self._o3_linear = self.generate_o3_linear_code()
 
-    def generate_o3_linear_code(self) -> fx.GraphModule:
+    def generate_o3_linear_code(self) -> nn.Module:
         graphmod = _o3_linear_codegen(*self.linear_params)
 
         if self.optimize_einsums:
@@ -854,6 +854,7 @@ class O3Linear(nn.Module):
         if self.script_codegen:
             graphmod = torch.jit.script(jitable(graphmod))
 
+        assert isinstance(graphmod, nn.Module)
         return graphmod
 
     @property
