@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: MIT
 
-from typing import Any, Protocol, cast
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import Any, Literal
 
 import numpy as np
 from ase.atoms import Atoms
@@ -25,19 +27,72 @@ except ImportError as e:
     gpu4pyscf_import_error = e
 
 
-class _SkalaParameters(Protocol):
-    xc: object
-    basis: object
-    with_density_fit: object
+@dataclass(frozen=True, slots=True)
+class _SkalaParameters:
+    xc: ExcFunctionalBase | str
+    basis: str | None
+    with_density_fit: bool
     auxbasis: str | None
-    with_newton: object
-    with_dftd3: object
-    with_retry: object
-    charge: Any
-    multiplicity: Any
-    verbose: Any
+    with_newton: bool
+    with_dftd3: bool
+    with_retry: bool
+    charge: int | None
+    multiplicity: int | None
+    verbose: int
     ks_config: dict[str, Any] | None
-    device: object
+    device: Literal["cpu", "cuda"]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.xc, (ExcFunctionalBase, str)):
+            raise InputError("XC functional must be a string or ExcFunctionalBase.")
+
+        if self.basis is not None and not isinstance(self.basis, str):
+            raise InputError("Basis set must be a string or None.")
+
+        if self.auxbasis is not None and not isinstance(self.auxbasis, str):
+            raise InputError("Auxiliary basis set must be a string or None.")
+
+        if self.ks_config is not None and not isinstance(self.ks_config, dict):
+            raise InputError("KS configuration must be a dictionary or None.")
+        if self.ks_config is not None and not all(
+            isinstance(key, str) for key in self.ks_config
+        ):
+            raise InputError("KS configuration keys must be strings.")
+
+        if self.device not in ("cpu", "cuda"):
+            raise InputError(f"Unsupported device type: {self.device}")
+
+    @classmethod
+    def from_ase(cls, parameters: Mapping[str, Any]) -> "_SkalaParameters":
+        return cls(
+            xc=parameters["xc"],
+            basis=parameters["basis"],
+            with_density_fit=bool(parameters["with_density_fit"]),
+            auxbasis=parameters["auxbasis"],
+            with_newton=bool(parameters["with_newton"]),
+            with_dftd3=bool(parameters["with_dftd3"]),
+            with_retry=bool(parameters["with_retry"]),
+            charge=_optional_int_parameter("charge", parameters["charge"]),
+            multiplicity=_optional_int_parameter(
+                "multiplicity", parameters["multiplicity"]
+            ),
+            verbose=_int_parameter("verbose", parameters["verbose"]),
+            ks_config=parameters["ks_config"],
+            device=parameters["device"],
+        )
+
+
+def _int_parameter(name: str, value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError) as e:
+        raise InputError(f"{name} must be an integer, got {value!r}.") from e
+
+
+def _optional_int_parameter(name: str, value: Any) -> int | None:
+    if value is None:
+        return None
+    return _int_parameter(name, value)
 
 
 class Skala(Calculator):
@@ -89,15 +144,14 @@ class Skala(Calculator):
         **kwargs : dict
             Additional parameters to set for the calculator.
         """
+        parameters = _SkalaParameters.from_ase({**self.parameters, **kwargs})
         changed_parameters: dict[str, Any] = super().set(**kwargs)  # type: ignore[no-untyped-call]
-        parameters = cast(_SkalaParameters, self.parameters)
         if "verbose" in changed_parameters:
             if self._mol is not None:
-                self._mol.verbose = int(parameters.verbose)
+                self._mol.verbose = parameters.verbose
             if self._ks is not None:
-                verbose = int(parameters.verbose)
-                self._ks.verbose = verbose
-                self._ks.base.verbose = verbose
+                self._ks.verbose = parameters.verbose
+                self._ks.base.verbose = parameters.verbose
 
         if "ks_config" in changed_parameters and parameters.ks_config is not None:
             if self._ks is not None:
@@ -159,10 +213,11 @@ class Skala(Calculator):
         super().calculate(  # type: ignore[no-untyped-call]
             atoms=atoms, properties=properties, system_changes=system_changes
         )
-        parameters = cast(_SkalaParameters, self.parameters)
+        parameters = _SkalaParameters.from_ase(self.parameters)
 
-        if not isinstance(basis := parameters.basis, str):
+        if parameters.basis is None:
             raise InputError("Basis set must be specified in the parameters.")
+        basis = parameters.basis
 
         if self.atoms is None:
             raise CalculatorError("Atoms object is required for calculation.")
@@ -182,7 +237,7 @@ class Skala(Calculator):
                 atom=atom,
                 basis=basis,
                 unit="Angstrom",
-                verbose=int(parameters.verbose),
+                verbose=parameters.verbose,
                 charge=_get_charge(self.atoms, parameters),
                 spin=_get_uhf(self.atoms, parameters),
             )
@@ -192,35 +247,30 @@ class Skala(Calculator):
 
         if self._ks is None:
             dm0 = None
-            if not isinstance(xc_param := parameters.xc, (ExcFunctionalBase, str)):
-                raise InputError("XC functional must be a string or ExcFunctionalBase.")
-            device = parameters.device
-            if device == "cuda":
+            if parameters.device == "cuda":
                 if skala_gpu is None:
                     raise ImportError(
                         "gpu4pyscf is not available. Please install gpu4pyscf to use GPU acceleration."
                     ) from gpu4pyscf_import_error
                 ks = skala_gpu.SkalaKS(
                     mol=self._mol,
-                    xc=xc_param,
-                    with_density_fit=bool(parameters.with_density_fit),
+                    xc=parameters.xc,
+                    with_density_fit=parameters.with_density_fit,
                     auxbasis=parameters.auxbasis,
-                    with_newton=bool(parameters.with_newton),
-                    with_dftd3=bool(parameters.with_dftd3),
-                    ks_config=parameters.ks_config,
-                )
-            elif device == "cpu":
-                ks = skala_cpu.SkalaKS(
-                    mol=self._mol,
-                    xc=xc_param,
-                    with_density_fit=bool(parameters.with_density_fit),
-                    auxbasis=parameters.auxbasis,
-                    with_newton=bool(parameters.with_newton),
-                    with_dftd3=bool(parameters.with_dftd3),
+                    with_newton=parameters.with_newton,
+                    with_dftd3=parameters.with_dftd3,
                     ks_config=parameters.ks_config,
                 )
             else:
-                raise InputError(f"Unsupported device type: {device}")
+                ks = skala_cpu.SkalaKS(
+                    mol=self._mol,
+                    xc=parameters.xc,
+                    with_density_fit=parameters.with_density_fit,
+                    auxbasis=parameters.auxbasis,
+                    with_newton=parameters.with_newton,
+                    with_dftd3=parameters.with_dftd3,
+                    ks_config=parameters.ks_config,
+                )
 
             self._ks = ks.nuc_grad_method()
         else:
@@ -254,10 +304,8 @@ def _get_charge(atoms: Atoms, parameters: _SkalaParameters) -> int:
     by summing the initial charges of all atoms.
     """
     if parameters.charge is None:
-        charge = atoms.get_initial_charges().sum()  # type: ignore[no-untyped-call]
-    else:
-        charge = parameters.charge
-    return int(charge)
+        return int(atoms.get_initial_charges().sum())  # type: ignore[no-untyped-call]
+    return parameters.charge
 
 
 def _get_uhf(atoms: Atoms, parameters: _SkalaParameters) -> int:
@@ -269,4 +317,4 @@ def _get_uhf(atoms: Atoms, parameters: _SkalaParameters) -> int:
     if parameters.multiplicity is None:
         multiplicity = int(atoms.get_initial_magnetic_moments().sum().round())  # type: ignore[no-untyped-call]
         return multiplicity
-    return int(parameters.multiplicity) - 1
+    return parameters.multiplicity - 1

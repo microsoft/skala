@@ -8,6 +8,24 @@ from ase.calculators import calculator
 from skala.ase import Skala
 
 
+@pytest.mark.parametrize(
+    ("parameters", "message"),
+    [
+        ({"xc": object()}, "XC functional must be a string or ExcFunctionalBase."),
+        ({"basis": 1}, "Basis set must be a string or None."),
+        ({"auxbasis": 1}, "Auxiliary basis set must be a string or None."),
+        ({"ks_config": []}, "KS configuration must be a dictionary or None."),
+        ({"ks_config": {1: "value"}}, "KS configuration keys must be strings."),
+        ({"device": "tpu"}, "Unsupported device type: tpu"),
+        ({"verbose": "quiet"}, "verbose must be an integer"),
+    ],
+)
+def test_invalid_parameters(parameters: dict[str, object], message: str) -> None:
+    skala = Skala()
+    with pytest.raises(calculator.InputError, match=message):
+        skala.set(**parameters)
+
+
 @pytest.mark.parametrize("xc", ["pbe", "tpss", "skala-1.0", "skala-1.1"])
 def test_calc(xc: str) -> None:
     atoms = molecule("H2O")  # type: ignore[no-untyped-call]
