@@ -468,12 +468,7 @@ def _num_aux_basis_functions(mf: SCF) -> int | None:
     if df is None:
         return None
     if hasattr(df, "get_naoaux"):  # pyscf CPU DF
-        count: object = df.get_naoaux()
-        if not isinstance(count, int):
-            raise TypeError(
-                f"PySCF returned a non-integer auxiliary basis count: {count!r}"
-            )
-        return count
+        return int(df.get_naoaux())
     auxmol = getattr(df, "auxmol", None)  # gpu4pyscf DF exposes the aux Mole
     return auxmol.nao_nr() if auxmol is not None else None
 
