@@ -158,14 +158,11 @@ class TestSymmetricContraction:
             yield
 
     def test_output_shape(self) -> None:
-        from e3nn import o3 as e3nn_o3
         from skala_model.utils.symmetric_contraction import SymmetricContraction
 
         torch.manual_seed(42)
-        irreps_in = e3nn_o3.Irreps("3x0e+3x1e")
-        irreps_out = e3nn_o3.Irreps("3x0e+3x1e")
-        assert isinstance(irreps_in, e3nn_o3.Irreps)
-        assert isinstance(irreps_out, e3nn_o3.Irreps)
+        irreps_in = Irreps("3x0e+3x1e")
+        irreps_out = Irreps("3x0e+3x1e")
         sc = SymmetricContraction(irreps_in, irreps_out, correlation=2)
 
         x = torch.randn(5, irreps_in.dim)
@@ -173,14 +170,11 @@ class TestSymmetricContraction:
         assert out.shape == (5, irreps_out.dim)
 
     def test_output_deterministic(self) -> None:
-        from e3nn import o3 as e3nn_o3
         from skala_model.utils.symmetric_contraction import SymmetricContraction
 
         torch.manual_seed(42)
-        irreps_in = e3nn_o3.Irreps("3x0e+3x1e")
-        irreps_out = e3nn_o3.Irreps("3x0e+3x1e")
-        assert isinstance(irreps_in, e3nn_o3.Irreps)
-        assert isinstance(irreps_out, e3nn_o3.Irreps)
+        irreps_in = Irreps("3x0e+3x1e")
+        irreps_out = Irreps("3x0e+3x1e")
         sc = SymmetricContraction(irreps_in, irreps_out, correlation=2)
 
         torch.manual_seed(123)

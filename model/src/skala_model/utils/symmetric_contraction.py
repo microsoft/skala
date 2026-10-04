@@ -3,8 +3,6 @@
 # Based on original MACE code: https://github.com/ACEsuit/mace
 # See algorithm 1 in the appendix of https://arxiv.org/pdf/2206.07697
 
-from typing import TypeAlias
-
 import opt_einsum_fx
 import torch
 import torch.fx
@@ -12,10 +10,10 @@ from e3nn import o3
 from typing_extensions import override
 
 from skala_model.utils.cg import u_matrix_real
-from skala_model.utils.irreps import Irreps as CompileIrreps
+from skala_model.utils.irreps import Irreps
 
 ALPHABET = ["w", "x", "v", "n", "z", "r", "t", "y", "u", "o", "p", "s"]
-IrrepsLike: TypeAlias = o3.Irreps | CompileIrreps
+ALPHABET = ["w", "x", "v", "n", "z", "r", "t", "y", "u", "o", "p", "s"]
 
 
 def get_alphabet_string(i: int) -> str:
@@ -27,8 +25,8 @@ def get_alphabet_string(i: int) -> str:
 class SymmetricContraction(torch.nn.Module):
     def __init__(
         self,
-        irreps_in: IrrepsLike,
-        irreps_out: IrrepsLike,
+        irreps_in: Irreps,
+        irreps_out: Irreps,
         correlation: int,
         sketch: bool = False,
     ) -> None:
@@ -76,7 +74,7 @@ class SymmetricContraction(torch.nn.Module):
 class Contraction(torch.nn.Module):
     def __init__(
         self,
-        irreps_in: IrrepsLike,
+        irreps_in: Irreps,
         irrep_out: o3.Irreps,
         correlation: int,
         hidden_nf: int,
@@ -221,7 +219,7 @@ class Contraction(torch.nn.Module):
         return result
 
 
-def pack(x: torch.Tensor, irreps: IrrepsLike) -> torch.Tensor:
+def pack(x: torch.Tensor, irreps: Irreps) -> torch.Tensor:
     return torch.cat(
         [
             x[..., irrep_slice].view(*x.shape[:-1], mul_ir.mul, mul_ir.ir.dim)
