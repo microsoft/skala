@@ -14,7 +14,7 @@ import time
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NotRequired, TypedDict
 
 from skala_benchmark.models import Molecule
 from skala_benchmark.protocol import Device, FunctionalKind, FunctionalSpec
@@ -42,6 +42,31 @@ if TYPE_CHECKING:
     from skala.functional.base import ExcFunctionalBase
 
     from pyscf import gto
+
+
+class _MoleculeConfig(TypedDict):
+    atomic_numbers: list[int]
+    geometry_bohr: list[list[float]]
+    charge: NotRequired[int]
+    multiplicity: NotRequired[int]
+
+
+class _FunctionalConfig(TypedDict):
+    name: str
+    kind: str
+
+
+class _RunConfigJson(TypedDict):
+    molecule: _MoleculeConfig
+    basis: str
+    functional: _FunctionalConfig
+    device: str
+    ansatz: NotRequired[str]
+    density_fit: NotRequired[bool]
+    auxbasis: NotRequired[str | None]
+    grid_level: NotRequired[int]
+    conv_tol: NotRequired[float]
+    conv_tol_grad: NotRequired[float | None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,17 +98,28 @@ class RunConfig:
     @classmethod
     def from_json(cls, path: str | Path) -> RunConfig:
         with Path(path).open(encoding="utf-8") as fh:
-            data = json.load(fh)
+            data: _RunConfigJson = json.load(fh)
+        molecule = data["molecule"]
+        functional = data["functional"]
         return cls(
-            **{
-                **data,
-                "molecule": Molecule(**data["molecule"]),
-                "functional": FunctionalSpec(
-                    name=data["functional"]["name"],
-                    kind=FunctionalKind(data["functional"]["kind"]),
-                ),
-                "device": Device(data["device"]),
-            }
+            molecule=Molecule(
+                atomic_numbers=molecule["atomic_numbers"],
+                geometry_bohr=molecule["geometry_bohr"],
+                charge=molecule.get("charge", 0),
+                multiplicity=molecule.get("multiplicity", 1),
+            ),
+            basis=data["basis"],
+            functional=FunctionalSpec(
+                name=functional["name"],
+                kind=FunctionalKind(functional["kind"]),
+            ),
+            device=Device(data["device"]),
+            ansatz=data.get("ansatz", "UKS"),
+            density_fit=data.get("density_fit", True),
+            auxbasis=data.get("auxbasis"),
+            grid_level=data.get("grid_level", 3),
+            conv_tol=data.get("conv_tol", 5e-6),
+            conv_tol_grad=data.get("conv_tol_grad"),
         )
 
 
