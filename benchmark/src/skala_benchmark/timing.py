@@ -29,7 +29,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, TypeAlias, cast
 
 from typing_extensions import override
 
@@ -44,8 +44,13 @@ if TYPE_CHECKING:
 STEADY_STATE_FROM_CYCLE = 1
 
 
-class Mark(Protocol):
-    """An opaque point in time on either the host or the device timeline."""
+class _CudaMark(Protocol):
+    """CUDA event operations needed by the device timeline."""
+
+    def elapsed_time(self, end_event: _CudaMark) -> float: ...
+
+
+Mark: TypeAlias = float | _CudaMark
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,7 +132,9 @@ class HostTimeline(Timeline):
         return time.perf_counter()
 
     def elapsed_ms(self, start: Mark, end: Mark) -> float:
-        return 1e3 * (float(end) - float(start))  # type: ignore[arg-type]
+        if not isinstance(start, float) or not isinstance(end, float):
+            raise TypeError("HostTimeline requires host-clock marks")
+        return 1e3 * (end - start)
 
 
 class CudaTimeline(Timeline):
@@ -141,14 +148,16 @@ class CudaTimeline(Timeline):
     def mark(self) -> Mark:
         event = self._torch.cuda.Event(enable_timing=True)  # type: ignore[no-untyped-call]
         event.record()
-        return event
+        return cast(_CudaMark, event)
 
     @override
     def resolve(self) -> None:
         self._torch.cuda.synchronize()
 
     def elapsed_ms(self, start: Mark, end: Mark) -> float:
-        return float(start.elapsed_time(end))  # type: ignore[attr-defined]
+        if isinstance(start, float) or isinstance(end, float):
+            raise TypeError("CudaTimeline requires CUDA event marks")
+        return float(start.elapsed_time(end))
 
 
 def make_timeline(device: torch.device | str) -> Timeline:
@@ -291,6 +300,7 @@ class ScfInstrumentation:
 
         if initial_build is not None:
             cycles_begin = initial_build.end
+            assert cycles_begin is not None
         else:
             first_veff = self._veff.first_start()
             cycles_begin = first_veff if first_veff is not None else start
