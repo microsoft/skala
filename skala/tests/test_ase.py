@@ -28,7 +28,7 @@ def test_invalid_parameters(parameters: dict[str, object], message: str) -> None
 
 @pytest.mark.parametrize("xc", ["pbe", "tpss", "skala-1.0", "skala-1.1"])
 def test_calc(xc: str) -> None:
-    atoms = molecule("H2O")  # type: ignore[no-untyped-call]
+    atoms = molecule("H2O")
     atoms.calc = Skala(
         xc=xc,
         basis="def2-svp",
@@ -63,7 +63,7 @@ def test_calc(xc: str) -> None:
 
 
 def test_missing_basis() -> None:
-    atoms = molecule("H2O")  # type: ignore[no-untyped-call]
+    atoms = molecule("H2O")
     atoms.calc = Skala(xc="pbe", with_density_fit=True, auxbasis="def2-svp-jkfit")
 
     with pytest.raises(
@@ -73,7 +73,7 @@ def test_missing_basis() -> None:
 
 
 def test_ks_config() -> None:
-    atoms = molecule("H2O")  # type: ignore[no-untyped-call]
+    atoms = molecule("H2O")
     atoms.calc = Skala(
         xc="pbe",
         basis="def2-svp",

@@ -71,7 +71,7 @@ def _veff_and_expl_nuc_grad(
     return assemble_nuclear_gradient(derivatives, rdm1, mol.natm, atom_grid_blocks())
 
 
-class SkalaRKSGradient(RHFGradient):  # type: ignore[misc]
+class SkalaRKSGradient(RHFGradient):
     functional: ExcFunctionalBase
     """LivDFT functional"""
     nuc_grad_feats: set[Feature] | None
@@ -164,7 +164,7 @@ class SkalaRKSGradient(RHFGradient):  # type: ignore[misc]
         return 0
 
 
-class SkalaUKSGradient(UHFGradient):  # type: ignore[misc]
+class SkalaUKSGradient(UHFGradient):
     functional: ExcFunctionalBase
     """LivDFT functional"""
     nuc_grad_feats: set[Feature] | None

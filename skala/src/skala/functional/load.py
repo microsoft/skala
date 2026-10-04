@@ -127,7 +127,7 @@ class TracedFunctional(ExcFunctionalBase):
                 )
             fp = io.BytesIO(data)
 
-        traced_model = torch.jit.load(fp, _extra_files=extra_files, map_location=device)  # type: ignore[no-untyped-call]
+        traced_model = torch.jit.load(fp, _extra_files=extra_files, map_location=device)
 
         _metadata = json.loads(extra_files["metadata"].decode("utf-8"))
         if not isinstance(_metadata, dict):

@@ -408,7 +408,7 @@ def _num_profiled_runs(default: int = 1) -> int:
     try:
         return max(
             int(
-                torch._C._jit_get_num_profiled_runs()  # type: ignore[attr-defined]  # pyrefly: ignore[missing-attribute]
+                torch._C._jit_get_num_profiled_runs()  # pyrefly: ignore[missing-attribute]
             ),
             1,
         )

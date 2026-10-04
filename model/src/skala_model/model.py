@@ -210,7 +210,8 @@ class SkalaFunctional(ExcFunctionalBase):
     # that can be reconstructed from __init__ args).
     _RECONSTRUCTABLE_BUFFER_PREFIXES = ("radial_basis.", "semi_local_features.")
 
-    def load_state_dict(  # type: ignore  # needs mutable dict
+    @override
+    def load_state_dict(  # pyrefly: ignore[bad-override]  # needs mutable dict
         self,
         state_dict: dict[str, Any],
         strict: bool = True,
@@ -422,8 +423,10 @@ class NonLocalModel(nn.Module):
             nn.Linear(self.input_nf, self.hidden_nf),
             torch.nn.SiLU(),
         )
-        torch.nn.init.xavier_uniform_(self.pre_down_layer[0].weight)  # type: ignore
-        torch.nn.init.zeros_(self.pre_down_layer[0].bias)  # type: ignore
+        pre_down_linear = self.pre_down_layer[0]
+        assert isinstance(pre_down_linear, nn.Linear)
+        torch.nn.init.xavier_uniform_(pre_down_linear.weight)
+        torch.nn.init.zeros_(pre_down_linear.bias)
 
         self.tp_down = TensorProduct(
             self.in_irreps,
@@ -469,8 +472,10 @@ class NonLocalModel(nn.Module):
             nn.Linear(self.hidden_nf, self.hidden_nf),
             torch.nn.SiLU(),
         )
-        torch.nn.init.xavier_uniform_(self.post_up_layer[0].weight)  # type: ignore
-        torch.nn.init.zeros_(self.post_up_layer[0].bias)  # type: ignore
+        post_up_linear = self.post_up_layer[0]
+        assert isinstance(post_up_linear, nn.Linear)
+        torch.nn.init.xavier_uniform_(post_up_linear.weight)
+        torch.nn.init.zeros_(post_up_linear.bias)
 
         self.concat_layer = torch.nn.Sequential(
             nn.Linear(self.input_nf + self.hidden_nf, self.input_nf),
@@ -518,7 +523,9 @@ class NonLocalModel(nn.Module):
 
     @property
     def dtype(self) -> torch.dtype:
-        return self.pre_down_layer[0].weight.dtype  # type: ignore
+        pre_down_linear = self.pre_down_layer[0]
+        assert isinstance(pre_down_linear, nn.Linear)
+        return pre_down_linear.weight.dtype
 
 
 class TensorProduct(nn.Module):
@@ -561,7 +568,7 @@ class TensorProduct(nn.Module):
             for i_1, (_, ir_1) in enumerate(irreps_in1)
             for i_2, (_, ir_2) in enumerate(irreps_in2)
             for i_out, (_, ir_out) in enumerate(irreps_out)
-            if ir_out in ir_1 * ir_2  # type: ignore  # Irrep.__mul__ not in stubs
+            if ir_out in ir_1 * ir_2  # pyrefly: ignore[not-iterable, unsupported-operation]
         ]
 
         self.slices = [irreps_in1.slices(), irreps_in2.slices(), irreps_out.slices()]
@@ -935,7 +942,7 @@ def _o3_linear_codegen(
 
     outs: list[Any] = []
     for (i_in, i_out), w in zip(instr, weights, strict=True):
-        x1_i = x1[:, slices[0][i_in][0] : slices[0][i_in][1]]  # type: ignore
+        x1_i = x1[:, slices[0][i_in][0] : slices[0][i_in][1]]
         outs.append(
             torch.einsum(
                 "sui,uv->svi",

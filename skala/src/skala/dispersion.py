@@ -9,7 +9,7 @@ import numpy as np
 from pyscf import gto
 
 try:
-    from pyscf.dispersion.dftd3 import (  # type: ignore[import-not-found, unused-ignore]
+    from pyscf.dispersion.dftd3 import (
         DFTD3Dispersion as _PySCFDFTD3Dispersion,
     )
 
@@ -38,11 +38,11 @@ except ModuleNotFoundError as error:
     if error.name not in {"pyscf.dispersion", "pyscf.dispersion.dftd3"}:
         raise
 
-    from dftd3.pyscf import (  # type: ignore[import-not-found, unused-ignore]  # pyrefly: ignore[missing-import]
+    from dftd3.pyscf import (  # pyrefly: ignore[missing-import]
         DFTD3Dispersion as _StandaloneDFTD3Dispersion,
     )
 
-    class DFTD3Dispersion:  # type: ignore[no-redef]
+    class DFTD3Dispersion:
         """Normalize the standalone DFT-D3 API."""
 
         def __init__(self, mol: gto.Mole, xc: str):

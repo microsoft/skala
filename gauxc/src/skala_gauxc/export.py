@@ -83,7 +83,7 @@ def pyscf_to_gauxc_h5(
                 mol.atom_charges(), mol.atom_coords(unit="Bohr"), strict=True
             )
         ],
-        dtype=MOLECULE_DTYPE,  # type: ignore[call-overload]  # numpy structured dtype
+        dtype=MOLECULE_DTYPE,  # numpy structured dtype
     )
     basis = np.array(
         [
@@ -98,7 +98,7 @@ def pyscf_to_gauxc_h5(
             for func in mol._basis[atom]
             for prim in range(1, len(func[1]))
         ],
-        dtype=BASIS_DTYPE,  # type: ignore[call-overload]  # numpy structured dtype
+        dtype=BASIS_DTYPE,  # numpy structured dtype
     )
     dm_scalar = dm if dm.ndim == 2 else dm[0] + dm[1]
     dm_z = np.zeros_like(dm) if dm.ndim == 2 else dm[0] - dm[1]

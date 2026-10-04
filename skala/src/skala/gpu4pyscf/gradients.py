@@ -89,7 +89,7 @@ def nuc_grad_from_veff(
     return grad
 
 
-class SkalaRKSGradient(RHFGradient):  # type: ignore[misc]
+class SkalaRKSGradient(RHFGradient):
     functional: ExcFunctionalBase
     """Skala functional"""
     nuc_grad_feats: set[Feature] | None
@@ -197,7 +197,7 @@ class SkalaRKSGradient(RHFGradient):  # type: ignore[misc]
         return self
 
 
-class SkalaUKSGradient(UHFGradient):  # type: ignore[misc]
+class SkalaUKSGradient(UHFGradient):
     functional: ExcFunctionalBase
     """Skala functional"""
     nuc_grad_feats: set[Feature] | None

@@ -80,7 +80,7 @@ def _require_skala_numint(
     return cast(SkalaNumInt[np.ndarray[Any, F64]], numint)
 
 
-class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
+class SkalaRKS(dft.rks.RKS):
     """Restricted Kohn-Sham method with support for Skala functional."""
 
     xc: str
@@ -177,7 +177,7 @@ class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
         return cast(SkalaRKS, ks)
 
 
-class SkalaUKS(dft.uks.UKS):  # type: ignore[misc]
+class SkalaUKS(dft.uks.UKS):
     """Unrestricted Kohn-Sham method with support for Skala functional."""
 
     xc: str

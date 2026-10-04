@@ -1,28 +1,3 @@
-[tool.mypy]
-strict = true
-explicit_package_bases = true
-mypy_path = ["skala/src", "model/src", "gauxc/src", "benchmark/src", "skala", "."]
-python_version = "3.11"
-exclude = ["build/", "website/_build/", "htmlcov/", "third_party/"]
-
-[[tool.mypy.overrides]]
-module = [
-    "cupy",
-    "cupy.*",
-    "e3nn",
-    "e3nn.*",
-    "gpu4pyscf",
-    "gpu4pyscf.*",
-    "h5py",
-    "h5py.*",
-    "opt_einsum_fx",
-    "opt_einsum_fx.*",
-    "pyscf",
-    "pyscf.*",
-]
-ignore_missing_imports = true
-
-
 [tool.ruff]
 target-version = "py311"
 src = ["skala/", "model/", "gauxc/", "benchmark/", "website/"]

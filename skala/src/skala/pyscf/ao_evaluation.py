@@ -444,7 +444,7 @@ class _BlockwiseAOFeatureOperator(Function):
             )
         return cast(
             Tensor,
-            _BlockwiseAOFeatureOperator.apply(  # type: ignore[no-untyped-call]
+            _BlockwiseAOFeatureOperator.apply(
                 value_tangent,
                 ctx.mol,
                 ctx.grids,
@@ -461,7 +461,7 @@ class _BlockwiseAOFeatureOperator(Function):
         ctx: _BlockwiseAOFeatureOperatorContext,
         *grad_outputs: torch.Tensor,
     ) -> tuple[torch.Tensor | None, ...]:
-        input_cotangent = _BlockwiseAOFeatureOperator.apply(  # type: ignore[no-untyped-call]
+        input_cotangent = _BlockwiseAOFeatureOperator.apply(
             grad_outputs[0],
             ctx.mol,
             ctx.grids,
@@ -513,7 +513,7 @@ def evaluate_ao_features_blockwise(
     """
     return cast(
         Tensor,
-        _BlockwiseAOFeatureOperator.apply(  # type: ignore[no-untyped-call]
+        _BlockwiseAOFeatureOperator.apply(
             value,
             mol,
             grids,

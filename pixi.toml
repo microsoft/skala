@@ -115,7 +115,6 @@ pytest-randomly = "*"
 pytest-timeout = "*"
 
 [feature.lint.dependencies]
-mypy = ">=2"
 pre-commit = "*"
 pyrefly = ">=1,<2"
 

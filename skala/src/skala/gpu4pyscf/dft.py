@@ -70,7 +70,7 @@ from skala.pyscf.utils import pyscf_version_newer_than_2_10
 from skala.typing import F64
 
 
-class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
+class SkalaRKS(dft.rks.RKS):
     """Restricted Kohn-Sham method with support for Skala functional."""
 
     with_dftd3: DFTD3Dispersion | None = None
@@ -144,7 +144,7 @@ class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
 
         # We temporarily need to swap out xc for a known functional to satisfy df_jk.density_fit's checks, but we'll swap it back before returning.
         try:
-            real_xc: ExcFunctionalBase | str = self.xc  # type: ignore[has-type]
+            real_xc: ExcFunctionalBase | str = self.xc
             self.xc = "tpss"
             ks = df_jk.density_fit(self, auxbasis, with_df, only_dfj)
         finally:
@@ -154,7 +154,7 @@ class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
         return cast(SkalaRKS, ks)
 
 
-class SkalaUKS(dft.uks.UKS):  # type: ignore[misc]
+class SkalaUKS(dft.uks.UKS):
     """Unrestricted Kohn-Sham method with support for Skala functional."""
 
     with_dftd3: DFTD3Dispersion | None = None
@@ -228,7 +228,7 @@ class SkalaUKS(dft.uks.UKS):  # type: ignore[misc]
 
         # We temporarily need to swap out xc for a known functional to satisfy df_jk.density_fit's checks, but we'll swap it back before returning.
         try:
-            real_xc: ExcFunctionalBase | str = self.xc  # type: ignore[has-type]
+            real_xc: ExcFunctionalBase | str = self.xc
             self.xc = "tpss"
             ks = df_jk.density_fit(self, auxbasis, with_df, only_dfj)
         finally:

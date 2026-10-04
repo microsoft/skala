@@ -23,7 +23,7 @@ from skala.pyscf.backend import (
 from skala.pyscf.xc_integrator import XCIntegrator, XCResult
 
 
-class SkalaNumInt(NumInt, Generic[ArrayF64]):  # type: ignore[misc]
+class SkalaNumInt(NumInt, Generic[ArrayF64]):
     """Skala implementation of the ``pyscf.dft.numint.NumInt`` interface.
 
     This class overrides the methods that PySCF and GPU4PySCF use from

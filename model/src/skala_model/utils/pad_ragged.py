@@ -4,7 +4,7 @@ import torch
 
 
 def _is_tracing() -> bool:
-    return bool(torch.jit.is_tracing())  # type: ignore[attr-defined,no-untyped-call]
+    return bool(torch.jit.is_tracing())
 
 
 def pad_ragged(

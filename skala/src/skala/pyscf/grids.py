@@ -17,7 +17,7 @@ from skala.pyscf.spatial_grid_layout import (
 LOG = getLogger(__name__)
 
 
-class SkalaGrids(gen_grid.Grids):  # type: ignore[misc]
+class SkalaGrids(gen_grid.Grids):
     """PySCF grids with atom-major ordering and Skala layout caching.
 
     Configure and build the grid before preparing its spatial layout. Preparing

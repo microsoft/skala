@@ -23,7 +23,7 @@ from skala.pyscf.retry import retry_scf
 try:
     import skala.gpu4pyscf as skala_gpu
 except ImportError as e:
-    skala_gpu = None  # type: ignore[assignment]
+    skala_gpu = None
     gpu4pyscf_import_error = e
 
 
@@ -132,7 +132,7 @@ class Skala(Calculator):
     _ks: grad.rhf.GradientsBase | None = None
 
     def __init__(self, atoms: Atoms | None = None, **kwargs: Any) -> None:
-        super().__init__(atoms=atoms, **kwargs)  # type: ignore[no-untyped-call]
+        super().__init__(atoms=atoms, **kwargs)
 
     @override
     def set(self, **kwargs: Any) -> dict[str, Any]:
@@ -145,7 +145,7 @@ class Skala(Calculator):
             Additional parameters to set for the calculator.
         """
         parameters = _SkalaParameters.from_ase({**self.parameters, **kwargs})
-        changed_parameters: dict[str, Any] = super().set(**kwargs)  # type: ignore[no-untyped-call]
+        changed_parameters: dict[str, Any] = super().set(**kwargs)
         if "verbose" in changed_parameters:
             if self._mol is not None:
                 self._mol.verbose = parameters.verbose
@@ -184,7 +184,7 @@ class Skala(Calculator):
         """
         Reset the calculator to its initial state.
         """
-        super().reset()  # type: ignore[no-untyped-call]
+        super().reset()
 
     @override
     def calculate(
@@ -210,7 +210,7 @@ class Skala(Calculator):
         if system_changes is None:
             system_changes = all_changes
 
-        super().calculate(  # type: ignore[no-untyped-call]
+        super().calculate(
             atoms=atoms, properties=properties, system_changes=system_changes
         )
         parameters = _SkalaParameters.from_ase(self.parameters)
@@ -304,7 +304,7 @@ def _get_charge(atoms: Atoms, parameters: _SkalaParameters) -> int:
     by summing the initial charges of all atoms.
     """
     if parameters.charge is None:
-        return int(atoms.get_initial_charges().sum())  # type: ignore[no-untyped-call]
+        return int(atoms.get_initial_charges().sum())
     return parameters.charge
 
 
@@ -315,6 +315,6 @@ def _get_uhf(atoms: Atoms, parameters: _SkalaParameters) -> int:
     is calculated by summing the initial magnetic moments of all atoms.
     """
     if parameters.multiplicity is None:
-        multiplicity = int(atoms.get_initial_magnetic_moments().sum().round())  # type: ignore[no-untyped-call]
+        multiplicity = int(atoms.get_initial_magnetic_moments().sum().round())
         return multiplicity
     return parameters.multiplicity - 1

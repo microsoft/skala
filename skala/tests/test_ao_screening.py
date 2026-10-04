@@ -1269,7 +1269,7 @@ def test_screened_ao_traversals_are_independent_of_model_chunking(
             backward_calls += 1
         else:
             forward_calls += 1
-        result = original_apply(*args)  # type: ignore[no-untyped-call]
+        result = original_apply(*args)
         assert isinstance(result, torch.Tensor)
         return result
 

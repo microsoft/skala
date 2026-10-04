@@ -146,7 +146,7 @@ class CudaTimeline(Timeline):
         self._torch = torch
 
     def mark(self) -> Mark:
-        event = self._torch.cuda.Event(enable_timing=True)  # type: ignore[no-untyped-call]
+        event = self._torch.cuda.Event(enable_timing=True)
         event.record()
         return cast(_CudaMark, event)
 
@@ -383,7 +383,7 @@ def instrument(
         instrumentation._neural = True
         original_get_exc = functional.get_exc
         restore.append((functional, "get_exc", original_get_exc))
-        functional.get_exc = _timed(  # type: ignore[method-assign]
+        functional.get_exc = _timed(
             original_get_exc, instrumentation, instrumentation._forward
         )
         # The network's derivative is a separate call, so the two halves of the
