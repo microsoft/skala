@@ -9,6 +9,7 @@ from typing import ClassVar
 
 import torch
 from torch import nn
+from typing_extensions import override
 
 from skala.features import AOFeatureSpec, Feature, FeatureMap
 
@@ -163,6 +164,7 @@ class LinearFeature(nn.Module, ABC):
     nfeats: int
 
     @abstractmethod
+    @override
     def forward(self, dm: torch.Tensor, ao: torch.Tensor) -> torch.Tensor: ...
 
     @abstractmethod

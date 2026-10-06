@@ -57,6 +57,7 @@ from typing import Any, cast
 import numpy as np
 import torch
 from pyscf.df import df_jk
+from typing_extensions import override
 
 from pyscf import dft, gto
 from skala.dispersion import DFTD3Dispersion
@@ -68,15 +69,22 @@ from skala.pyscf.utils import pyscf_version_newer_than_2_10
 from skala.typing import F64
 
 
-class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
+def _require_skala_numint(
+    ks: object,
+) -> SkalaNumInt[np.ndarray[Any, F64]]:
+    numint = getattr(ks, "_numint", None)
+    if not isinstance(numint, SkalaNumInt):
+        raise TypeError(
+            "Skala Kohn-Sham calculators require skala.pyscf.numint.SkalaNumInt"
+        )
+    return cast(SkalaNumInt[np.ndarray[Any, F64]], numint)
+
+
+class SkalaRKS(dft.rks.RKS):
     """Restricted Kohn-Sham method with support for Skala functional."""
 
     xc: str
-
-    grids: SkalaGrids
-    """Numerical integration grids."""
-
-    _numint: SkalaNumInt[np.ndarray[Any, F64]]
+    grids: dft.Grids
 
     with_dftd3: DFTD3Dispersion | None = None
     """DFT-D3 dispersion correction."""
@@ -102,6 +110,7 @@ class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
 
         self.grids = SkalaGrids(mol)(level=self.grids.level)
 
+    @override
     def initialize_grids(
         self, mol: gto.Mole | None = None, dm: np.ndarray | None = None
     ) -> "SkalaRKS":
@@ -114,6 +123,7 @@ class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
         assert isinstance(result, SkalaRKS)
         return result
 
+    @override
     def energy_nuc(self) -> float:
         enuc = float(super().energy_nuc())
         if self.with_dftd3:
@@ -122,9 +132,11 @@ class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
             enuc += edisp
         return enuc
 
+    @override
     def Gradients(self) -> SkalaRKSGradient:
         return SkalaRKSGradient(self)
 
+    @override
     def nuc_grad_method(self) -> SkalaRKSGradient:
         return self.Gradients()
 
@@ -138,8 +150,11 @@ class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
             mo_coeff = self.mo_coeff
         if mo_occ is None:
             mo_occ = self.mo_occ
-        return self._numint.gen_response(mo_coeff, mo_occ, **kwargs, ks=self)
+        return _require_skala_numint(self).gen_response(
+            mo_coeff, mo_occ, **kwargs, ks=self
+        )
 
+    @override
     def density_fit(
         self,
         auxbasis: str | None = None,
@@ -162,15 +177,11 @@ class SkalaRKS(dft.rks.RKS):  # type: ignore[misc]
         return cast(SkalaRKS, ks)
 
 
-class SkalaUKS(dft.uks.UKS):  # type: ignore[misc]
+class SkalaUKS(dft.uks.UKS):
     """Unrestricted Kohn-Sham method with support for Skala functional."""
 
     xc: str
-
-    grids: SkalaGrids
-    """Numerical integration grids."""
-
-    _numint: SkalaNumInt[np.ndarray[Any, F64]]
+    grids: dft.Grids
 
     with_dftd3: DFTD3Dispersion | None = None
     """DFT-D3 dispersion correction."""
@@ -196,6 +207,7 @@ class SkalaUKS(dft.uks.UKS):  # type: ignore[misc]
 
         self.grids = SkalaGrids(mol)(level=self.grids.level)
 
+    @override
     def initialize_grids(
         self, mol: gto.Mole | None = None, dm: np.ndarray | None = None
     ) -> "SkalaUKS":
@@ -208,6 +220,7 @@ class SkalaUKS(dft.uks.UKS):  # type: ignore[misc]
         assert isinstance(result, SkalaUKS)
         return result
 
+    @override
     def energy_nuc(self) -> float:
         enuc = float(super().energy_nuc())
         if self.with_dftd3:
@@ -216,9 +229,11 @@ class SkalaUKS(dft.uks.UKS):  # type: ignore[misc]
             enuc += edisp
         return enuc
 
+    @override
     def Gradients(self) -> SkalaUKSGradient:
         return SkalaUKSGradient(self)
 
+    @override
     def nuc_grad_method(self) -> SkalaUKSGradient:
         return self.Gradients()
 
@@ -232,8 +247,11 @@ class SkalaUKS(dft.uks.UKS):  # type: ignore[misc]
             mo_coeff = self.mo_coeff
         if mo_occ is None:
             mo_occ = self.mo_occ
-        return self._numint.gen_response(mo_coeff, mo_occ, **kwargs, ks=self)
+        return _require_skala_numint(self).gen_response(
+            mo_coeff, mo_occ, **kwargs, ks=self
+        )
 
+    @override
     def density_fit(
         self,
         auxbasis: str | None = None,

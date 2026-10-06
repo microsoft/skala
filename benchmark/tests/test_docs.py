@@ -54,10 +54,14 @@ def test_html_build_generates_report_and_copies_sources(
 
 def test_non_html_build_skips_report(tmp_path: Path, monkeypatch: Any) -> None:
     module = _load_extension()
+
+    def fail_generate(*args: object, **kwargs: object) -> None:
+        raise AssertionError("called")
+
     monkeypatch.setattr(
         module,
         "generate",
-        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("called")),
+        fail_generate,
     )
     app = SimpleNamespace(
         outdir=str(tmp_path / "linkcheck"),

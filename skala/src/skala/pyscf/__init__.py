@@ -8,7 +8,7 @@ functionals and the PySCF quantum chemistry package, enabling DFT calculations
 with neural network-based functionals.
 """
 
-from typing import Any
+from typing import Any, TypeVar, cast
 
 import torch
 
@@ -16,6 +16,8 @@ from pyscf import dft as pyscf_dft
 from pyscf import gto
 from skala.functional import ExcFunctionalBase, load_functional
 from skala.pyscf import dft
+
+_KS = TypeVar("_KS", bound=pyscf_dft.rks.RKS | pyscf_dft.uks.UKS)
 
 
 def SkalaKS(
@@ -29,7 +31,7 @@ def SkalaKS(
     ks_config: dict[str, Any] | None = None,
     soscf_config: dict[str, Any] | None = None,
     device: torch.device | None = None,
-) -> dft.SkalaRKS | dft.SkalaUKS:
+) -> dft.SkalaRKS | dft.SkalaUKS | pyscf_dft.rks.RKS | pyscf_dft.uks.UKS:
     """
     Create a Kohn-Sham calculator for the Skala functional.
 
@@ -56,8 +58,9 @@ def SkalaKS(
 
     Returns
     -------
-    dft.SkalaRKS or dft.SkalaUKS
-        The Kohn-Sham calculator object.
+    dft.SkalaRKS, dft.SkalaUKS, pyscf.dft.RKS, or pyscf.dft.UKS
+        The Kohn-Sham calculator object. Native PySCF functionals return a
+        native PySCF calculator.
 
     Example
     -------
@@ -141,7 +144,7 @@ def SkalaRKS(
     ks_config: dict[str, Any] | None = None,
     soscf_config: dict[str, Any] | None = None,
     device: torch.device | None = None,
-) -> dft.SkalaRKS:
+) -> dft.SkalaRKS | pyscf_dft.rks.RKS:
     """
     Create a restricted Kohn-Sham calculator for the Skala functional.
 
@@ -168,8 +171,9 @@ def SkalaRKS(
 
     Returns
     -------
-    dft.SkalaRKS
-        The Kohn-Sham calculator object.
+    dft.SkalaRKS or pyscf.dft.RKS
+        The restricted Kohn-Sham calculator. Native PySCF functionals return a
+        native PySCF calculator.
 
     Example
     -------
@@ -220,7 +224,7 @@ def SkalaUKS(
     ks_config: dict[str, Any] | None = None,
     soscf_config: dict[str, Any] | None = None,
     device: torch.device | None = None,
-) -> dft.SkalaUKS:
+) -> dft.SkalaUKS | pyscf_dft.uks.UKS:
     """
     Create an unrestricted Kohn-Sham calculator for the Skala functional.
 
@@ -247,8 +251,9 @@ def SkalaUKS(
 
     Returns
     -------
-    dft.SkalaUKS
-        The Kohn-Sham calculator object.
+    dft.SkalaUKS or pyscf.dft.UKS
+        The unrestricted Kohn-Sham calculator. Native PySCF functionals return
+        a native PySCF calculator.
 
     Example
     -------
@@ -289,28 +294,29 @@ def SkalaUKS(
 
 
 def _apply_ks_config(
-    ks: "dft.SkalaRKS | dft.SkalaUKS",
+    ks: _KS,
     *,
     with_density_fit: bool,
     with_newton: bool,
     auxbasis: str | None,
     ks_config: dict[str, Any] | None,
     soscf_config: dict[str, Any] | None,
-) -> "dft.SkalaRKS | dft.SkalaUKS":
+) -> _KS:
     """Apply common KS configuration (grids, density fitting, Newton, SOSCF)."""
+    configured_ks: Any = ks
     if ks_config is not None:
-        ks = ks(**ks_config)
+        configured_ks = configured_ks(**ks_config)
     if with_density_fit:
-        ks = ks.density_fit(auxbasis=auxbasis)
+        configured_ks = configured_ks.density_fit(auxbasis=auxbasis)
     elif auxbasis is not None:
         raise ValueError(
             "Auxiliary basis can only be set when density fitting is enabled."
         )
     if with_newton:
-        ks = ks.newton()
+        configured_ks = configured_ks.newton()
         if soscf_config is not None:
-            ks.__dict__.update(soscf_config)
-    return ks
+            configured_ks.__dict__.update(soscf_config)
+    return cast(_KS, configured_ks)
 
 
 def _create_native_pyscf_ks(

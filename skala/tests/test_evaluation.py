@@ -174,7 +174,10 @@ def test_mgga_feature_function_to_dict_preserves_public_feature_shapes() -> None
 def test_evaluation_policy_defaults_and_is_immutable() -> None:
     policy = EvaluationPolicy()
 
+    def set_policy_attribute(name: str, value: object) -> None:
+        setattr(policy, name, value)
+
     assert policy.ao_block_size is None
     assert policy.safety_fraction == 0.8
     with pytest.raises(FrozenInstanceError):
-        policy.safety_fraction = 0.5  # type: ignore[misc]
+        set_policy_attribute("safety_fraction", 0.5)

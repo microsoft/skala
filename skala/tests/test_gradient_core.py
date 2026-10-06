@@ -15,6 +15,7 @@ from skala.pyscf.gradient_core import (
     contract_ao_derivative_block,
     grid_derivative_block,
 )
+from typing_extensions import override
 
 from pyscf import gto
 
@@ -40,6 +41,7 @@ def test_nuclear_feature_derivatives_select_memory_budget(
     class TestFunctional(ExcFunctionalBase):
         features = [Feature.DENSITY]
 
+        @override
         def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             return mol[Feature.DENSITY].sum()
 

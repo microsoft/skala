@@ -167,8 +167,8 @@ def _candidate_knots(
         return []
 
     candidates: set[float] = set()
-    for index in range(1, unique_x.size - 1):
-        candidates.add(float(unique_x[index]))
+    for candidate in unique_x[1:-1]:
+        candidates.add(float(candidate))
 
     for left, right in pairwise(unique_x[1:-1]):
         candidates.add(float((left + right) / 2.0))
@@ -211,10 +211,10 @@ def _fit_continuous(x: FloatArray, y: FloatArray, knots: list[float]) -> _Model:
     slopes, intercepts = _continuous_convex_lines(x, y, knots)
     boundaries = [float(np.min(x)), *knots, float(np.max(x))]
     segments = [
-        _LogSegment(
-            boundaries[index], boundaries[index + 1], slopes[index], intercepts[index]
+        _LogSegment(left, right, slope, intercept)
+        for (left, right), slope, intercept in zip(
+            pairwise(boundaries), slopes, intercepts, strict=True
         )
-        for index in range(len(slopes))
     ]
     return _Model(segments=segments, knots=knots, continuous=True)
 
@@ -261,7 +261,7 @@ def _continuous_convex_lines(
 
 
 def _forbid_downward_jumps(
-    coefficients: list[tuple[float, float] | None],
+    coefficients: list[tuple[float, float]],
     boundaries: list[float],
 ) -> None:
     """Raise segment intercepts so the fit never steps down at a breakpoint.
@@ -270,19 +270,20 @@ def _forbid_downward_jumps(
     would start below its predecessor's end value makes the whole piecewise
     curve non-decreasing from left to right. Slopes are left untouched.
     """
-    for index in range(len(coefficients) - 1):
-        left = coefficients[index]
-        right = coefficients[index + 1]
-        assert left is not None and right is not None
-        boundary = boundaries[index + 1]
+    for right_index, ((left, right), boundary) in enumerate(
+        zip(pairwise(coefficients), boundaries[1:-1], strict=True), start=1
+    ):
         end_left = left[0] * boundary + left[1]
         start_right = right[0] * boundary + right[1]
         if start_right < end_left:
-            coefficients[index + 1] = (right[0], right[1] + (end_left - start_right))
+            coefficients[right_index] = (
+                right[0],
+                right[1] + (end_left - start_right),
+            )
 
 
 def _enforce_increasing_slopes(
-    coefficients: list[tuple[float, float] | None],
+    coefficients: list[tuple[float, float]],
     x: FloatArray,
     y: FloatArray,
     indices: NDArray[np.int64],
@@ -297,9 +298,7 @@ def _enforce_increasing_slopes(
     non-decreasing.
     """
     running_slope = 0.0
-    for index in range(len(coefficients)):
-        coefficient = coefficients[index]
-        assert coefficient is not None
+    for index, coefficient in enumerate(coefficients):
         slope = coefficient[0]
         if slope < running_slope:
             slope = running_slope
@@ -326,7 +325,9 @@ def _fit_discontinuous(x: FloatArray, y: FloatArray, knots: list[float]) -> _Mod
             coefficients.append(None)
 
     valid_indices = [
-        index for index, coefficient in enumerate(coefficients) if coefficient
+        index
+        for index, coefficient in enumerate(coefficients)
+        if coefficient is not None
     ]
     for index, coefficient in enumerate(coefficients):
         if coefficient is not None:
@@ -338,22 +339,26 @@ def _fit_discontinuous(x: FloatArray, y: FloatArray, knots: list[float]) -> _Mod
             neighbor = min(
                 valid_indices, key=lambda valid_index: abs(valid_index - index)
             )
-            slope = max(coefficients[neighbor][0], 0.0)  # type: ignore[index]
+            neighbor_coefficient = coefficients[neighbor]
+            assert neighbor_coefficient is not None
+            slope = max(neighbor_coefficient[0], 0.0)
         else:
             slope = 0.0
         coefficients[index] = (slope, mean_y - slope * mean_x)
 
+    resolved_coefficients: list[tuple[float, float]] = []
+    for coefficient in coefficients:
+        assert coefficient is not None
+        resolved_coefficients.append(coefficient)
+
     boundaries = [float(np.min(x)), *knots, float(np.max(x))]
-    _enforce_increasing_slopes(coefficients, x, y, indices)
-    _forbid_downward_jumps(coefficients, boundaries)
+    _enforce_increasing_slopes(resolved_coefficients, x, y, indices)
+    _forbid_downward_jumps(resolved_coefficients, boundaries)
     segments = [
-        _LogSegment(
-            boundaries[index],
-            boundaries[index + 1],
-            coefficients[index][0],  # type: ignore[index]
-            coefficients[index][1],  # type: ignore[index]
+        _LogSegment(left, right, slope, intercept)
+        for (left, right), (slope, intercept) in zip(
+            pairwise(boundaries), resolved_coefficients, strict=True
         )
-        for index in range(len(coefficients))
     ]
     return _Model(segments=segments, knots=knots, continuous=False)
 
@@ -677,8 +682,8 @@ def smooth_stacked_fractions(
 
     dense_log = np.linspace(log_x[0], log_x[-1], grid_points)
     smoothed = np.empty((dense_log.size, num_bands - 1), dtype=np.float64)
-    for band in range(num_bands - 1):
-        spline = make_smoothing_spline(log_x, cumulative_data[:, band])
+    for band, cumulative_band in enumerate(cumulative_data.T):
+        spline = make_smoothing_spline(log_x, cumulative_band)
         smoothed[:, band] = spline(dense_log)
     smoothed = np.clip(smoothed, 0.0, 1.0)
     smoothed = np.maximum.accumulate(smoothed, axis=1)

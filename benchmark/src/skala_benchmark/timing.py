@@ -26,10 +26,12 @@ from __future__ import annotations
 import itertools
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Generator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, TypeAlias, cast
+
+from typing_extensions import override
 
 if TYPE_CHECKING:
     import torch
@@ -42,8 +44,13 @@ if TYPE_CHECKING:
 STEADY_STATE_FROM_CYCLE = 1
 
 
-class Mark(Protocol):
-    """An opaque point in time on either the host or the device timeline."""
+class _CudaMark(Protocol):
+    """CUDA event operations needed by the device timeline."""
+
+    def elapsed_time(self, end_event: _CudaMark) -> float: ...
+
+
+Mark: TypeAlias = float | _CudaMark
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,7 +132,9 @@ class HostTimeline(Timeline):
         return time.perf_counter()
 
     def elapsed_ms(self, start: Mark, end: Mark) -> float:
-        return 1e3 * (float(end) - float(start))  # type: ignore[arg-type]
+        if not isinstance(start, float) or not isinstance(end, float):
+            raise TypeError("HostTimeline requires host-clock marks")
+        return 1e3 * (end - start)
 
 
 class CudaTimeline(Timeline):
@@ -137,15 +146,18 @@ class CudaTimeline(Timeline):
         self._torch = torch
 
     def mark(self) -> Mark:
-        event = self._torch.cuda.Event(enable_timing=True)  # type: ignore[no-untyped-call]
+        event = self._torch.cuda.Event(enable_timing=True)
         event.record()
-        return event
+        return cast(_CudaMark, event)
 
+    @override
     def resolve(self) -> None:
         self._torch.cuda.synchronize()
 
     def elapsed_ms(self, start: Mark, end: Mark) -> float:
-        return float(start.elapsed_time(end))  # type: ignore[attr-defined]
+        if isinstance(start, float) or isinstance(end, float):
+            raise TypeError("CudaTimeline requires CUDA event marks")
+        return float(start.elapsed_time(end))
 
 
 def make_timeline(device: torch.device | str) -> Timeline:
@@ -183,7 +195,7 @@ class _Accumulator:
         self._intervals: list[_Interval] = []
 
     @contextmanager
-    def measure(self, cycle: int) -> Iterator[None]:
+    def measure(self, cycle: int) -> Generator[None, None, None]:
         interval = _Interval(
             cycle=cycle, start=self._timeline.mark(), opened=self._sequence()
         )
@@ -288,6 +300,7 @@ class ScfInstrumentation:
 
         if initial_build is not None:
             cycles_begin = initial_build.end
+            assert cycles_begin is not None
         else:
             first_veff = self._veff.first_start()
             cycles_begin = first_veff if first_veff is not None else start
@@ -329,7 +342,7 @@ def instrument(
     *,
     device: torch.device | str,
     functional: ExcFunctionalBase | str | None = None,
-) -> Iterator[ScfInstrumentation]:
+) -> Generator[ScfInstrumentation, None, None]:
     """Instrument ``mf`` in place for the duration of the context.
 
     Wraps the effective-potential and numerical-integration entry points and,
@@ -370,7 +383,7 @@ def instrument(
         instrumentation._neural = True
         original_get_exc = functional.get_exc
         restore.append((functional, "get_exc", original_get_exc))
-        functional.get_exc = _timed(  # type: ignore[method-assign]
+        functional.get_exc = _timed(
             original_get_exc, instrumentation, instrumentation._forward
         )
         # The network's derivative is a separate call, so the two halves of the

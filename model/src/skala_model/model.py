@@ -17,6 +17,7 @@ from opt_einsum_fx import jitable, optimize_einsums_full
 from skala.features import Feature, FeatureMap
 from skala.functional.base import ExcFunctionalBase, enhancement_density_inner_product
 from torch import fx, nn
+from typing_extensions import override
 
 from skala_model.layers import ScaledSigmoid
 from skala_model.utils.irreps import Irreps
@@ -67,6 +68,7 @@ class SemiLocalFeatures(nn.Module):
             persistent=False,
         )
 
+    @override
     def forward(self, mol: FeatureMap) -> tuple[torch.Tensor, torch.Tensor]:
         features = _prepare_features_raw(mol)
         features_ab = features
@@ -92,6 +94,7 @@ class ExpRadialScaleModel(nn.Module):
             "temps", 2 * torch.linspace(min_std, max_std, embedding_size) ** 2
         )
 
+    @override
     def forward(self, dist2: torch.Tensor) -> torch.Tensor:
         """Compute radial basis values.
 
@@ -207,7 +210,8 @@ class SkalaFunctional(ExcFunctionalBase):
     # that can be reconstructed from __init__ args).
     _RECONSTRUCTABLE_BUFFER_PREFIXES = ("radial_basis.", "semi_local_features.")
 
-    def load_state_dict(  # type: ignore  # needs mutable dict
+    @override
+    def load_state_dict(  # pyrefly: ignore[bad-override]  # needs mutable dict
         self,
         state_dict: dict[str, Any],
         strict: bool = True,
@@ -299,6 +303,7 @@ class SkalaFunctional(ExcFunctionalBase):
 
         return packed_mol_feats
 
+    @override
     def get_exc(self, mol: FeatureMap) -> torch.Tensor:
         exc_density = self._get_exc_density_padded(mol).double()
         grid_weights = (
@@ -313,6 +318,7 @@ class SkalaFunctional(ExcFunctionalBase):
 
         return (exc_density * grid_weights).sum()
 
+    @override
     def get_exc_density(self, mol: FeatureMap) -> torch.Tensor:
         padded = self._get_exc_density_padded(mol)
         sizes = mol[Feature.ATOMIC_GRID_SIZES]
@@ -417,8 +423,10 @@ class NonLocalModel(nn.Module):
             nn.Linear(self.input_nf, self.hidden_nf),
             torch.nn.SiLU(),
         )
-        torch.nn.init.xavier_uniform_(self.pre_down_layer[0].weight)  # type: ignore
-        torch.nn.init.zeros_(self.pre_down_layer[0].bias)  # type: ignore
+        pre_down_linear = self.pre_down_layer[0]
+        assert isinstance(pre_down_linear, nn.Linear)
+        torch.nn.init.xavier_uniform_(pre_down_linear.weight)
+        torch.nn.init.zeros_(pre_down_linear.bias)
 
         self.tp_down = TensorProduct(
             self.in_irreps,
@@ -464,14 +472,17 @@ class NonLocalModel(nn.Module):
             nn.Linear(self.hidden_nf, self.hidden_nf),
             torch.nn.SiLU(),
         )
-        torch.nn.init.xavier_uniform_(self.post_up_layer[0].weight)  # type: ignore
-        torch.nn.init.zeros_(self.post_up_layer[0].bias)  # type: ignore
+        post_up_linear = self.post_up_layer[0]
+        assert isinstance(post_up_linear, nn.Linear)
+        torch.nn.init.xavier_uniform_(post_up_linear.weight)
+        torch.nn.init.zeros_(post_up_linear.bias)
 
         self.concat_layer = torch.nn.Sequential(
             nn.Linear(self.input_nf + self.hidden_nf, self.input_nf),
             nn.SiLU(),
         )
 
+    @override
     def forward(
         self,
         h: torch.Tensor,  # (num_fine, num_coarse, input_nf)
@@ -512,7 +523,9 @@ class NonLocalModel(nn.Module):
 
     @property
     def dtype(self) -> torch.dtype:
-        return self.pre_down_layer[0].weight.dtype  # type: ignore
+        pre_down_linear = self.pre_down_layer[0]
+        assert isinstance(pre_down_linear, nn.Linear)
+        return pre_down_linear.weight.dtype
 
 
 class TensorProduct(nn.Module):
@@ -555,7 +568,7 @@ class TensorProduct(nn.Module):
             for i_1, (_, ir_1) in enumerate(irreps_in1)
             for i_2, (_, ir_2) in enumerate(irreps_in2)
             for i_out, (_, ir_out) in enumerate(irreps_out)
-            if ir_out in ir_1 * ir_2  # type: ignore  # Irrep.__mul__ not in stubs
+            if ir_out in ir_1 * ir_2  # pyrefly: ignore[not-iterable, unsupported-operation]
         ]
 
         self.slices = [irreps_in1.slices(), irreps_in2.slices(), irreps_out.slices()]
@@ -569,7 +582,7 @@ class TensorProduct(nn.Module):
 
     def reset_parameters(self) -> None:
         def num_elements(ins: tuple[int, int, int]) -> int:
-            return int(self.irreps_in1[ins[0]].mul * self.irreps_in2[ins[1]].mul)
+            return self.irreps_in1[ins[0]].mul * self.irreps_in2[ins[1]].mul
 
         for idx, ins in enumerate(self.instr):
             num_in = sum(num_elements(ins_) for ins_ in self.instr if ins_[2] == ins[2])
@@ -577,6 +590,7 @@ class TensorProduct(nn.Module):
             x = (6 / (num_in + num_out)) ** 0.5
             self._batched_W.data[idx].uniform_(-x, x)
 
+    @override
     def _load_from_state_dict(
         self,
         state_dict: dict[str, torch.Tensor],
@@ -778,6 +792,7 @@ class TensorProduct(nn.Module):
             out = distance_weights * out
         return out
 
+    @override
     def forward(
         self,
         x1: torch.Tensor,
@@ -833,7 +848,7 @@ class O3Linear(nn.Module):
         self.reset_parameters()
         self._o3_linear = self.generate_o3_linear_code()
 
-    def generate_o3_linear_code(self) -> fx.GraphModule:
+    def generate_o3_linear_code(self) -> nn.Module:
         graphmod = _o3_linear_codegen(*self.linear_params)
 
         if self.optimize_einsums:
@@ -846,6 +861,7 @@ class O3Linear(nn.Module):
         if self.script_codegen:
             graphmod = torch.jit.script(jitable(graphmod))
 
+        assert isinstance(graphmod, nn.Module)
         return graphmod
 
     @property
@@ -859,7 +875,7 @@ class O3Linear(nn.Module):
 
     def reset_parameters(self) -> None:
         def num_elements(ins: tuple[int, int]) -> int:
-            return int(self.irreps_in[ins[0]].mul)
+            return self.irreps_in[ins[0]].mul
 
         for ins in self.instr:
             i_in, i_out = ins
@@ -877,6 +893,7 @@ class O3Linear(nn.Module):
             result.append(weight)
         return result
 
+    @override
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         result = self._o3_linear(x, *self.weight_list)
         assert isinstance(result, torch.Tensor)
@@ -925,7 +942,7 @@ def _o3_linear_codegen(
 
     outs: list[Any] = []
     for (i_in, i_out), w in zip(instr, weights, strict=True):
-        x1_i = x1[:, slices[0][i_in][0] : slices[0][i_in][1]]  # type: ignore
+        x1_i = x1[:, slices[0][i_in][0] : slices[0][i_in][1]]
         outs.append(
             torch.einsum(
                 "sui,uv->svi",

@@ -14,6 +14,7 @@ from torch import Tensor
 from torch.autograd import Function
 from torch.autograd.function import FunctionCtx
 from torch.utils.dlpack import from_dlpack
+from typing_extensions import override
 
 from pyscf import dft, gto
 from skala.pyscf import feature_math
@@ -34,9 +35,8 @@ class _BlockwiseAOFeatureOperatorContext(Protocol):
     blksize: int | None
     compile_feature_function: bool
     adjoint: bool
-    output_shape: torch.Size
-    output_device: torch.device
-    output_dtype: torch.dtype
+    result_shape: torch.Size
+    result_options: tuple[torch.device, torch.dtype]
 
 
 def _active_cpu_ao_indices(
@@ -370,6 +370,7 @@ class _BlockwiseAOFeatureOperator(Function):
     """
 
     @staticmethod
+    @override
     def setup_context(
         ctx: FunctionCtx,
         inputs: tuple[
@@ -393,12 +394,14 @@ class _BlockwiseAOFeatureOperator(Function):
             context.compile_feature_function,
             context.adjoint,
         ) = inputs
-        context.output_shape = output.shape
-        context.output_device = output.device
-        context.output_dtype = output.dtype
+        context.result_shape = output.shape
+        context.result_options = output.device, output.dtype
 
+    # Custom Functions intentionally specialize PyTorch's variadic forward signature;
+    # setup_context additionally requires this override to remain ctx-free.
     @staticmethod
-    def forward(
+    @override
+    def forward(  # pyrefly: ignore[bad-override]
         value: torch.Tensor,
         mol: gto.Mole,
         grids: Grid,
@@ -426,20 +429,22 @@ class _BlockwiseAOFeatureOperator(Function):
         )
 
     @staticmethod
+    @override
     def jvp(
         ctx: _BlockwiseAOFeatureOperatorContext,
         *grad_inputs: torch.Tensor | None,
     ) -> torch.Tensor:
         value_tangent = grad_inputs[0]
         if value_tangent is None:
+            result_device, result_dtype = ctx.result_options
             return torch.zeros(
-                ctx.output_shape,
-                device=ctx.output_device,
-                dtype=ctx.output_dtype,
+                ctx.result_shape,
+                device=result_device,
+                dtype=result_dtype,
             )
         return cast(
             Tensor,
-            _BlockwiseAOFeatureOperator.apply(  # type: ignore[no-untyped-call]
+            _BlockwiseAOFeatureOperator.apply(
                 value_tangent,
                 ctx.mol,
                 ctx.grids,
@@ -451,11 +456,12 @@ class _BlockwiseAOFeatureOperator(Function):
         )
 
     @staticmethod
+    @override
     def backward(
         ctx: _BlockwiseAOFeatureOperatorContext,
         *grad_outputs: torch.Tensor,
     ) -> tuple[torch.Tensor | None, ...]:
-        input_cotangent = _BlockwiseAOFeatureOperator.apply(  # type: ignore[no-untyped-call]
+        input_cotangent = _BlockwiseAOFeatureOperator.apply(
             grad_outputs[0],
             ctx.mol,
             ctx.grids,
@@ -507,7 +513,7 @@ def evaluate_ao_features_blockwise(
     """
     return cast(
         Tensor,
-        _BlockwiseAOFeatureOperator.apply(  # type: ignore[no-untyped-call]
+        _BlockwiseAOFeatureOperator.apply(
             value,
             mol,
             grids,

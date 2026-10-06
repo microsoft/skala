@@ -5,6 +5,7 @@ from typing import Any
 
 import torch
 from pyscf.dft import gen_grid
+from typing_extensions import override
 
 from pyscf import gto
 from skala.pyscf.spatial_grid_layout import (
@@ -16,7 +17,7 @@ from skala.pyscf.spatial_grid_layout import (
 LOG = getLogger(__name__)
 
 
-class SkalaGrids(gen_grid.Grids):  # type: ignore[misc]
+class SkalaGrids(gen_grid.Grids):
     """PySCF grids with atom-major ordering and Skala layout caching.
 
     Configure and build the grid before preparing its spatial layout. Preparing
@@ -38,21 +39,23 @@ class SkalaGrids(gen_grid.Grids):  # type: ignore[misc]
         super().__setattr__("alignment", 1)
         super().__setattr__("_initializing", False)
 
-    def __setattr__(self, key: str, value: Any) -> None:
+    @override
+    def __setattr__(self, key: str, val: Any) -> None:
         # Alignment padding would break the exact atom-major grid layout expected
         # by Skala, so only the base-class constructor may set a non-unit value.
         if (
             key == "alignment"
-            and value != 1
+            and val != 1
             and not getattr(self, "_initializing", False)
         ):
-            raise ValueError(f"SkalaGrids alignment must be 1, got {value}")
+            raise ValueError(f"SkalaGrids alignment must be 1, got {val}")
         # The spatial permutations and screening data are derived from these
         # attributes and must be rebuilt after any assignment.
         if key in {"coords", "weights", "cutoff"}:
             super().__setattr__("_spatial_grid_layout", None)
-        super().__setattr__(key, value)
+        super().__setattr__(key, val)
 
+    @override
     def build(
         self,
         mol: gto.Mole | None = None,
@@ -73,6 +76,13 @@ class SkalaGrids(gen_grid.Grids):  # type: ignore[misc]
     ) -> SpatialGridLayout:
         """Return the cached spatial layout, creating it when needed."""
         if self._spatial_grid_layout is None:
+            coords = self.coords
+            weights = self.weights
+            if coords is None or weights is None:
+                raise RuntimeError(
+                    "Grid coordinates and weights must be built before preparing "
+                    "the spatial layout"
+                )
             spatial_grid_layout = prepare_spatial_grid_layout(
                 mol,
                 self,
@@ -81,7 +91,7 @@ class SkalaGrids(gen_grid.Grids):  # type: ignore[misc]
             )
             # Freeze the source arrays before publishing their derived layout.
             # Reassignment remains supported and invalidates the cache above.
-            self.coords.setflags(write=False)
-            self.weights.setflags(write=False)
+            coords.setflags(write=False)
+            weights.setflags(write=False)
             self._spatial_grid_layout = spatial_grid_layout
         return self._spatial_grid_layout

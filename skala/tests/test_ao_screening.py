@@ -5,6 +5,7 @@ from typing import Any, TypeAlias, cast
 import numpy as np
 import pytest
 import torch
+from pyscf.dft.numint import NumInt
 from skala.features import AOFeatureSpec, Feature, FeatureMap
 from skala.functional.base import ExcFunctionalBase
 from skala.pyscf import ao_evaluation as ao_evaluation_module
@@ -35,6 +36,7 @@ from skala.pyscf.spatial_grid_layout import (
 )
 from skala.pyscf.xc_integrator import XCIntegrator
 from skala.typing import F64
+from typing_extensions import override
 
 from pyscf import dft, gto
 from tests.utils import QuadraticFunctional, force_ao_screening
@@ -91,16 +93,21 @@ def test_mgga_supported_features_are_linear_in_density_matrix(
     dm = torch.tensor([[2.0, 0.5], [0.5, 1.0]], dtype=torch.float64)
     tangent = torch.tensor([[0.2, -0.1], [-0.1, 0.3]], dtype=torch.float64)
 
+    def evaluate_features(value: torch.Tensor) -> torch.Tensor:
+        result = feature_function(value, ao)
+        assert isinstance(result, torch.Tensor)
+        return result
+
     features = feature_function(dm, ao)
     feature_jvp = torch.func.jvp(
-        lambda value: feature_function(value, ao),
+        evaluate_features,
         (dm,),
         (tangent,),
     )[1]
 
     def first_jvp(value: torch.Tensor) -> torch.Tensor:
         result = torch.func.jvp(
-            lambda inner: feature_function(inner, ao),
+            evaluate_features,
             (value,),
             (tangent,),
         )[1]
@@ -144,7 +151,12 @@ def test_mgga_analytic_vjp_matches_autograd(
     dm_shape = (3, 3) if spin_channels is None else (spin_channels, 3, 3)
     dm = torch.randn(dm_shape, dtype=torch.float64, generator=generator)
 
-    vjp_result = torch.func.vjp(lambda value: feature_function(value, ao), dm)
+    def evaluate_features(value: torch.Tensor) -> torch.Tensor:
+        result = feature_function(value, ao)
+        assert isinstance(result, torch.Tensor)
+        return result
+
+    vjp_result = torch.func.vjp(evaluate_features, dm)
     features = vjp_result[0]
     pullback = vjp_result[1]
     cotangent = torch.randn(features.shape, dtype=features.dtype, generator=generator)
@@ -182,10 +194,14 @@ def test_feature_block_compiled_vjp_matches_eager(
     )
 
     compile_function = torch.compile
+
+    def compile_eager(function: Callable[..., Any]) -> Callable[..., Any]:
+        return compile_function(function, backend="eager")
+
     monkeypatch.setattr(
         torch,
         "compile",
-        lambda function: compile_function(function, backend="eager"),
+        compile_eager,
     )
 
     compiled_forward = _evaluate_feature_block(
@@ -259,11 +275,17 @@ def test_dense_model_evaluation_uses_model_chunks(
     """Keep model chunking independent from the AO screening decision."""
     mol = gto.M(atom="H 0 0 0; H 0 0 0.74", basis="sto-3g", verbose=0)
     grids = _minimal_atom_grid(mol)
-    atom_grid_size = grids.weights.size // mol.natm
+    weights = grids.weights
+    assert weights is not None
+    atom_grid_size = weights.size // mol.natm
+
+    def estimate_chunks(*args: object, **kwargs: object) -> dict[int, int]:
+        return {atom_grid_size: 1}
+
     monkeypatch.setattr(
         model_chunking_module,
         "estimate_max_model_atoms_per_chunk",
-        lambda *args, **kwargs: {atom_grid_size: 1},
+        estimate_chunks,
     )
 
     class CountingFunctional(QuadraticFunctional):
@@ -271,6 +293,7 @@ def test_dense_model_evaluation_uses_model_chunks(
             super().__init__()
             self.calls = 0
 
+        @override
         def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             self.calls += 1
             return super().get_exc(mol)
@@ -343,9 +366,8 @@ def test_decompose_grid_into_spatial_blocks_groups_interleaved_clusters() -> Non
     block_size = 3
     labels = np.tile(np.arange(4), block_size)
     offsets = np.repeat(np.arange(block_size), 4)
-    coords = np.column_stack(
-        (100.0 * labels + offsets, np.zeros(labels.size), np.zeros(labels.size))
-    )
+    coords = np.zeros((labels.size, 3), dtype=np.float64)
+    coords[:, 0] = 100.0 * labels + offsets
 
     forward, _ = _decompose_grid_into_spatial_blocks(coords, block_size)
 
@@ -543,6 +565,21 @@ def test_call_rejects_second_order_evaluation(carbon: gto.Mole) -> None:
             torch.eye(carbon.nao_nr(), dtype=torch.float64),
             second_order=True,
         )
+
+
+def test_numint_implements_pyscf_contract() -> None:
+    assert isinstance(SkalaNumInt(QuadraticFunctional()), NumInt)
+
+
+def test_numint_rejects_unsupported_pyscf_modes(carbon: gto.Mole) -> None:
+    numint: _NumPyNumInt = SkalaNumInt(QuadraticFunctional())
+    grids = _minimal_atom_grid(carbon)
+    dm = np.eye(carbon.nao_nr())
+
+    with pytest.raises(NotImplementedError, match="Relativistic"):
+        numint.nr_rks(carbon, grids, None, dm, relativity=1)
+    with pytest.raises(NotImplementedError, match="Hermitian"):
+        numint.nr_rks(carbon, grids, None, dm, hermi=0)
 
 
 @pytest.mark.parametrize("expected", [False, True])
@@ -791,6 +828,10 @@ def test_cpu_screening_slices_and_scatters_full_derivatives(
     screen_index[1, -1] = 1
     grids.non0tab = screen_index
     active_ao_indices = _active_cpu_ao_indices(carbon, screen_index)
+    weights = grids.weights
+    coords = grids.coords
+    assert weights is not None
+    assert coords is not None
 
     class FakeNumInt:
         def block_loop(
@@ -803,8 +844,8 @@ def test_cpu_screening_slices_and_scatters_full_derivatives(
                 yield (
                     ao[grid_slice],
                     None,
-                    grids.weights[grid_slice],
-                    grids.coords[grid_slice],
+                    weights[grid_slice],
+                    coords[grid_slice],
                 )
 
     monkeypatch.setattr(dft.numint, "NumInt", FakeNumInt)
@@ -866,6 +907,10 @@ def test_cpu_all_active_block_uses_dense_sentinel(
     screen_index[1, 0] = 1
     grids.non0tab = screen_index
     ao_values = np.ones((ngrids, carbon.nao_nr()))
+    weights = grids.weights
+    coords = grids.coords
+    assert weights is not None
+    assert coords is not None
 
     class FakeNumInt:
         def block_loop(
@@ -876,8 +921,8 @@ def test_cpu_all_active_block_uses_dense_sentinel(
                 yield (
                     ao_values[grid_slice],
                     None,
-                    grids.weights[grid_slice],
-                    grids.coords[grid_slice],
+                    weights[grid_slice],
+                    coords[grid_slice],
                 )
 
     monkeypatch.setattr(dft.numint, "NumInt", FakeNumInt)
@@ -906,13 +951,17 @@ def test_cpu_no_active_aos_returns_full_zero_derivatives(
     ao = np.ones((ngrids, carbon.nao_nr()))
     screen_index = np.zeros((1, carbon.nbas), dtype=np.uint8)
     grids.non0tab = screen_index
+    weights = grids.weights
+    coords = grids.coords
+    assert weights is not None
+    assert coords is not None
 
     class FakeNumInt:
         def block_loop(
             self, *args: object, **kwargs: object
         ) -> Iterator[tuple[np.ndarray, None, np.ndarray, np.ndarray]]:
             assert kwargs["non0tab"] is screen_index
-            yield ao, None, grids.weights, grids.coords
+            yield ao, None, weights, coords
 
     monkeypatch.setattr(dft.numint, "NumInt", FakeNumInt)
     feature_function = MGGAFeatureFunction(AOFeatureSpec([Feature.DENSITY]))
@@ -1079,8 +1128,10 @@ def test_cpu_density_dense_screened_equivalence() -> None:
     with force_ao_screening(True):
         screened = numint.get_rho(mol, dm, grids)
 
-    assert dense.shape == grids.weights.shape
-    assert screened.shape == grids.weights.shape
+    weights = grids.weights
+    assert weights is not None
+    assert dense.shape == weights.shape
+    assert screened.shape == weights.shape
     np.testing.assert_allclose(screened, dense, rtol=1e-10, atol=1e-11)
 
 
@@ -1109,6 +1160,7 @@ def test_screened_integration_adds_bookkeeping_features(
             super().__init__()
             self.features = features
 
+        @override
         def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             return mol[energy_feature].square().sum()
 
@@ -1170,6 +1222,7 @@ def test_response_of_linear_functional_is_zero(screened: bool) -> None:
                 Feature.GRID_WEIGHTS,
             ]
 
+        @override
         def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             return (mol[Feature.DENSITY] * mol[Feature.GRID_WEIGHTS]).sum()
 
@@ -1193,11 +1246,17 @@ def test_screened_ao_traversals_are_independent_of_model_chunking(
     """Keep global screened AO traversal counts independent of model chunk count."""
     mol = gto.M(atom="H 0 0 0; H 0 0 0.74", basis="sto-3g", verbose=0)
     grids = _minimal_atom_grid(mol)
-    atom_grid_size = grids.weights.size // mol.natm
+    weights = grids.weights
+    assert weights is not None
+    atom_grid_size = weights.size // mol.natm
+
+    def estimate_chunks(*args: object, **kwargs: object) -> dict[int, int]:
+        return {atom_grid_size: 1}
+
     monkeypatch.setattr(
         model_chunking_module,
         "estimate_max_model_atoms_per_chunk",
-        lambda *args, **kwargs: {atom_grid_size: 1},
+        estimate_chunks,
     )
 
     forward_calls = 0
@@ -1210,7 +1269,7 @@ def test_screened_ao_traversals_are_independent_of_model_chunking(
             backward_calls += 1
         else:
             forward_calls += 1
-        result = original_apply(*args)  # type: ignore[no-untyped-call]
+        result = original_apply(*args)
         assert isinstance(result, torch.Tensor)
         return result
 

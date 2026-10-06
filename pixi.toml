@@ -10,7 +10,7 @@ platforms = [
   { name = "linux-64-cuda12", platform = "linux-64", cuda = "12" },
   { name = "linux-64-cuda13", platform = "linux-64", cuda = "13" },
 ]
-requires-pixi = ">=0.78,<0.79"
+requires-pixi = ">=0.81,<0.82"
 preview = ["pixi-build"]
 
 [workspace.conda-pypi-map]
@@ -19,12 +19,13 @@ conda-forge = { mapping-mode = "overlay", mapping = { dftd3-python = "dftd3", py
 [feature.python-runtime.dependencies]
 ase = "*"
 numpy = "<2.5"
+typing-extensions = ">=4.16.0,<5"
 
 [feature.python-runtime.pypi-dependencies]
 skala = { path = "skala", editable = true }
 
 [feature.model-definition.dependencies]
-e3nn = "*"
+e3nn = ">=0.5,<0.7"
 opt_einsum_fx = "*"
 
 [feature.model-definition.pypi-dependencies]
@@ -114,8 +115,8 @@ pytest-randomly = "*"
 pytest-timeout = "*"
 
 [feature.lint.dependencies]
-mypy = ">=2"
 pre-commit = "*"
+pyrefly = ">=1,<2"
 
 [feature.lint.pypi-dependencies]
 pandas-stubs = "*"
@@ -125,6 +126,12 @@ types-PyYAML = "*"
 
 [feature.profiling.target.linux-64.dependencies]
 memray = "*"
+
+[feature.dev-tools]
+platforms = ["linux-64", "linux-64-cuda12"]
+
+[feature.dev-tools.dependencies]
+pip = "*"
 py-spy = "*"
 
 [feature.benchmark.dependencies]
@@ -162,7 +169,7 @@ ninja = "*"
 nlohmann_json = ">=3.9"
 
 [feature.fortran]
-platforms = ["linux-64"]
+platforms = ["linux-64", "linux-64-cuda12"]
 
 [feature.fortran.dependencies]
 fortran-compiler = "*"
@@ -208,7 +215,8 @@ libmagma-devel = ">=2.10,<2.11"
 
 [environments]
 default = { features = ["python-runtime", "model-definition", "gauxc-python", "component-sources", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-213-cpu", "test", "lint", "profiling", "benchmark"], no-default-feature = true, platforms = ["linux-64", "linux-aarch64", "osx-arm64"] }
-lint = { features = ["python-runtime", "model-definition", "gauxc-python", "component-sources", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-213-cpu", "test", "lint", "profiling", "benchmark"], no-default-feature = true, platforms = ["linux-64"] }
+dev = { features = ["python-runtime", "model-definition", "gauxc-python", "component-sources", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-213-cpu", "test", "lint", "profiling", "benchmark", "docs", "release", "native-toolchain", "fortran", "gauxc-core", "gauxc-cpu", "hdf5-serial", "dev-tools"], no-default-feature = true, platforms = ["linux-64"] }
+dev-gpu = { features = ["python-runtime", "model-definition", "gauxc-python", "component-sources", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-213-gpu", "cuda-12", "test", "lint", "profiling", "benchmark", "docs", "release", "native-toolchain", "fortran", "gauxc-core", "gauxc-cuda12", "hdf5-serial", "dev-tools"], no-default-feature = true, platforms = ["linux-64-cuda12"] }
 test-py311-pyscf214-torch213 = { features = ["python-runtime", "model-assets", "python-311", "pyscf-214", "dispersion", "torch-213-cpu", "test"], no-default-feature = true, platforms = ["linux-64"] }
 test-py312-pyscf214-torch212 = { features = ["python-runtime", "component-sources", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-212-cpu", "test", "profiling", "benchmark"], no-default-feature = true, platforms = ["linux-64", "linux-aarch64", "osx-arm64"] }
 test-py312-pyscf214-torch213 = { features = ["python-runtime", "component-sources", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-213-cpu", "test", "profiling", "benchmark"], no-default-feature = true, platforms = ["linux-64", "linux-aarch64", "osx-arm64"] }
