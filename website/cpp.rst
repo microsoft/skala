@@ -158,8 +158,6 @@ The output for the H2 molecule with the def2-QZVP basis set should look like thi
    |dExc/d(grid_weights)| = 9.72895
    |dExc/d(coarse_0_atomic_coords)| = 0.00108825
 
-The exchange-correlation energy matches the one obtained with the :doc:`Fortran example <ftorch>`.
-
 .. note::
 
    You are expected to add the D3 dispersion correction (using B3LYP settings) to the final energy of Skala.
