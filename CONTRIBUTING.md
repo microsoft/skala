@@ -32,12 +32,14 @@ OMP_NUM_THREADS=4 pixi run -e dev pytest -v --doctest-modules \
 OMP_NUM_THREADS=4 pixi run -e dev pytest -v model/tests/test_model.py \
 	model/tests/test_utils.py gauxc/tests/ benchmark/tests/
 pixi run -e dev pre-commit run --all-files
-pixi run -e dev sphinx-build -b html website website/_build/html
-pixi run -e dev sphinx-build -b html gauxc/docs website/_build/html/gauxc
-touch website/_build/html/.nojekyll
 ```
 
 Set `OMP_NUM_THREADS=4` when running tests locally to match CI.
+
+Build the documentation (main site plus GauXC guide) into `website/_build/html`:
+`pixi run -e docs bash -c 'sphinx-build -b html website website/_build/html && sphinx-build -b html gauxc/docs website/_build/html/gauxc'`.
+It is published to [microsoft.github.io/skala](https://microsoft.github.io/skala) by the
+[Docs workflow](.github/workflows/docs.yml) on every push to `main` (or by running it manually).
 
 The `dev` environment includes all CPU development, documentation, profiling, packaging,
 and native integration dependencies. Use `dev-gpu` for the equivalent CUDA 12 toolchain.

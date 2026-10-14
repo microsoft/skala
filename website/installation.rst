@@ -14,11 +14,9 @@ To install *skala*, you can use pip:
 
    pip install skala
 
-This will install the *skala* packages and all its dependencies, including
+This will install the *skala* package and all its dependencies, including
 
-* `torch <https://pytorch.org>`__,
-  `e3nn <https://e3nn.org>`__, and
-  `opt_einsum_fx <https://opt-einsum-fx.readthedocs.io>`__
+* `torch <https://pytorch.org>`__
   for running the exchange-correlation model
 * `pyscf <https://pyscf.org>`__
   for running the self-consistent field (SCF) calculations and evaluating the density features
@@ -42,7 +40,7 @@ Reproducible source environments
 Skala uses `Pixi <https://pixi.sh>`__ for source dependency management. The
 repository contains one ``pixi.toml`` and one committed ``pixi.lock`` covering
 all supported Python, PySCF, PyTorch, CUDA, documentation, release, and native
-build environments. Install Pixi 0.75, then clone the repository and install the
+build environments. Install Pixi 0.81, then clone the repository and install the
 default CPU environment:
 
 .. code-block:: bash

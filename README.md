@@ -24,7 +24,7 @@ This repository contains five components:
 5. [`website/`](website) contains the main Sphinx site.
 
 Compiled-code examples include:
-    - [Skala in C++ with libtorch](https://microsoft.github.io/skala/cpp)
+   - [Skala in C++ with libtorch](https://microsoft.github.io/skala/cpp)
    - [Skala in Fortran with FTorch](https://microsoft.github.io/skala/ftorch)
    - [Skala in C++ with GauXC](https://microsoft.github.io/skala/gauxc/cpp-library)
    - [Skala in C with GauXC](https://microsoft.github.io/skala/gauxc/c-library)

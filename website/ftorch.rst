@@ -4,6 +4,12 @@ Using Skala in Fortran with FTorch
 This page provides an example of how to use Skala in Fortran with the FTorch library.
 The example demonstrates how to load a Skala model, prepare input features, compute the exchange-correlation energy and potential, and access the results.
 
+.. note::
+
+   This example evaluates the Skala model on precomputed density features and is meant as a starting point for calling the model from your own code.
+   To add Skala to an existing electronic structure code, where the integration grid, the density features, and the exchange-correlation potential have to be computed from a density matrix, use `GauXC <https://microsoft.github.io/skala/gauxc/>`__ instead, which also provides Fortran bindings.
+   A :doc:`C++ version <cpp>` of this example is also available.
+
 
 Setting up development environment
 ----------------------------------
@@ -17,7 +23,7 @@ From the repository root, activate the environment:
    pixi shell --locked -e ftorch
 
 All following commands are executed in this shell from the repository root.
-Configure and build the example with:
+Configure, build, and install the example with:
 
 .. code-block:: bash
 
@@ -68,16 +74,19 @@ We will use the following directory structure and files:
 
 .. code-block:: text
 
-   skala/
-   ├── CMakeLists.txt
-   ├── app/
-   │   └── main.f90
-   ├── cmake/
-   │   ├── skala-dep-versions.cmake
-   │   └── skala-ftorch.cmake
-   └── src/
-       ├── skala_ftorch.cxx
-       └── skala_ftorch.f90
+   model/examples/
+   ├── prepare_inputs.py
+   └── fortran/
+       └── ftorch_integration/
+           ├── CMakeLists.txt
+           ├── app/
+           │   └── main.f90
+           ├── cmake/
+           │   ├── skala-dep-versions.cmake
+           │   └── skala-ftorch.cmake
+           └── src/
+               ├── skala_ftorch.cxx
+               └── skala_ftorch.f90
 
 For the main ``CMakeLists.txt`` file, we will set up the project and include the necessary CMake modules for Skala and FTorch:
 

@@ -7,6 +7,9 @@ on:
       - '.github/workflows/docs.yml'
       - '.github/actions/setup-pixi/**'
       - 'benchmark/pyproject.toml'
+      - 'gauxc/docs/**'
+      - 'gauxc/examples/**'
+      - 'model/examples/**'
       - 'pixi.lock'
       - 'pixi.toml'
       - 'pyproject.toml'
@@ -46,6 +49,7 @@ jobs:
       - name: Build documentation
         run: |
           sphinx-build -b html website website/_build/html
+          sphinx-build -b html gauxc/docs website/_build/html/gauxc
           touch website/_build/html/.nojekyll
 
       - name: Check external links
