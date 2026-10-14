@@ -62,12 +62,11 @@ When editing code:
 ## Documentation
 
 - Engine: Sphinx with myst-nb (executes notebooks during build).
-- Build locally:
+- Build locally (main site plus GauXC guide into `website/_build/html`):
   ```bash
-  pixi run -e docs sphinx-build -b html website website/_build/html
-  pixi run -e docs sphinx-build -b html gauxc/docs website/_build/html/gauxc
-  touch website/_build/html/.nojekyll
+  pixi run docs
   ```
+- Check external links with `pixi run docs-linkcheck`.
 - Notebooks in `website/` should be executable with a 5-minute timeout.
 - Use reStructuredText for standalone pages; Jupyter notebooks for tutorials.
 
@@ -100,7 +99,7 @@ When editing code:
 | Lint code | `pixi run -e dev pre-commit run --all-files` |
 | Run runtime tests | `OMP_NUM_THREADS=4 pixi run -e dev pytest -v --doctest-modules --cov=skala --cov-report=xml --cov-report=term-missing --cov-report=html --durations=50 --durations-min=1.0 skala/src/skala/ skala/tests/` |
 | Run component tests | `OMP_NUM_THREADS=4 pixi run -e dev pytest -v model/tests/test_model.py model/tests/test_utils.py gauxc/tests/ benchmark/tests/` |
-| Build docs | `pixi run -e docs sphinx-build -b html website website/_build/html && pixi run -e docs sphinx-build -b html gauxc/docs website/_build/html/gauxc && touch website/_build/html/.nojekyll` |
+| Build docs | `pixi run docs` |
 | Type check | `pixi run -e dev pyrefly check` |
 
 ## Contact

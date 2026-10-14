@@ -25,6 +25,8 @@ The Skala model
    Released checkpoints are distributed as TorchScript files (``.fun``) on `Hugging Face <https://huggingface.co/microsoft/skala-1.1>`__ and documented in the :doc:`model cards <model-card/index>`.
    A checkpoint takes density features on an integration grid (density, density gradient, kinetic energy density, grid coordinates and weights, and atomic coordinates) and returns the exchange-correlation energy density on that grid.
    Because the checkpoints are TorchScript files, they can be evaluated from Python as well as from compiled languages through LibTorch.
+   To understand the architecture behind the checkpoints better we also provide the `model source on GitHub <https://github.com/microsoft/skala/tree/main/model>`__, while this is not the actual trained model, it should help further the understanding of what happens in the traced models.
+   See the `model README <https://github.com/microsoft/skala/blob/main/model/README.md>`__ for details.
 
 The ``skala`` Python package
    The published package on `PyPI <https://pypi.org/project/skala/>`__ loads the released checkpoints and adds Skala to `PySCF <https://pyscf.org>`__ as an add-on.
@@ -57,39 +59,12 @@ Refer to their documentation for installation and input options.
    See the `exchange-correlation section of the FHI-aims manual <https://fhi-aims.org/uploads/manual/Ch3/S3.html#skala_model_path>`__.
 
 
-Where to start
---------------
-
-.. list-table::
-   :header-rows: 1
-   :widths: 45 55
-
-   * - I want to …
-     - Start with
-   * - run DFT calculations with Skala from Python
-     - :doc:`installation`, then :doc:`pyscf/singlepoint`, :doc:`pyscf/gpu4pyscf`, or :doc:`ase`
-   * - use Skala in CP2K or FHI-aims
-     - the documentation of these codes, see `Skala in electronic structure packages`_
-   * - add Skala to an existing electronic structure code
-     - `GauXC <https://microsoft.github.io/skala/gauxc/>`__ with its C++, C, or Fortran bindings
-   * - evaluate the Skala model from my own C++ or Fortran code
-     - :doc:`cpp` or :doc:`ftorch`
-   * - know what performance to expect
-     - :doc:`benchmarks`
-
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Getting started
-   :hidden:
-
-   Installation <installation>
-
 .. toctree::
    :maxdepth: 1
    :caption: Python package
    :hidden:
 
+   Installation <installation>
    PySCF single-point calculations <pyscf/singlepoint>
    GPU4PySCF <pyscf/gpu4pyscf>
    SCF settings <pyscf/scf_settings>
@@ -106,11 +81,11 @@ Where to start
 
 .. toctree::
    :maxdepth: 1
-   :caption: Skala in other codes
+   :caption: Skala in electronic structure packages
    :hidden:
 
    CP2K <https://manual.cp2k.org/trunk/methods/dft/gauxc.html>
-   FHI-aims <https://fhi-aims.org/uploads/manual/Ch3/S3.html#skala_model_path>
+   FHI-aims <https://fhi-aims.org/uploads/manual/Ch3/S3.html>
 
 .. toctree::
    :maxdepth: 1
