@@ -24,6 +24,7 @@ The model is trained on a large dataset of highly accurate total atomization ene
    GPU4PySCF <pyscf/gpu4pyscf>
    SCF settings <pyscf/scf_settings>
    ASE <ase>
+   C++ (LibTorch) <cpp>
    Fortran (FTorch) <ftorch>
    GauXC <https://microsoft.github.io/skala/gauxc/>
    Performance & scaling <benchmarks>

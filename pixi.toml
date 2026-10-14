@@ -227,10 +227,10 @@ gpu-cuda13-torch213 = { features = ["python-runtime", "model-definition", "compo
 docs = { features = ["python-runtime", "component-sources", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-213-cpu", "benchmark", "docs"], no-default-feature = true, platforms = ["linux-64"] }
 assets = { features = ["python-312", "model-assets"], no-default-feature = true, platforms = ["linux-64"] }
 release = { features = ["python-312", "release"], no-default-feature = true, platforms = ["linux-64"] }
-cpp-integration = { features = ["python-runtime", "model-definition", "component-sources", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-213-cpu", "native-toolchain"], no-default-feature = true, platforms = ["linux-64"] }
+cpp-integration = { features = ["python-runtime", "model-definition", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-213-cpu", "native-toolchain"], no-default-feature = true, platforms = ["linux-64"] }
 gauxc-openmp = { features = ["python-312", "torch-213-cpu", "native-toolchain", "gauxc-core", "gauxc-cpu", "hdf5-serial"], no-default-feature = true, platforms = ["linux-64"] }
 gauxc-openmp-fortran = { features = ["python-312", "torch-213-cpu", "native-toolchain", "fortran", "gauxc-core", "gauxc-cpu", "hdf5-serial"], no-default-feature = true, platforms = ["linux-64"] }
 gauxc-mpi = { features = ["python-312", "torch-213-cpu", "native-toolchain", "gauxc-core", "gauxc-cpu", "mpi"], no-default-feature = true, platforms = ["linux-64"] }
 gauxc-mpi-fortran = { features = ["python-312", "torch-213-cpu", "native-toolchain", "fortran", "gauxc-core", "gauxc-cpu", "mpi"], no-default-feature = true, platforms = ["linux-64"] }
 gauxc-cuda12 = { features = ["python-312", "torch-213-gpu", "native-toolchain", "gauxc-core", "gauxc-cuda12", "hdf5-serial"], no-default-feature = true, platforms = ["linux-64-cuda12"] }
-ftorch = { features = ["python-312", "model-assets", "torch-213-cpu", "native-toolchain", "fortran"], no-default-feature = true, platforms = ["linux-64"] }
+ftorch = { features = ["python-runtime", "model-definition", "model-assets", "python-312", "pyscf-214", "dispersion", "torch-213-cpu", "native-toolchain", "fortran"], no-default-feature = true, platforms = ["linux-64"] }
