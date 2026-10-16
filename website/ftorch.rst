@@ -4,35 +4,67 @@ Using Skala in Fortran with FTorch
 This page provides an example of how to use Skala in Fortran with the FTorch library.
 The example demonstrates how to load a Skala model, prepare input features, compute the exchange-correlation energy and potential, and access the results.
 
+.. note::
+
+   This example evaluates the Skala model on precomputed density features and is meant as a starting point for calling the model from your own code.
+   To add Skala to an existing electronic structure code, where the integration grid, the density features, and the exchange-correlation potential have to be computed from a density matrix, use `GauXC <https://microsoft.github.io/skala/gauxc/>`__ instead, which also provides Fortran bindings.
+   A :doc:`C++ version <cpp>` of this example is also available.
+
 
 Setting up development environment
 ----------------------------------
 
-The repository's locked ``ftorch`` Pixi environment provides Python 3.12,
-LibTorch, CMake, Ninja, and the C, C++, and Fortran toolchains. Install it from
-the repository root:
+The repository's locked ``ftorch`` Pixi environment provides everything needed for this example:
+LibTorch, CMake, Ninja, and the C, C++, and Fortran toolchains, the ``hf`` CLI to download the model checkpoint, and the ``skala`` runtime with PySCF to generate the input features.
+From the repository root, activate the environment:
 
 .. code-block:: bash
 
-   pixi install --locked -e ftorch
+   pixi shell --locked -e ftorch
 
+All following commands are executed in this shell from the repository root.
 Configure, build, and install the example with:
 
 .. code-block:: bash
 
-   pixi run -e ftorch bash -c \
-     'cmake -B build_example -S model/examples/fortran/ftorch_integration -G Ninja \
-       -DCMAKE_INSTALL_PREFIX="$CONDA_PREFIX"'
-   pixi run -e ftorch cmake --build build_example
-   pixi run -e ftorch ctest --test-dir build_example --output-on-failure
-   pixi run -e ftorch cmake --install build_example
+   cmake -B build_example -S model/examples/fortran/ftorch_integration -G Ninja \
+     -DCMAKE_INSTALL_PREFIX="$CONDA_PREFIX"
+   cmake --build build_example
+   ctest --test-dir build_example --output-on-failure
+   cmake --install build_example
 
-After downloading the checkpoint and generating the input features, run the
-installed example directly:
+
+Preparing the model and input features
+--------------------------------------
+
+To evaluate Skala, we download the model checkpoint from HuggingFace using the ``hf`` CLI from the ``huggingface_hub`` package:
 
 .. code-block:: bash
 
-   pixi run -e ftorch Skala ./skala-1.1-rev1.fun ./features
+   hf download microsoft/skala-1.1 skala-1.1-rev1.fun --local-dir .
+
+The example reads the input features from torch ``.pt`` files, one file per feature.
+They are generated for the H2 molecule with the def2-QZVP basis set by the ``model/examples/prepare_inputs.py`` script:
+
+.. code-block:: bash
+
+   python model/examples/prepare_inputs.py --output-dir features
+
+.. dropdown:: Feature preparation script
+
+   .. literalinclude:: ../model/examples/prepare_inputs.py
+      :language: python
+      :caption: model/examples/prepare_inputs.py
+
+.. tip::
+
+   Here we load the features directly from torch ``.pt`` files, in your application you may want to create them directly from Fortran arrays as supported in FTorch.
+
+With the checkpoint and the features in place, run the example:
+
+.. code-block:: bash
+
+   Skala ./skala-1.1-rev1.fun ./features
 
 Model trust and loading errors
 -----------------------------
@@ -68,16 +100,19 @@ We will use the following directory structure and files:
 
 .. code-block:: text
 
-   skala/
-   ├── CMakeLists.txt
-   ├── app/
-   │   └── main.f90
-   ├── cmake/
-   │   ├── skala-dep-versions.cmake
-   │   └── skala-ftorch.cmake
-   └── src/
-       ├── skala_ftorch.cxx
-       └── skala_ftorch.f90
+   model/examples/
+   ├── prepare_inputs.py
+   └── fortran/
+       └── ftorch_integration/
+           ├── CMakeLists.txt
+           ├── app/
+           │   └── main.f90
+           ├── cmake/
+           │   ├── skala-dep-versions.cmake
+           │   └── skala-ftorch.cmake
+           └── src/
+               ├── skala_ftorch.cxx
+               └── skala_ftorch.f90
 
 For the main ``CMakeLists.txt`` file, we will set up the project and include the necessary CMake modules for Skala and FTorch:
 
@@ -157,18 +192,6 @@ The input to the Skala model is passed via a dictionary of tensors, which we pre
    :caption: app/main.f90
    :lines: 37-71
 
-.. note::
-
-   To export the features from Python, you can use the provided ``prepare_inputs.py`` script.
-
-   .. literalinclude:: ../model/examples/cpp/cpp_integration/prepare_inputs.py
-      :language: python
-      :caption: prepare_inputs.py
-
-.. tip::
-
-   Here we load the features directly from torch ``.pt`` files, in your application you may want to create them directly from Fortran arrays as supported in FTorch.
-
 To place the features in the correct format for Skala, we add them to the input dictionary with the appropriate keys.
 
 .. literalinclude:: ../model/examples/fortran/ftorch_integration/app/main.f90
@@ -208,40 +231,18 @@ To get the exchange-correlation energy, we need to weight the exc values by the 
    The used FTorch version 1.0.0 does not yet support the ``torch_tensor_sum`` operation, therefore we provide an implementation ourselves.
    Future versions of FTorch might cover more features which are provided by the FTorch extensions in the ``src/`` directory, so be sure to check the documentation for the latest updates.
 
-Now we can build our application using CMake:
+Now we can build and install our application:
 
 .. code-block:: bash
 
-   cmake -B build -S . -GNinja
-   cmake --build build
+   cmake --build build_example
+   cmake --install build_example
 
-To evaluate Skala, we download the model checkpoint from HuggingFace using the ``hf`` CLI from the ``huggingface_hub`` package:
-
-.. code-block:: shell
-
-   hf download microsoft/skala-1.1 skala-1.1-rev1.fun --local-dir .
-
-.. note::
-
-   To create the features directory run the ``prepare_inputs.py`` script from the
-   ``model/examples/cpp/cpp_integration/`` directory.
-   This will generate the necessary input features for the H2 molecule with the def2-QZVP basis set.
-
-   .. code-block:: bash
-
-      python prepare_inputs.py --output-dir features --basis def2-QZVP
-
-   The script needs the ``skala`` package installed in your Python environment, which can be done via pip:
-
-   .. code-block:: bash
-
-      pip install skala
-
-And run the application, passing the path to the Skala model and the feature directory as command line arguments.
+And run it, passing the path to the Skala model and the feature directory as command line arguments:
 
 .. code-block:: bash
 
-   ./build/Skala skala-1.1-rev1.fun features
+   Skala ./skala-1.1-rev1.fun ./features
 
 The output for the H2 molecule with the def2-QZVP basis set should look like this:
 
@@ -285,17 +286,18 @@ Or by converting them to Fortran arrays and using the built-in array operations.
    :caption: app/main.f90
    :lines: 162-225
 
-We rebuild the application to include the latest changes:
+We rebuild and reinstall the application to include the latest changes:
 
 .. code-block:: bash
 
-   cmake --build build
+   cmake --build build_example
+   cmake --install build_example
 
 Finally, we can run the application again to see the updated output with the computed potential values.
 
 .. code-block:: bash
 
-   ./build/Skala skala-1.1-rev1.fun features
+   Skala ./skala-1.1-rev1.fun ./features
 
 In the output we can see the computed exchange-correlation energy as well as the mean values of the potential components, and the raw tensor data for each component.
 
@@ -345,6 +347,10 @@ In the output we can see the computed exchange-correlation energy as well as the
     -> dexc/d_coarse_0_atomic_coords: shape = (3, 2)
         [[ -1.68408204319782E-11 -9.23455002109453E-12  7.69511908655255E-04]
          [  ...]]
+
+.. note::
+
+   You are expected to add the D3(BJ) dispersion correction (using B3LYP damping parameters) to the final energy of Skala.
 
 Summary
 -------
