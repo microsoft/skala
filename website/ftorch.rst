@@ -350,7 +350,7 @@ In the output we can see the computed exchange-correlation energy as well as the
 
 .. note::
 
-   You are expected to add the D3 dispersion correction (using B3LYP settings) to the final energy of Skala.
+   You are expected to add the D3(BJ) dispersion correction (using B3LYP damping parameters) to the final energy of Skala.
 
 Summary
 -------
