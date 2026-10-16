@@ -44,7 +44,7 @@ To evaluate Skala, we download the model checkpoint from HuggingFace using the `
    hf download microsoft/skala-1.1 skala-1.1-rev1.fun --local-dir .
 
 The example reads the input features from torch ``.pt`` files, one file per feature.
-They are generated for the H2 molecule with the def2-QZVP basis set by the ``model/examples/prepare_inputs.py`` script, which is shared by the :doc:`C++ <cpp>` and Fortran examples:
+They are generated for the H2 molecule with the def2-QZVP basis set by the ``model/examples/prepare_inputs.py`` script:
 
 .. code-block:: bash
 
