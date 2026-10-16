@@ -16,7 +16,7 @@ from pathlib import Path
 import torch
 from huggingface_hub import hf_hub_download
 
-from skala.functional._hashes import KNOWN_HASHES
+from skala.functional._hashes import KNOWN_HASHES, KNOWN_REVISIONS
 from skala.functional.base import ExcFunctionalBase
 from skala.functional.load import TracedFunctional
 from skala.functional.traditional import (
@@ -113,10 +113,15 @@ def resolve_functional_artifact(
     repo_id = f"microsoft/{func_name.partition('-rev')[0]}"
     cpu_file, cuda_file = _SKALA_VERSIONS[func_name]
     filename = cpu_file if device_type == "cpu" else cuda_file
-    path = hf_hub_download(repo_id=repo_id, filename=filename)
+    expected_hash = KNOWN_HASHES[(repo_id, filename)]
+    path = hf_hub_download(
+        repo_id=repo_id,
+        filename=filename,
+        revision=KNOWN_REVISIONS[repo_id],
+    )
     return FunctionalArtifact(
         Path(path),
-        KNOWN_HASHES.get((repo_id, filename)),
+        expected_hash,
     )
 
 

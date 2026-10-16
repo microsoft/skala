@@ -183,6 +183,7 @@ platforms = ["linux-64", "linux-64-cuda12"]
 
 [feature.fortran.dependencies]
 fortran-compiler = "*"
+openssl = ">=3"
 
 [feature.hdf5-serial]
 platforms = ["linux-64", "linux-64-cuda12"]

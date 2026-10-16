@@ -30,6 +30,7 @@ Configure, build, and install the example with:
    cmake -B build_example -S model/examples/fortran/ftorch_integration -G Ninja \
      -DCMAKE_INSTALL_PREFIX="$CONDA_PREFIX"
    cmake --build build_example
+   ctest --test-dir build_example --output-on-failure
    cmake --install build_example
 
 
@@ -64,6 +65,31 @@ With the checkpoint and the features in place, run the example:
 .. code-block:: bash
 
    Skala ./skala-1.1-rev1.fun ./features
+
+Model trust and loading errors
+-----------------------------
+
+The example accepts only the SHA-256-pinned ``skala-1.1-rev1.fun`` checkpoint.
+The native loader hashes the file before deserializing it and loads the same
+verified bytes. OpenSSL's Crypto library is required and is included in the
+locked environment. To use a different model, obtain its digest through a trusted
+channel and explicitly update the application; do not trust a digest supplied
+alongside an untrusted download.
+
+The Fortran API requires ``expected_sha256`` as its third argument:
+
+.. code-block:: fortran
+
+   call skala_model_load(model, path, expected_sha256, status=status)
+   if (status /= 0) then
+     ! Handle the failure without using model.
+   end if
+
+Loading and metadata errors are logged by the native wrapper and return a null
+handle rather than allowing C++ exceptions across the C boundary. With the
+optional ``status`` argument, failure returns a nonzero status; without it,
+the Fortran wrapper terminates explicitly with ``error stop``.
+Only load feature tensor files from trusted sources as well.
 
 
 Build system setup
@@ -150,28 +176,28 @@ We define a small contained helper procedure to read the command line arguments:
 .. literalinclude:: ../model/examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
-   :lines: 227-248
+   :lines: 228-249
 
 The main types provided by the Skala bindings are the ``skala_model`` type, which extends the ``torch_model`` provided by FTorch and has a custom ``skala_model_load`` procedure for loading the Skala model and its meta data.
 
 .. literalinclude:: ../model/examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
-   :lines: 32-34
+   :lines: 32-35
 
 The input to the Skala model is passed via a dictionary of tensors, which we prepare by loading the necessary features from disk and converting them to the appropriate format.
 
 .. literalinclude:: ../model/examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
-   :lines: 36-70
+   :lines: 37-71
 
 To place the features in the correct format for Skala, we add them to the input dictionary with the appropriate keys.
 
 .. literalinclude:: ../model/examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
-   :lines: 72-92
+   :lines: 73-93
 
 .. note::
 
@@ -191,14 +217,14 @@ With this we can now compute the exchange-correlation energy and potential by ca
 .. literalinclude:: ../model/examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
-   :lines: 94-96
+   :lines: 95-97
 
 To get the exchange-correlation energy, we need to weight the exc values by the grid weights and sum over the grid points, which we can do using the provided tensor operations.
 
 .. literalinclude:: ../model/examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
-   :lines: 98-105
+   :lines: 99-106
 
 .. note::
 

@@ -20,7 +20,7 @@ import pytest
 import skala.functional as functional_module
 import torch
 from skala.functional import FunctionalArtifact, resolve_functional_artifact
-from skala.functional._hashes import KNOWN_HASHES
+from skala.functional._hashes import KNOWN_HASHES, KNOWN_REVISIONS
 from skala.functional.load import TracedFunctional
 
 _SCRIPT_PATH = (
@@ -44,10 +44,10 @@ def test_resolve_functional_artifact_uses_device_model(
 ) -> None:
     """Resolve the device-specific file once without exposing private tables."""
     resolved_path = tmp_path / "skala.fun"
-    calls: list[tuple[str, str]] = []
+    calls: list[tuple[str, str, str]] = []
 
-    def fake_hf_hub_download(*, repo_id: str, filename: str) -> str:
-        calls.append((repo_id, filename))
+    def fake_hf_hub_download(*, repo_id: str, filename: str, revision: str) -> str:
+        calls.append((repo_id, filename, revision))
         return str(resolved_path)
 
     monkeypatch.delenv("SKALA_LOCAL_MODEL_PATH", raising=False)
@@ -74,7 +74,13 @@ def test_resolve_functional_artifact_uses_device_model(
     )
     assert artifact.load(torch.device("cuda")) is loaded_functional
     assert artifact.load(torch.device("cuda")) is loaded_functional
-    assert calls == [("microsoft/skala-1.1", "skala-1.1-rev1-cuda.fun")]
+    assert calls == [
+        (
+            "microsoft/skala-1.1",
+            "skala-1.1-rev1-cuda.fun",
+            KNOWN_REVISIONS["microsoft/skala-1.1"],
+        )
+    ]
     assert load_calls == [
         (resolved_path, torch.device("cuda"), artifact.expected_hash),
         (resolved_path, torch.device("cuda"), artifact.expected_hash),
@@ -105,16 +111,57 @@ def test_download_script_runs(
 
 
 @pytest.mark.parametrize("repo_id, filename", _PUBLISHED_FUNCTIONALS)
+def test_download_script_rejects_tampered_model(
+    script_module: ModuleType,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    repo_id: str,
+    filename: str,
+) -> None:
+    """A hash mismatch fails before deserialization or publishing the output."""
+    downloaded = tmp_path / "downloaded.fun"
+    downloaded.write_bytes(b"tampered model")
+    output = tmp_path / "output.fun"
+    output.write_bytes(b"existing verified model")
+
+    def fake_download(*, repo_id: str, filename: str, revision: str) -> str:
+        assert revision == KNOWN_REVISIONS[repo_id]
+        return str(downloaded)
+
+    monkeypatch.setattr(script_module, "hf_hub_download", fake_download)
+    with pytest.raises(ValueError, match="Hash mismatch"):
+        script_module.download_model(repo_id, filename, str(output))
+    assert output.read_bytes() == b"existing verified model"
+
+
+def test_download_script_requires_integrity_metadata(
+    script_module: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Missing metadata must fail before any network or model loading."""
+    repo_id, filename = _PUBLISHED_FUNCTIONALS[1]
+    monkeypatch.delitem(KNOWN_HASHES, (repo_id, filename))
+
+    def unexpected_download(**kwargs: str) -> str:
+        pytest.fail("Missing integrity metadata must prevent downloading")
+
+    monkeypatch.setattr(script_module, "hf_hub_download", unexpected_download)
+    with pytest.raises(KeyError):
+        script_module.download_model(repo_id, filename, str(tmp_path / "model.fun"))
+
+
+@pytest.mark.parametrize("repo_id, filename", _PUBLISHED_FUNCTIONALS)
 def test_all_expected_features_are_documented(
     script_module: ModuleType, repo_id: str, filename: str
 ) -> None:
     """Every feature a published functional requests must be documented."""
     from huggingface_hub import hf_hub_download
 
-    path = hf_hub_download(repo_id=repo_id, filename=filename)
-    fun = TracedFunctional.load(
-        path, expected_hash=KNOWN_HASHES.get((repo_id, filename))
+    path = hf_hub_download(
+        repo_id=repo_id,
+        filename=filename,
+        revision=KNOWN_REVISIONS[repo_id],
     )
+    fun = TracedFunctional.load(path, expected_hash=KNOWN_HASHES[(repo_id, filename)])
 
     for feature in fun.features:
         assert feature in script_module.feature_shapes, (

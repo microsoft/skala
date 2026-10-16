@@ -8,6 +8,13 @@ These hashes are used to verify file integrity before loading with
 security-sensitive.
 """
 
+# Maps repo_id -> immutable Hugging Face commit revision.
+KNOWN_REVISIONS: dict[str, str] = {
+    "microsoft/skala-1.0": "6a002991259cf046831ed379f75a837ffd1eef82",
+    "microsoft/skala-1.1": "99b5ed87e5f69d9216e1f9e30148b922eaea1241",
+    "microsoft/skala-baselines": "0a0af12a5bbb2e149868215e0003f7f953f776f8",
+}
+
 # Maps (repo_id, filename) -> expected SHA-256 hex digest.
 KNOWN_HASHES: dict[tuple[str, str], str] = {
     ("microsoft/skala-1.0", "skala-1.0.fun"): (
@@ -31,4 +38,8 @@ KNOWN_HASHES: dict[tuple[str, str], str] = {
         "microsoft/skala-1.1",
         "skala-1.1-rev1-cuda.fun",
     ): "f848eae769dca91741a518ae7275d10caac398ab21db649f91bc1f136872f223",
+    (
+        "microsoft/skala-baselines",
+        "ldax.fun",
+    ): "dd30928579ac970ffccc0c6f4ff6e2f7d7eeda3665352229a3f2678b3d0cb32e",
 }

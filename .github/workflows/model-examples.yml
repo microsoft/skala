@@ -36,7 +36,8 @@ jobs:
 
     - name: Download checkpoint
       run: >-
-        hf download microsoft/skala-1.1 skala-1.1-rev1.fun --local-dir .
+        hf download microsoft/skala-1.1 skala-1.1-rev1.fun
+        --revision 99b5ed87e5f69d9216e1f9e30148b922eaea1241 --local-dir .
 
     - name: Upload checkpoint
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -100,6 +101,7 @@ jobs:
         cmake -B build_example -S model/examples/fortran/ftorch_integration -G Ninja \
           -DCMAKE_INSTALL_PREFIX="$CONDA_PREFIX"
         cmake --build build_example
+        ctest --test-dir build_example --output-on-failure
         cmake --install build_example
 
     - name: Generate features

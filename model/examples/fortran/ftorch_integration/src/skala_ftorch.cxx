@@ -1,5 +1,9 @@
 #include <torch/script.h>
 #include <torch/csrc/autograd/autograd.h>
+#include <openssl/evp.h>
+#include <iomanip>
+#include <memory>
+#include <sstream>
 
 typedef void* torch_jit_script_module_t;
 typedef void* torch_tensor_t;
@@ -71,63 +75,95 @@ skala_tensor_item_double(const torch_tensor_t tensor)
 extern "C"
 torch_jit_script_module_t
 skala_model_load(const char *filename,
+                 const char *expected_sha256,
                  const bool requires_grad,
-                 SkalaFeature* features) {
-  torch::AutoGradMode enable_grad(requires_grad);
-  torch::jit::ExtraFilesMap extra_files{{"features", ""}, {"protocol_version", ""}};
-  torch::jit::script::Module *module = nullptr;
+                 SkalaFeature* features) noexcept {
   try {
-    module = new torch::jit::script::Module;
-    *module =
-        torch::jit::load(filename, torch::Device(torch::kCPU), extra_files);
+    if (filename == nullptr || expected_sha256 == nullptr ||
+        std::string(expected_sha256).size() != 64 ||
+        std::string(expected_sha256).find_first_not_of("0123456789abcdef") != std::string::npos) {
+      throw std::runtime_error("A trusted lowercase SHA-256 digest is required");
+    }
+    std::ifstream input(filename, std::ios::binary);
+    if (!input.is_open()) {
+      throw std::runtime_error("Failed to open model file");
+    }
+    std::ostringstream buffer;
+    buffer << input.rdbuf();
+    if (input.bad() || buffer.fail()) {
+      throw std::runtime_error("Failed to read model file");
+    }
+    const auto bytes = buffer.str();
+    unsigned char digest[EVP_MAX_MD_SIZE];
+    unsigned int digest_size = 0;
+    if (EVP_Digest(bytes.data(), bytes.size(), digest, &digest_size, EVP_sha256(), nullptr) != 1) {
+      throw std::runtime_error("SHA-256 computation failed");
+    }
+    std::ostringstream actual_hash;
+    for (unsigned int i = 0; i < digest_size; ++i) {
+      actual_hash << std::hex << std::setw(2) << std::setfill('0')
+                  << static_cast<unsigned int>(digest[i]);
+    }
+    if (actual_hash.str() != expected_sha256) {
+      throw std::runtime_error("SHA-256 mismatch for model file; refusing to deserialize");
+    }
+    // Deserialize the exact bytes that were verified, not a reopened path.
+    std::istringstream verified_input(bytes);
+    torch::AutoGradMode enable_grad(requires_grad);
+    torch::jit::ExtraFilesMap extra_files{{"features", ""}, {"protocol_version", ""}};
+    auto module = std::make_unique<torch::jit::script::Module>(
+        torch::jit::load(verified_input, torch::Device(torch::kCPU), extra_files));
+
+    if (extra_files.at("protocol_version") != "2") {
+      throw std::runtime_error("Unsupported protocol version " + extra_files.at("protocol_version"));
+    }
+
+    auto feature_str = extra_files.at("features");
+    // formatted as ["feature1", "feature2", ...] parse without using a full json library
+    std::unordered_map<std::string, SkalaFeature> feature_keys;
+    size_t pos = 0;
+    while ((pos = feature_str.find('"', pos)) != std::string::npos) {
+      size_t end_pos = feature_str.find('"', pos + 1);
+      if (end_pos == std::string::npos) break;
+      auto feature_key = feature_str.substr(pos + 1, end_pos - pos - 1);
+      if (feature_key == "density") {
+        feature_keys.insert({feature_key, Feature_Density});
+      } else if (feature_key == "grad") {
+        feature_keys.insert({feature_key, Feature_Grad});
+      } else if (feature_key == "kin") {
+        feature_keys.insert({feature_key, Feature_Kin});
+      } else if (feature_key == "grid_coords") {
+        feature_keys.insert({feature_key, Feature_GridCoords});
+      } else if (feature_key == "grid_weights") {
+        feature_keys.insert({feature_key, Feature_GridWeights});
+      } else if (feature_key == "coarse_0_atomic_coords") {
+        feature_keys.insert({feature_key, Feature_Coarse0AtomicCoords});
+      } else if (feature_key == "atomic_grid_weights") {
+        feature_keys.insert({feature_key, Feature_AtomicGridWeights});
+      } else if (feature_key == "atomic_grid_sizes") {
+        feature_keys.insert({feature_key, Feature_AtomicGridSizes});
+      } else if (feature_key == "atomic_grid_size_bound_shape") {
+        feature_keys.insert({feature_key, Feature_AtomicGridSizeBoundShape});
+      }
+      pos = end_pos + 1;
+    }
+
+    if (features != nullptr) {
+      size_t i = 0;
+      for (const auto &[key, value] : feature_keys) {
+        features[i] = value;
+        ++i;
+      }
+    }
+
+    return module.release();
   } catch (const std::exception &e) {
-    ctorch_error(e.what(), [&]() { delete module; });
+    std::cerr << "[ERROR]: Model loading failed: " << e.what() << std::endl;
+    return nullptr;
+  } catch (...) {
+    std::cerr << "[ERROR]: Model loading failed with a non-standard exception" << std::endl;
+    return nullptr;
   }
-
-  if (std::stoi(extra_files.at("protocol_version")) != 2) {
-    std::string message = "Unsupported protocol version " + extra_files.at("protocol_version");
-    ctorch_error(message, [&]() { delete module; });
-  }
-
-  auto feature_str = extra_files.at("features");
-  // formatted as ["feature1", "feature2", ...] parse without using a full json library
-  std::unordered_map<std::string, SkalaFeature> feature_keys;
-  size_t pos = 0;
-  while ((pos = feature_str.find('"', pos)) != std::string::npos) {
-    size_t end_pos = feature_str.find('"', pos + 1);
-    if (end_pos == std::string::npos) break;
-    auto feature_key = feature_str.substr(pos + 1, end_pos - pos - 1);
-    if (feature_key == "density") {
-      feature_keys.insert({feature_key, Feature_Density});
-    } else if (feature_key == "grad") {
-      feature_keys.insert({feature_key, Feature_Grad});
-    } else if (feature_key == "kin") {
-      feature_keys.insert({feature_key, Feature_Kin});
-    } else if (feature_key == "grid_coords") {
-      feature_keys.insert({feature_key, Feature_GridCoords});
-    } else if (feature_key == "grid_weights") {
-      feature_keys.insert({feature_key, Feature_GridWeights});
-    } else if (feature_key == "coarse_0_atomic_coords") {
-      feature_keys.insert({feature_key, Feature_Coarse0AtomicCoords});
-    } else if (feature_key == "atomic_grid_weights") {
-      feature_keys.insert({feature_key, Feature_AtomicGridWeights});
-    } else if (feature_key == "atomic_grid_sizes") {
-      feature_keys.insert({feature_key, Feature_AtomicGridSizes});
-    } else if (feature_key == "atomic_grid_size_bound_shape") {
-      feature_keys.insert({feature_key, Feature_AtomicGridSizeBoundShape});
-    }
-    pos = end_pos + 1;
-  }
-
-  if (features != nullptr) {
-    size_t i = 0;
-    for (const auto &[key, value] : feature_keys) {
-      features[i] = value;
-      ++i;
-    }
-  }
-
-  return module;
 }
 
 static inline

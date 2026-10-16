@@ -1,6 +1,6 @@
 module skala_ftorch
   use iso_c_binding, only : c_ptr, c_char, c_int, c_int64_t, c_size_t, c_bool, &
-    & c_null_ptr, c_null_char, c_double, c_f_pointer
+    & c_null_ptr, c_null_char, c_double, c_f_pointer, c_associated
   use ftorch, only : torch_model, torch_model_delete, torch_tensor
   implicit none
   private
@@ -54,16 +54,19 @@ module skala_ftorch
 
 contains
 
-  subroutine skala_model_load(model, path, requires_grad)
+  subroutine skala_model_load(model, path, expected_sha256, requires_grad, status)
     type(skala_model), intent(out) :: model
     character(len=*), intent(in) :: path
+    character(len=*), intent(in) :: expected_sha256
     logical, intent(in), optional :: requires_grad
+    integer, intent(out), optional :: status
 
     interface
-      function load_skala_model_c(path, requires_grad, features) result(model) &
+      function load_skala_model_c(path, expected_sha256, requires_grad, features) result(model) &
         & bind(c, name="skala_model_load")
         import :: c_ptr, c_char, c_int, c_bool
         character(kind=c_char), intent(in) :: path(*)
+        character(kind=c_char), intent(in) :: expected_sha256(*)
         logical(c_bool), value :: requires_grad
         integer(c_int), intent(out) :: features(*)
         type(c_ptr) :: model
@@ -77,8 +80,14 @@ contains
     if (present(requires_grad)) requires_grad_c = requires_grad
 
     features(:) = 0
-    model%p = load_skala_model_c(to_c_str(path), requires_grad_c, features)
+    if (present(status)) status = 1
+    model%p = load_skala_model_c(to_c_str(path), to_c_str(expected_sha256), requires_grad_c, features)
+    if (.not. c_associated(model%p)) then
+      if (present(status)) return
+      error stop "Skala model loading failed"
+    end if
     model%features = pack(features, features > 0)
+    if (present(status)) status = 0
   end subroutine skala_model_load
 
   subroutine skala_tensor_load(tensor, path)
@@ -315,7 +324,7 @@ contains
   subroutine skala_model_delete(model)
     type(skala_model), intent(inout) :: model
     
-    call torch_model_delete(model%torch_model)
+    if (c_associated(model%p)) call torch_model_delete(model%torch_model)
   end subroutine skala_model_delete
 
   subroutine skala_dict_new(input)

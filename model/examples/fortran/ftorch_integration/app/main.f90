@@ -31,7 +31,8 @@ program main
 
   ! Load the model
   print '(a)', "[1] Loading model from "//path
-  call skala_model_load(model, path)
+  call skala_model_load(model, path, &
+    & "7f3e8622e1eb520ccd88a55464c3e359ac4d7e5ccbd1fb77a26afa1e1c20a5cd")
 
   print '(a)', "[2] Loading features from "//feature_dir
   get_features: block
