@@ -1,3 +1,4 @@
+// docs-start: imports
 #include <torch/script.h>
 #include <torch/csrc/autograd/autograd.h>
 #include <nlohmann/json.hpp>
@@ -9,7 +10,9 @@ using json = nlohmann::json;
 using IValueList = std::vector<c10::IValue>;
 using IValueMap = std::unordered_map<std::string, c10::IValue>;
 using FeatureDict = c10::Dict<std::string, at::Tensor>;
+// docs-end: imports
 
+// docs-start: load-features
 at::Tensor
 load_feature(const std::string &filename, torch::DeviceType device)
 {
@@ -36,7 +39,9 @@ load_features(const std::string &prefix, const std::vector<std::string> &keys, t
   }
   return featmap;
 }
+// docs-end: load-features
 
+// docs-start: load-model
 std::tuple<torch::jit::Method, std::vector<std::string>>
 load_model(const std::string &filename, torch::DeviceType device)
 {
@@ -77,7 +82,9 @@ load_model(const std::string &filename, torch::DeviceType device)
 
   return std::make_tuple(mod.get_method("get_exc_density"), keys);
 }
+// docs-end: load-model
 
+// docs-start: evaluate-energy
 at::Tensor
 get_exc(const torch::jit::Method &exc_func, const FeatureDict &features)
 {
@@ -86,7 +93,9 @@ get_exc(const torch::jit::Method &exc_func, const FeatureDict &features)
   kwargs["mol"] = features;
   return exc_func(args, kwargs).toTensor();
 }
+// docs-end: evaluate-energy
 
+// docs-start: evaluate-gradients
 std::tuple<at::Tensor, c10::Dict<std::string, at::Tensor>>
 get_exc_and_grad(const torch::jit::Method &exc_func, const FeatureDict &features)
 {
@@ -131,7 +140,9 @@ get_exc_and_grad(const torch::jit::Method &exc_func, const FeatureDict &features
 
   return std::make_tuple(exc_on_grid, grad);
 }
+// docs-end: evaluate-gradients
 
+// docs-start: main
 int main(int argc, const char *argv[])
 {
   if (argc != 3)
@@ -165,3 +176,4 @@ int main(int argc, const char *argv[])
 
   return 0;
 }
+// docs-end: main

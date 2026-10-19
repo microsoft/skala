@@ -14,7 +14,7 @@ The example demonstrates how to load a Skala model, prepare input features, comp
 Setting up development environment
 ----------------------------------
 
-The repository's locked ``ftorch`` Pixi environment provides everything needed for this example:
+The repository's locked ``ftorch`` `Pixi <https://pixi.sh>`__ environment provides everything needed for this example:
 LibTorch, CMake, Ninja, and the C, C++, and Fortran toolchains, the ``hf`` CLI to download the model checkpoint, and the ``skala`` runtime with PySCF to generate the input features.
 From the repository root, activate the environment:
 
@@ -67,7 +67,7 @@ With the checkpoint and the features in place, run the example:
    Skala ./skala-1.1-rev1.fun ./features
 
 Model trust and loading errors
------------------------------
+------------------------------
 
 The example accepts only the SHA-256-pinned ``skala-1.1-rev1.fun`` checkpoint.
 The native loader hashes the file before deserializing it and loads the same
@@ -162,42 +162,48 @@ We start the main program with the necessary module imports and variable declara
 .. literalinclude:: ../model/examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
-   :lines: 1-18
+   :start-after: ! docs-start: declarations
+   :end-before: ! docs-end: declarations
 
 First, we obtain the command line arguments for the model path and feature directory, and check that they are provided:
 
 .. literalinclude:: ../model/examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
-   :lines: 20-30
+   :start-after: ! docs-start: command-line
+   :end-before: ! docs-end: command-line
 
 We define a small contained helper procedure to read the command line arguments:
 
 .. literalinclude:: ../model/examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
-   :lines: 228-249
+   :start-after: ! docs-start: get-argument
+   :end-before: ! docs-end: get-argument
 
 The main types provided by the Skala bindings are the ``skala_model`` type, which extends the ``torch_model`` provided by FTorch and has a custom ``skala_model_load`` procedure for loading the Skala model and its meta data.
 
 .. literalinclude:: ../model/examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
-   :lines: 32-35
+   :start-after: ! docs-start: load-model
+   :end-before: ! docs-end: load-model
 
 The input to the Skala model is passed via a dictionary of tensors, which we prepare by loading the necessary features from disk and converting them to the appropriate format.
 
 .. literalinclude:: ../model/examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
-   :lines: 37-71
+   :start-after: ! docs-start: load-features
+   :end-before: ! docs-end: load-features
 
 To place the features in the correct format for Skala, we add them to the input dictionary with the appropriate keys.
 
 .. literalinclude:: ../model/examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
-   :lines: 73-93
+   :start-after: ! docs-start: prepare-input
+   :end-before: ! docs-end: prepare-input
 
 .. note::
 
@@ -217,14 +223,16 @@ With this we can now compute the exchange-correlation energy and potential by ca
 .. literalinclude:: ../model/examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
-   :lines: 95-97
+   :start-after: ! docs-start: evaluate-model
+   :end-before: ! docs-end: evaluate-model
 
 To get the exchange-correlation energy, we need to weight the exc values by the grid weights and sum over the grid points, which we can do using the provided tensor operations.
 
 .. literalinclude:: ../model/examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
-   :lines: 99-106
+   :start-after: ! docs-start: integrate-energy
+   :end-before: ! docs-end: integrate-energy
 
 .. note::
 
@@ -270,21 +278,24 @@ The potential terms are stored under the same keys as the input features and can
 .. literalinclude:: ../model/examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
-   :lines: 107-119
+   :start-after: ! docs-start: extract-gradients
+   :end-before: ! docs-end: extract-gradients
 
 We can use those tensors for further processing in our application, for example to compute the norm of the potential
 
 .. literalinclude:: ../model/examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
-   :lines: 121-155
+   :start-after: ! docs-start: gradient-means
+   :end-before: ! docs-end: gradient-means
 
 Or by converting them to Fortran arrays and using the built-in array operations.
 
 .. literalinclude:: ../model/examples/fortran/ftorch_integration/app/main.f90
    :language: fortran
    :caption: app/main.f90
-   :lines: 162-225
+   :start-after: ! docs-start: array-access
+   :end-before: ! docs-end: array-access
 
 We rebuild and reinstall the application to include the latest changes:
 
@@ -351,6 +362,7 @@ In the output we can see the computed exchange-correlation energy as well as the
 .. note::
 
    You are expected to add the D3(BJ) dispersion correction (using B3LYP damping parameters) to the final energy of Skala.
+   You can use e.g. `simple-dftd3 <https://github.com/loriab/simple-dftd3>`_ for that.
 
 Summary
 -------

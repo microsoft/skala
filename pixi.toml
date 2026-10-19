@@ -156,12 +156,12 @@ sphinxcontrib-bibtex = "*"
 sphinxcontrib-moderncmakedomain = "*"
 
 [feature.docs.tasks.docs]
-cmd = "sphinx-build -b html website website/_build/html && sphinx-build -b html gauxc/docs website/_build/html/gauxc && touch website/_build/html/.nojekyll"
+cmd = "sphinx-build -W -b html website website/_build/html && sphinx-build -W -b html gauxc/docs website/_build/html/gauxc && touch website/_build/html/.nojekyll"
 description = "Build the main site and the GauXC guide into website/_build/html"
 default-environment = "docs"
 
 [feature.docs.tasks.docs-linkcheck]
-cmd = "sphinx-build -D nb_execution_mode=off -b linkcheck website website/_build/linkcheck"
+cmd = "sphinx-build -W -D nb_execution_mode=off -b linkcheck website website/_build/linkcheck"
 description = "Check external links of the main site"
 default-environment = "docs"
 

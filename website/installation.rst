@@ -1,5 +1,5 @@
-Installation
-============
+Skala Installation
+==================
 
 Install from PyPI
 -----------------
@@ -37,10 +37,12 @@ The default Pytorch installation is the GPU version, which the *skala* package i
 Reproducible source environments
 --------------------------------
 
-Skala uses `Pixi <https://pixi.sh>`__ for source dependency management. The
+The above instructions cover the installation from PyPI, if you want an environment
+that is guaranteed to work, we provide instructions for setting up a reproducible
+source environment using `Pixi <https://pixi.sh>`__ as a package manager. The
 repository contains one ``pixi.toml`` and one committed ``pixi.lock`` covering
 all supported Python, PySCF, PyTorch, CUDA, documentation, release, and native
-build environments. Install Pixi 0.81, then clone the repository and install the
+build environments. Install Pixi, then clone the repository and install the
 default CPU environment:
 
 .. code-block:: bash
@@ -55,12 +57,6 @@ always use the selected environment:
 .. code-block:: bash
 
    pixi run -e default python your_script.py
-  OMP_NUM_THREADS=4 pixi run -e default pytest -v --doctest-modules \
-    --cov=skala --cov-report=xml --cov-report=term-missing --cov-report=html \
-   --durations=50 --durations-min=1.0 skala/src/skala/ skala/tests/
-   pixi run -e default pre-commit run --all-files
-
-Set ``OMP_NUM_THREADS=4`` when running tests locally to match CI.
 
 The locked compatibility environments are:
 
@@ -108,10 +104,6 @@ For example, install and test the primary CUDA environment with:
   pixi run -e gpu-cuda12-torch213 python tools/verify_gpu.py
   OMP_NUM_THREADS=4 pixi run -e gpu-cuda12-torch213 \
     pytest -v -m 'gpu and not profiling and not model_benchmark' skala/tests/
-
-The CUDA platforms are encoded in the lockfile, so container builds do not need
-a CUDA override when no GPU is attached. Runtime GPU checks still require a
-compatible NVIDIA driver and device.
 
 For development purposes, please initialize the pre-commit hooks via:
 

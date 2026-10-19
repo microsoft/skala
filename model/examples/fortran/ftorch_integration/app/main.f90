@@ -1,3 +1,4 @@
+! docs-start: declarations
 program main
   use iso_c_binding, only : c_double
   use ftorch, only : torch_tensor
@@ -16,7 +17,9 @@ program main
     & dexc_dgrid_weights, dexc_dcoarse_0_atomic_coords, vxc_norm
 
   character(len=:), allocatable :: path, feature_dir
+! docs-end: declarations
 
+  ! docs-start: command-line
   cli_input: block
   call get_argument(1, path)
   if (.not. allocated(path)) exit cli_input
@@ -28,12 +31,16 @@ program main
     print '(a)', "Usage: "//path//" <model_path> <feature_dir>"
     stop 1
   end if
+  ! docs-end: command-line
 
+  ! docs-start: load-model
   ! Load the model
   print '(a)', "[1] Loading model from "//path
   call skala_model_load(model, path, &
     & "7f3e8622e1eb520ccd88a55464c3e359ac4d7e5ccbd1fb77a26afa1e1c20a5cd")
+  ! docs-end: load-model
 
+  ! docs-start: load-features
   print '(a)', "[2] Loading features from "//feature_dir
   get_features: block
   integer :: ift
@@ -69,7 +76,9 @@ program main
     end select
   end do
   end block get_features
+  ! docs-end: load-features
 
+  ! docs-start: prepare-input
   ! Prepare the input dictionary for the model
   print '(a)', "[3] Preparing input dictionary"
   call skala_dict_new(input)
@@ -91,11 +100,15 @@ program main
     call input%insert(skala_feature%atomic_grid_sizes, atomic_grid_sizes)
   if (model%needs_feature(skala_feature%atomic_grid_size_bound_shape)) &
     call input%insert(skala_feature%atomic_grid_size_bound_shape, atomic_grid_size_bound_shape)
+  ! docs-end: prepare-input
 
+  ! docs-start: evaluate-model
   ! Request exc and vxc from the model
   print '(a)', "[4] Running model inference"
   call model%get_exc_and_vxc(input, exc, vxc)
+  ! docs-end: evaluate-model
 
+  ! docs-start: integrate-energy
   ! Print the exchange-correlation energy
   print '(a)', "[5] Computing XC energy = sum(exc * grid_weights)"
   exc_weighted: block
@@ -104,7 +117,9 @@ program main
   call skala_tensor_sum(weighted, weighted_sum)
   print '(a, es22.14)', " -> E_xc = ", skala_tensor_item_double(weighted_sum)
   end block exc_weighted
+  ! docs-end: integrate-energy
 
+  ! docs-start: extract-gradients
   print '(a)', "[6] Extracting vxc components"
   if (model%needs_feature(skala_feature%density)) &
     call vxc%at(skala_feature%density, dexc_ddensity)
@@ -118,7 +133,9 @@ program main
     call vxc%at(skala_feature%grid_weights, dexc_dgrid_weights)
   if (model%needs_feature(skala_feature%coarse_0_atomic_coords)) &
     call vxc%at(skala_feature%coarse_0_atomic_coords, dexc_dcoarse_0_atomic_coords)
+  ! docs-end: extract-gradients
 
+  ! docs-start: gradient-means
   ! Print mean of each gradient component
   print '(a)', "[7] Gradient means (dexc/dx)"
   print_gradients: block
@@ -154,7 +171,9 @@ program main
       skala_tensor_item_double(grad_mean)
   end if
   end block print_gradients
+  ! docs-end: gradient-means
 
+  ! docs-start: array-access
   ! Demonstrate direct Fortran array access to tensor data
   print '(a)', "[8] Accessing tensor data as Fortran arrays"
   array_access: block
@@ -224,8 +243,10 @@ program main
       "     [[", arr2d(:3, 1), "]", "      [  ...]]"
   end if
   end block array_access
+  ! docs-end: array-access
 
 contains
+  ! docs-start: get-argument
   subroutine get_argument(idx, arg)
     integer, intent(in) :: idx
     character(len=:), allocatable, intent(out) :: arg
@@ -246,4 +267,5 @@ contains
       end if
     end if
   end subroutine get_argument
+  ! docs-end: get-argument
 end program main

@@ -14,7 +14,7 @@ The example demonstrates how to load a Skala model, prepare input features, comp
 Setting up development environment
 ----------------------------------
 
-The repository's locked ``cpp-integration`` Pixi environment provides everything needed for this example:
+The repository's locked ``cpp-integration`` `Pixi <https://pixi.sh>`__ environment provides everything needed for this example:
 LibTorch, nlohmann_json, CMake, Ninja, and the C and C++ toolchains, the ``hf`` CLI to download the model checkpoint, and the ``skala`` runtime with PySCF to generate the input features.
 From the repository root, activate the environment:
 
@@ -94,7 +94,8 @@ We start the program with the necessary headers and some type aliases for the To
 .. literalinclude:: ../model/examples/cpp/cpp_integration/main.cpp
    :language: c++
    :caption: main.cpp
-   :lines: 1-11
+   :start-after: // docs-start: imports
+   :end-before: // docs-end: imports
 
 The Skala checkpoint is a TorchScript module.
 Next to the module, the checkpoint stores the list of required input features and the protocol version as extra files, which we read while loading the model.
@@ -103,7 +104,8 @@ The ``get_exc_density`` method of the module evaluates the exchange-correlation 
 .. literalinclude:: ../model/examples/cpp/cpp_integration/main.cpp
    :language: c++
    :caption: main.cpp
-   :lines: 40-79
+   :start-after: // docs-start: load-model
+   :end-before: // docs-end: load-model
 
 The input to the Skala model is passed via a dictionary of tensors.
 We load each required feature from its ``.pt`` file and insert it into the dictionary under its feature name:
@@ -111,28 +113,32 @@ We load each required feature from its ``.pt`` file and insert it into the dicti
 .. literalinclude:: ../model/examples/cpp/cpp_integration/main.cpp
    :language: c++
    :caption: main.cpp
-   :lines: 13-38
+   :start-after: // docs-start: load-features
+   :end-before: // docs-end: load-features
 
 With the model and the features available, we evaluate the exchange-correlation energy density by calling the model method with the feature dictionary as ``mol`` keyword argument:
 
 .. literalinclude:: ../model/examples/cpp/cpp_integration/main.cpp
    :language: c++
    :caption: main.cpp
-   :lines: 81-88
+   :start-after: // docs-start: evaluate-energy
+   :end-before: // docs-end: evaluate-energy
 
 To obtain the derivatives of the exchange-correlation energy with respect to the input features, which are needed to build the exchange-correlation potential, we enable gradients on the relevant feature tensors and use LibTorch's autograd:
 
 .. literalinclude:: ../model/examples/cpp/cpp_integration/main.cpp
    :language: c++
    :caption: main.cpp
-   :lines: 90-133
+   :start-after: // docs-start: evaluate-gradients
+   :end-before: // docs-end: evaluate-gradients
 
 Finally, the main program reads the command line arguments, loads model and features, and computes the exchange-correlation energy by weighting the energy density with the grid weights and summing over the grid points:
 
 .. literalinclude:: ../model/examples/cpp/cpp_integration/main.cpp
    :language: c++
    :caption: main.cpp
-   :lines: 135-167
+   :start-after: // docs-start: main
+   :end-before: // docs-end: main
 
 Running the example
 -------------------
@@ -167,6 +173,7 @@ The output for the H2 molecule with the def2-QZVP basis set should look like thi
 .. note::
 
    You are expected to add the D3(BJ) dispersion correction (using B3LYP damping parameters) to the final energy of Skala.
+   You can use e.g. `simple-dftd3 <https://github.com/loriab/simple-dftd3>`_ for that.
 
 .. tip::
 

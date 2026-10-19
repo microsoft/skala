@@ -38,6 +38,7 @@ Set `OMP_NUM_THREADS=4` when running tests locally to match CI.
 
 Build the documentation (main site plus GauXC guide) into `website/_build/html` with
 `pixi run docs`, and check its external links with `pixi run docs-linkcheck`.
+Both commands treat Sphinx warnings as errors, locally and in CI.
 It is published to [microsoft.github.io/skala](https://microsoft.github.io/skala) by the
 [Docs workflow](.github/workflows/docs.yml) on every push to `main` (or by running it manually).
 
