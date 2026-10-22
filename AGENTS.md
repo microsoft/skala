@@ -21,7 +21,7 @@ Skala is a neural network-based exchange-correlation (XC) functional for density
 ## Development environment
 
 1. **Python version**: 3.11–3.13 (target 3.11 for compatibility tooling).
-2. **Environment setup** (Pixi 0.81):
+2. **Environment setup** (Pixi 0.82.1):
    ```bash
   pixi install --locked -e dev
    ```

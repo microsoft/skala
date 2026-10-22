@@ -16,7 +16,7 @@ or contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any addi
 
 ## Development setup
 
-Install Pixi 0.81, then create the locked CPU development environment from the repository root:
+Install Pixi 0.82.1, then create the locked CPU development environment from the repository root:
 
 ```bash
 pixi install --locked -e dev
