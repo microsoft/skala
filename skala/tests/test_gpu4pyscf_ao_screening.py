@@ -326,11 +326,11 @@ def test_gpu_screened_skala_matches_cpu_on_carbon_chain(
 def test_gpu_empty_ao_block_matches_dense_reference() -> None:
     """Preserve grid alignment when GPU4PySCF finds no AOs in a block.
 
-    GPU4PySCF normally omits fixed-size grid blocks whose screening mask contains
-    no active atomic orbitals. Skala assigns each yielded result to a cumulative
-    grid slice, so omitting an empty block would shift every later result into the
-    wrong positions. ``strict_grid_order=True`` makes the backend yield the empty
-    block and allows Skala to advance that slice before processing active blocks.
+    GPU4PySCF 1.9.0 yields fixed-size grid blocks even when their screening mask
+    contains no active atomic orbitals. Skala must advance its cumulative grid
+    slice before skipping an empty block, or later results would be placed at
+    the wrong positions. No extra backend keyword is needed to preserve order.
+    GPU4PySCF 1.8.1 fails this contract unless ``strict_grid_order=True`` is used.
 
     The first block is placed far from the molecule to make its active-AO set
     empty, while the second block samples the molecular region. Comparing MGGA
@@ -357,6 +357,11 @@ def test_gpu_empty_ao_block_matches_dense_reference() -> None:
     ]
     assert active_ao_counts[0] == 0
     assert active_ao_counts[1] > 0
+    blocks = list(screening_numint.block_loop(mol, grids, deriv=1, blksize=block_size))
+    assert [int(block[1].size) for block in blocks] == active_ao_counts
+    assert [int(block[2].size) for block in blocks] == [block_size, block_size]
+    cupy.testing.assert_array_equal(blocks[0][3], far_coords)
+    cupy.testing.assert_array_equal(blocks[1][3], near_coords)
     grids._non0ao_idx = None
 
     feature_function = MGGAFeatureFunction(
@@ -400,7 +405,7 @@ def test_gpu_sparse_mask_sorts_scatters_and_unsorts(
         def block_loop(
             self, *args: object, **kwargs: object
         ) -> Iterator[tuple[object, object, object, object]]:
-            assert kwargs["strict_grid_order"] is True
+            assert "strict_grid_order" not in kwargs
             yield (
                 cupy.empty((0, block_size), dtype=cupy.float64),
                 cupy.empty(0, dtype=cupy.int64),

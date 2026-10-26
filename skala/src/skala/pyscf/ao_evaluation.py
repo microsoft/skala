@@ -262,9 +262,8 @@ class _GPUAOBlockLoop:
             deriv=self.feature_function.deriv,
             blksize=self.blksize,
             non0tab=None,
-            # GPU4PySCF otherwise omits zero-AO blocks, shifting later grid slices.
-            strict_grid_order=True,
         ):
+            # Advance over zero-AO blocks before skipping their contractions.
             start, end = end, end + block_weights.size
             if active_ao_indices.size == 0:
                 continue
