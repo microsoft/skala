@@ -6,7 +6,7 @@ import cupy
 import gpu4pyscf
 import torch
 
-EXPECTED_GPU4PYSCF_VERSION = "1.9.0s"
+EXPECTED_GPU4PYSCF_VERSION = "1.9.0"
 
 
 def main() -> None:
