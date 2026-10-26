@@ -15,7 +15,7 @@ REPOSITORY = Path(__file__).resolve().parents[2]
     [
         ("microsoft-skala", "microsoft_skala", [], True),
         ("skala-cuda12x", "skala_cuda", ["gpu4pyscf-cuda12x==1.9.0"], False),
-        ("skala-cuda13x", "skala_cuda", ["gpu4pyscf-cuda13x==1.9.0s"], False),
+        ("skala-cuda13x", "skala_cuda", ["gpu4pyscf-cuda13x==1.9.0"], False),
     ],
 )
 def test_render_compatibility_pyproject(
