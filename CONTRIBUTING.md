@@ -47,22 +47,8 @@ and native integration dependencies. Use `dev-gpu` for the equivalent CUDA 12 to
 Both environments provide unconstrained `pip` and `py-spy` installations so those tools
 do not impose version requirements on the rest of the environment.
 
-Run type checks in both environments to cover the installed CPU and GPU dependency APIs:
-
-```bash
-pixi run -e dev pyrefly check --min-severity=warn
-pixi run -e dev-gpu pyrefly check --min-severity=warn
-```
-
-GPU4PySCF reuses methods from unrelated CPU and GPU classes, so its borrowed receiver
-types need targeted compatibility suppressions. GPU modules and GPU-only tests disable
-unused-suppression reporting because those errors disappear without the optional GPU
-dependencies. GPU modules also waive the override-decorator requirement: explicit
-`@override` decorators cannot be verified when their parent classes are unavailable.
-Override-signature checks remain enabled.
-
 Named compatibility environments cover Python 3.11 through 3.13, PySCF 2.14,
-PyTorch 2.12 and 2.13, GPU4PySCF 1.9.0s, and CUDA 12 and 13. Keep `pixi.lock`
+PyTorch 2.12 and 2.13, GPU4PySCF 1.9.0, and CUDA 12 and 13. Keep `pixi.lock`
 synchronized with changes to `pixi.toml` or any component `pyproject.toml`.
 
 
