@@ -38,13 +38,11 @@ def get_grid_features(
         )
 
     if feature_spec.requires_atomic_layout:
-        atom_grids_tab = grids.gen_atomic_grids(
-            mol, grids.atom_grid, grids.radi_method, grids.level, grids.prune
-        )
+        atom_grids_tab = grids.gen_atomic_grids(mol)
         sizes = [len(atom_grids_tab[mol.atom_symbol(ia)][1]) for ia in range(mol.natm)]
 
         n_atomic = sum(sizes)
-        n_grid = grids.weights.shape[0]
+        n_grid = grids.size
         if n_atomic != n_grid:
             raise ValueError(
                 f"Grid size mismatch: sum of atomic grid sizes ({n_atomic}) does not match "

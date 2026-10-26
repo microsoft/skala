@@ -70,7 +70,7 @@ ks.kernel()
 
 The GPU install is more involved because `gpu4pyscf` ships CUDA-version-specific
 wheels that must match your CUDA toolkit. GPU environments and helper packages
-use the latest tested GPU4PySCF release, 1.8.1.
+use the latest tested GPU4PySCF release, 1.9.0s.
 
 To install all dependencies from PyPI, use the GPU specific package with the
 matching CUDA version, e.g., for CUDA 12:

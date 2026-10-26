@@ -35,8 +35,8 @@ from typing_extensions import override
 
 if TYPE_CHECKING:
     import torch
-    from pyscf.scf.hf import SCF
     from skala.functional.base import ExcFunctionalBase
+    from skala.pyscf.backend import KS
 
 #: Cycles from this index on are treated as steady state. Cycle 0 is excluded so
 #: that anything specific to a first iteration cannot distort a scaling fit;
@@ -338,7 +338,7 @@ class ScfInstrumentation:
 
 @contextmanager
 def instrument(
-    mf: SCF,
+    mf: KS,
     *,
     device: torch.device | str,
     functional: ExcFunctionalBase | str | None = None,
@@ -367,6 +367,7 @@ def instrument(
     original_veff = getattr(mf, "get_veff", None)
     if callable(original_veff):
         restore.append((mf, "get_veff", original_veff))
+        # pyrefly: ignore[method-assign]
         mf.get_veff = _timed(original_veff, instrumentation, instrumentation._veff)
 
     for name in ("nr_uks", "nr_rks"):
@@ -383,6 +384,7 @@ def instrument(
         instrumentation._neural = True
         original_get_exc = functional.get_exc
         restore.append((functional, "get_exc", original_get_exc))
+        # pyrefly: ignore[method-assign]
         functional.get_exc = _timed(
             original_get_exc, instrumentation, instrumentation._forward
         )

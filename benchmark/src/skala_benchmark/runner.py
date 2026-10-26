@@ -11,10 +11,10 @@ import json
 import math
 import sys
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, NotRequired, TypedDict
+from typing import TYPE_CHECKING, NotRequired, TypedDict, cast
 
 from skala_benchmark.models import Molecule
 from skala_benchmark.protocol import Device, FunctionalKind, FunctionalSpec
@@ -38,8 +38,8 @@ _WARMUP_BASIS = "def2-svp"
 
 if TYPE_CHECKING:
     import torch
-    from pyscf.scf.hf import SCF
     from skala.functional.base import ExcFunctionalBase
+    from skala.pyscf.backend import KS
 
     from pyscf import gto
 
@@ -284,6 +284,9 @@ def _run_scf(config: RunConfig, launched_at: float | None = None) -> RunOutcome:
         conv_tol_grad = float(
             getattr(mf, "conv_tol_grad", None) or math.sqrt(config.conv_tol)
         )
+        weights = mf.grids.weights
+        if weights is None:
+            raise RuntimeError("SCF completed without initialized grid weights")
         return RunResult(
             total_energy=energy,
             is_converged=mf.converged,
@@ -294,7 +297,7 @@ def _run_scf(config: RunConfig, launched_at: float | None = None) -> RunOutcome:
             num_aux_basis_functions=(
                 _num_aux_basis_functions(mf) if config.density_fit else None
             ),
-            grid_size=int(mf.grids.weights.shape[0]),
+            grid_size=int(weights.shape[0]),
             conv_tol_grad=conv_tol_grad,
             device=device.value,
             worker_ms=1e3 * (t_end - t_start),
@@ -318,7 +321,7 @@ def _run_scf(config: RunConfig, launched_at: float | None = None) -> RunOutcome:
 
 
 def _settle_xc_evaluation(
-    mf: SCF,
+    mf: KS,
     device: Device,
     *,
     max_evaluations: int = 10,
@@ -462,7 +465,7 @@ def count_atomic_orbitals(molecule: Molecule, basis: str) -> int:
     return int(_build_mol(molecule, basis).nao_nr())
 
 
-def _num_aux_basis_functions(mf: SCF) -> int | None:
+def _num_aux_basis_functions(mf: KS) -> int | None:
     """Number of density-fitting auxiliary basis functions (CPU or GPU backend)."""
     df = getattr(mf, "with_df", None)
     if df is None:
@@ -498,7 +501,7 @@ def _build_mf(
     device: Device,
     *,
     functional: ExcFunctionalBase | str | None = None,
-) -> SCF:
+) -> KS:
     func = (
         functional
         if functional is not None
@@ -507,7 +510,9 @@ def _build_mf(
     mf = _make_ks(mol, func, ansatz=config.ansatz, device=device)
 
     if config.density_fit:
-        mf = mf.density_fit(auxbasis=config.auxbasis)
+        # GPU4PySCF borrows RHF.density_fit for UKS, retaining the RHF receiver type.
+        density_fit = cast("Callable[[str | None], KS]", mf.density_fit)
+        mf = density_fit(config.auxbasis)
 
     mf.grids.level = config.grid_level
     mf.grids.reset()  # force a rebuild at the requested level
@@ -536,7 +541,7 @@ def _resolve_functional(
 
 def _make_ks(
     mol: gto.Mole, func: ExcFunctionalBase | str, *, ansatz: str, device: Device
-) -> SCF:
+) -> KS:
     """Construct the (Skala or PySCF-native) KS object on the chosen device."""
     unrestricted = ansatz == "UKS"
     if isinstance(func, str):

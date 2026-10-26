@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 from ase.atoms import Atoms
@@ -19,6 +19,10 @@ import skala.pyscf as skala_cpu
 from pyscf import grad, gto
 from skala.functional.base import ExcFunctionalBase
 from skala.pyscf.retry import retry_scf
+
+if TYPE_CHECKING:
+    from skala.gpu4pyscf.gradients import SkalaRKSGradient as GPU_RKSGradient
+    from skala.gpu4pyscf.gradients import SkalaUKSGradient as GPU_UKSGradient
 
 try:
     import skala.gpu4pyscf as skala_gpu
@@ -129,7 +133,7 @@ class Skala(Calculator):
     }
 
     _mol: gto.Mole | None = None
-    _ks: grad.rhf.GradientsBase | None = None
+    _ks: "grad.rhf.GradientsBase | GPU_RKSGradient | GPU_UKSGradient | None" = None
 
     def __init__(self, atoms: Atoms | None = None, **kwargs: Any) -> None:
         super().__init__(atoms=atoms, **kwargs)
@@ -283,7 +287,7 @@ class Skala(Calculator):
                 dm0 = self._ks.base.make_rdm1()
             self._ks.reset(self._mol)
             self._ks.base.mo_coeff = None
-
+        assert self._ks is not None
         if parameters.with_retry and dm0 is None:
             self._ks.base, _ = retry_scf(self._ks.base)
             energy = self._ks.base.e_tot

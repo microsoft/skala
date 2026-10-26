@@ -22,7 +22,6 @@ from skala.pyscf.backend import (
     Array,
     Grid,
     check_gpu_imports_were_successful,
-    dft_gpu,
     from_numpy_or_cupy,
 )
 from skala.typing import D1, D2, F64, I64, U8
@@ -232,11 +231,13 @@ class _GPUAOBlockLoop:
         blksize: int | None,
     ) -> None:
         check_gpu_imports_were_successful()
+        from gpu4pyscf.dft import numint as gpu_numint
+
         self.mol = mol
         self.grids = grids
         self.feature_function = feature_function
         self.blksize = blksize
-        self.numint = dft_gpu.numint.NumInt().build(mol, grids.coords)
+        self.numint = gpu_numint.NumInt().build(mol, grids.coords)
         self.numint.grid_blksize = blksize
         self.sort_idx = torch.as_tensor(self.numint.gdftopt._ao_idx, device=device)
         self.unsort_idx = torch.argsort(self.sort_idx)
@@ -301,7 +302,7 @@ def _evaluate_blockwise_ao_features(
     :func:`evaluate_ao_features_blockwise`, which supplies explicit reverse-
     and forward-mode rules without retaining every block's AO intermediates.
     """
-    ngrids = grids.weights.size
+    ngrids = grids.size
     block_loop = _make_ao_block_loop(dm.device, mol, grids, feature_function, blksize)
 
     features = torch.zeros(
@@ -536,7 +537,9 @@ def evaluate_full_grid(
     """Evaluate raw features over the full grid without block chunking."""
     if gpu:
         check_gpu_imports_were_successful()
-        ni = dft_gpu.numint.NumInt().build(mol, coords)
+        from gpu4pyscf.dft import numint as gpu_numint
+
+        ni = gpu_numint.NumInt().build(mol, coords)
     else:
         ni = dft.numint.NumInt()
     ao = from_numpy_or_cupy(
@@ -597,7 +600,7 @@ def evaluate_raw_features_auto_chunk(
 
     blksize = _resolve_ao_block_size(mol, feature_function, block_size, max_memory, gpu)
 
-    if blksize is not None and blksize >= grids.weights.shape[0]:
+    if blksize is not None and blksize >= grids.size:
         features = evaluate_full_grid(dm.double(), mol, grids.coords, feature_function)
     else:
         features = evaluate_ao_features_blockwise(

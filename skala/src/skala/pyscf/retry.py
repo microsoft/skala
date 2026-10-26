@@ -7,12 +7,20 @@ This module provides a retry mechanism for self-consistent field (SCF)
 calculations in PySCF, allowing for robust convergence handling.
 """
 
+from __future__ import annotations
+
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 import numpy as np
 from pyscf.scf.hf import SCF
 from pyscf.soscf.newton_ah import _CIAH_SOSCF
+
+if TYPE_CHECKING:
+    from gpu4pyscf.scf.hf import SCF as GPU_SCF
+
+_SCF = TypeVar("_SCF", bound="SCF | GPU_SCF")
 
 SMALL_GAP = 0.1
 
@@ -34,7 +42,7 @@ class SCFState:
     homo_lumo_gap_down_per_cycle: list[float | None]
 
     @classmethod
-    def empty(cls) -> "SCFState":
+    def empty(cls) -> SCFState:
         return cls(
             ntries=0,
             cycles=[],
@@ -46,13 +54,15 @@ class SCFState:
             homo_lumo_gap_down_per_cycle=[],
         )
 
-    def add_callback(self, scf: SCF) -> None:
+    def add_callback(self, scf: SCF | GPU_SCF) -> None:
+        # pyrefly: ignore[method-assign]
         scf.pre_kernel = self.pre_kernel_callback
         scf.callback = self.post_cycle_callback
+        # pyrefly: ignore[method-assign]
         scf.post_kernel = self.post_kernel_callback
 
     def pre_kernel_callback(self, envs: dict[str, Any]) -> None:
-        scf: SCF = envs["mf"]
+        scf: SCF | GPU_SCF = envs["mf"]
         e_tot = envs["e_tot"]
 
         self.ntries += 1
@@ -65,7 +75,7 @@ class SCFState:
         self.homo_lumo_gap_down_per_cycle = [None]
 
     def post_cycle_callback(self, envs: dict[str, Any]) -> None:
-        scf: SCF = envs["mf"]
+        scf: SCF | GPU_SCF = envs["mf"]
         e_tot = envs["e_tot"]
         norm_gorb = envs["norm_gorb"]
 
@@ -75,6 +85,10 @@ class SCFState:
         elif "imacro" in envs:  # Second-order SCF
             self.cycles.append(envs["imacro"] + 1)
             # In second-order SCF the orbital energies are not available every step
+            if not hasattr(scf, "_scf"):
+                raise RuntimeError(
+                    "Second-order SCF callback requires an underlying SCF object"
+                )
             mo_energy, _ = scf._scf.canonicalize(
                 envs["mo_coeff"], envs["mo_occ"], envs["fock"]
             )
@@ -111,7 +125,7 @@ class SCFState:
             self.homo_lumo_gap_down_per_cycle.append(gap[1])
 
     def post_kernel_callback(self, envs: dict[str, Any]) -> None:
-        scf: SCF = envs["mf"]
+        scf: SCF | GPU_SCF = envs["mf"]
 
         if scf.conv_check and scf.callback is not None:
             envs["cycle"] += 1
@@ -125,8 +139,8 @@ class SCFState:
 
 
 def retry_scf(
-    scf: SCF,
-) -> tuple[SCF, SCFState]:
+    scf: _SCF,
+) -> tuple[_SCF, SCFState]:
     """
     Retry the SCF calculation if it fails due to convergence issues.
 
@@ -152,7 +166,7 @@ def retry_scf(
     if isinstance(scf, _CIAH_SOSCF):
         return scf, state
 
-    init_config: dict[str, float | int] = {
+    init_config: dict[str, float | int | None] = {
         "damp": scf.damp,
         "diis_start_cycle": scf.diis_start_cycle,
     }
@@ -184,7 +198,9 @@ def retry_scf(
     scf.set(**init_config, level_shift=0.0)
 
     # Try second-order SCF with Newton's method
-    scf = scf.newton()
+    # GPU4PySCF borrows RHF.newton for UHF; its bound receiver type is inaccurate.
+    newton = cast(Callable[[], _SCF], scf.newton)
+    scf = newton()
     scf.kernel()
     if scf.converged:
         return scf, state

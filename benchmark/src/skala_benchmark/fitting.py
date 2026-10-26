@@ -548,7 +548,7 @@ def _fit_piecewise_loglog(
     )
     log_x = np.log10(x_array[valid_mask])
     log_y = np.log10(y_array[valid_mask])
-    n_points = int(log_x.size)
+    n_points = log_x.size
 
     if n_points == 0:
         return PiecewiseFit([], [], True, math.nan, 0, max_knots)

@@ -24,7 +24,7 @@ Installation
 
 The repository provides three locked GPU environments. They combine conda-forge
 PyTorch and CUDA libraries with PyPI PySCF and the latest tested GPU4PySCF
-release, 1.8.1:
+release, 1.9.0:
 
 * ``gpu-cuda12-torch212``
 * ``gpu-cuda12-torch213``

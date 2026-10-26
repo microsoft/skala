@@ -461,7 +461,9 @@ def test_prepare_spatially_sorted_cpu_grids(
     assert sorted_grids is not grids
     assert np.array_equal(grids.coords, coords)
     assert np.array_equal(grids.weights, weights)
+    assert sorted_grids.coords is not None
     assert np.array_equal(sorted_grids.coords, coords[forward])
+    assert sorted_grids.weights is not None
     assert np.array_equal(sorted_grids.weights, weights[forward])
     assert sorted_grids.non0tab is non0tab
     torch.testing.assert_close(
@@ -491,7 +493,7 @@ def test_grid_reuses_spatial_grid_layout_across_numints(
 
     def fake_prepare_spatial_grid_layout(
         mol: gto.Mole,
-        grids: object,
+        grids: SkalaGrids,
         block_size: int,
         device: torch.device,
     ) -> SpatialGridLayout:
@@ -540,16 +542,30 @@ def test_grid_reuses_spatial_grid_layout_across_numints(
     assert replacement_coords.flags.writeable
 
 
-class FakeKS:
-    def __init__(self, mol: gto.Mole, grids: object | None = None) -> None:
-        self.mol = mol
-        self.grids = grids or object()
+class FakeKS(dft.rks.RKS):
+    def __init__(self, mol: gto.Mole, grids: SkalaGrids) -> None:
+        super().__init__(mol)
+        self.grids = grids
         self.max_memory = 100
 
-    def make_rdm1(self, mo_coeff: np.ndarray, mo_occ: np.ndarray) -> np.ndarray:
+    @override
+    def make_rdm1(
+        self,
+        mo_coeff: np.ndarray | None = None,
+        mo_occ: np.ndarray | None = None,
+        **kwargs: Any,
+    ) -> np.ndarray:
         return np.eye(self.mol.nao_nr())
 
-    def get_j(self, mol: gto.Mole, dm: np.ndarray, hermi: int) -> np.ndarray:
+    @override
+    def get_j(
+        self,
+        mol: gto.Mole | None = None,
+        dm: np.ndarray | None = None,
+        hermi: int = 1,
+        omega: float | None = None,
+    ) -> np.ndarray:
+        assert dm is not None
         return np.zeros_like(dm)
 
 

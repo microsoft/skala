@@ -16,6 +16,7 @@ pytestmark = pytest.mark.gpu
 
 cupy = require_gpu()
 
+from gpu4pyscf.dft import numint as gpu_numint  # noqa: E402
 from skala.features import AOFeatureSpec, Feature  # noqa: E402
 from skala.functional.base import ExcFunctionalBase  # noqa: E402
 from skala.gpu4pyscf import SkalaKS  # noqa: E402
@@ -46,6 +47,8 @@ def test_prepare_spatially_sorted_gpu_grids() -> None:
         [[20.0, 0.0, 0.0], [0.0, 0.0, 0.0], [21.0, 0.0, 0.0], [1.0, 0.0, 0.0]]
     )
     weights = cupy.arange(coords.shape[0], dtype=cupy.float64)
+    # GPU4PySCF borrows the CPU constructor without changing its receiver type.
+    # pyrefly: ignore[bad-argument-type]
     grids = dft_gpu.Grids(mol)
     grids.coords = coords
     grids.weights = weights
@@ -64,6 +67,7 @@ def test_prepare_spatially_sorted_gpu_grids() -> None:
     assert grids._non0ao_idx is original_screening_cache
     assert isinstance(sorted_grids.coords, cupy.ndarray)
     assert isinstance(sorted_grids.weights, cupy.ndarray)
+    # pyrefly: ignore[missing-attribute]
     assert sorted_grids._non0ao_idx is None
     assert np.array_equal(
         cupy.asnumpy(sorted_grids.coords), cupy.asnumpy(coords)[forward]
@@ -80,6 +84,8 @@ def test_prepare_spatially_sorted_gpu_grids() -> None:
 
 def test_gpu_atom_major_features_require_skala_grids() -> None:
     mol = gto.M(atom="H 0 0 0", basis="sto-3g", spin=1, verbose=0)
+    # GPU4PySCF borrows the CPU constructor without changing its receiver type.
+    # pyrefly: ignore[bad-argument-type]
     grids = dft_gpu.Grids(mol)
     integrator = XCIntegrator(QuadraticFunctional(), device=torch.device("cuda:0"))
     dm = torch.eye(mol.nao_nr(), dtype=torch.float64, device="cuda:0")
@@ -210,7 +216,8 @@ def test_gpu_multiblock_mgga_response_dense_screened_equivalence() -> None:
     ks.grids.level = 1
     ks.grids.alignment = 1
     ks.grids.build(sort_grids=False)
-    assert ks.grids.weights.size > dft_gpu.numint.MIN_BLK_SIZE
+    assert ks.grids.weights is not None
+    assert ks.grids.weights.size > gpu_numint.MIN_BLK_SIZE
     mo_coeff = cupy.eye(mol.nao_nr())
     mo_occ = cupy.ones(mol.nao_nr())
     dm1 = cupy.eye(mol.nao_nr())
@@ -332,17 +339,19 @@ def test_gpu_empty_ao_block_matches_dense_reference() -> None:
     """
     mol = gto.M(atom="C 0 0 0", basis="sto-3g", spin=2, verbose=0)
     assert dft_gpu is not None
-    block_size = int(dft_gpu.numint.MIN_BLK_SIZE)
+    block_size = int(gpu_numint.MIN_BLK_SIZE)
     far_coords = cupy.full((block_size, 3), 100.0, dtype=cupy.float64)
     near_coords = cupy.linspace(-0.5, 0.5, block_size * 3, dtype=cupy.float64).reshape(
         block_size, 3
     )
     coords = cupy.concatenate((far_coords, near_coords))
+    # GPU4PySCF borrows the CPU constructor without changing its receiver type.
+    # pyrefly: ignore[bad-argument-type]
     grids = dft_gpu.Grids(mol)
     grids.coords = coords
     grids.weights = cupy.ones(coords.shape[0], dtype=cupy.float64)
 
-    screening_numint = dft_gpu.numint.NumInt().build(mol, coords)
+    screening_numint = gpu_numint.NumInt().build(mol, coords)
     active_ao_counts = [
         len(block[1]) for block in grids.get_non0ao_idx(screening_numint.gdftopt)
     ]
@@ -370,7 +379,7 @@ def test_gpu_sparse_mask_sorts_scatters_and_unsorts(
 ) -> None:
     mol = gto.M(atom="C 0 0 0", basis="sto-3g", spin=2, verbose=0)
     assert dft_gpu is not None
-    block_size = int(dft_gpu.numint.MIN_BLK_SIZE)
+    block_size = int(gpu_numint.MIN_BLK_SIZE)
     ngrids = 2 * block_size
     sort_idx = np.array([2, 0, 4, 1, 3])
     active_sorted_aos = np.array([0, 2, 4])
@@ -379,7 +388,9 @@ def test_gpu_sparse_mask_sorts_scatters_and_unsorts(
     )
     weights = cupy.ones(ngrids)
     coords = cupy.zeros((ngrids, 3))
-    grids = SimpleNamespace(weights=weights, coords=coords)
+    grids = GPU4PySCFSkalaGrids(mol)
+    grids.weights = weights
+    grids.coords = coords
 
     class FakeGpuNumInt:
         def build(self, mol: gto.Mole, coords: Array[D2, F64]) -> FakeGpuNumInt:
@@ -403,7 +414,7 @@ def test_gpu_sparse_mask_sorts_scatters_and_unsorts(
                 coords[block_size:],
             )
 
-    monkeypatch.setattr(dft_gpu.numint, "NumInt", FakeGpuNumInt)
+    monkeypatch.setattr(gpu_numint, "NumInt", FakeGpuNumInt)
 
     feature_function = MGGAFeatureFunction(AOFeatureSpec([Feature.DENSITY]))
     dm = torch.diag(

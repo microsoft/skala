@@ -76,12 +76,16 @@ class SkalaRKS(dft.rks.RKS):
     with_dftd3: DFTD3Dispersion | None = None
     """DFT-D3 dispersion correction."""
 
+    # Skala intentionally replaces GPU4PySCF's writable grid/integrator implementations.
+    # pyrefly: ignore[bad-override-mutable-attribute]
     grids: SkalaGrids
     """Grids object"""
 
+    # pyrefly: ignore[bad-override-mutable-attribute]
     cphf_grids: SkalaGrids
     """Grids object for CPHF"""
 
+    # pyrefly: ignore[bad-override-mutable-attribute]
     _numint: SkalaNumInt[cp.ndarray[Any, F64]]
 
     def __init__(
@@ -104,6 +108,8 @@ class SkalaRKS(dft.rks.RKS):
         )
 
     def energy_nuc(self) -> float:
+        # GPU4PySCF borrows this method from CPU SCF without changing its receiver type.
+        # pyrefly: ignore[bad-argument-type]
         enuc = float(super().energy_nuc())
         if self.with_dftd3:
             edisp = self.with_dftd3.get_energy()
@@ -160,12 +166,16 @@ class SkalaUKS(dft.uks.UKS):
     with_dftd3: DFTD3Dispersion | None = None
     """DFT-D3 dispersion correction."""
 
+    # Skala intentionally replaces GPU4PySCF's writable grid/integrator implementations.
+    # pyrefly: ignore[bad-override-mutable-attribute]
     grids: SkalaGrids
     """Grids object"""
 
+    # pyrefly: ignore[bad-override-mutable-attribute]
     cphf_grids: SkalaGrids
     """Grids object for CPHF"""
 
+    # pyrefly: ignore[bad-override-mutable-attribute]
     _numint: SkalaNumInt[cp.ndarray[Any, F64]]
 
     def __init__(
@@ -188,6 +198,8 @@ class SkalaUKS(dft.uks.UKS):
         )
 
     def energy_nuc(self) -> float:
+        # GPU4PySCF borrows this method from CPU SCF without changing its receiver type.
+        # pyrefly: ignore[bad-argument-type]
         enuc = float(super().energy_nuc())
         if self.with_dftd3:
             edisp = self.with_dftd3.get_energy()
