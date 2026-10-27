@@ -2,6 +2,8 @@
 
 """Modification of PySCF nuclear gradient object to work with Skala functional."""
 
+from __future__ import annotations
+
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any
 
