@@ -110,7 +110,7 @@ class SkalaRKSGradient(RHFGradient):
 
     def __init__(
         self,
-        ks: SkalaRKS | SkalaUKS,
+        ks: "SkalaRKS | SkalaUKS",
         verbose: bool = False,
         nuc_grad_feats: set[Feature] | None = None,
     ):
