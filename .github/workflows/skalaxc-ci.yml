@@ -23,6 +23,10 @@ env:
 jobs:
   build-and-test:
     runs-on: ${{ matrix.runner }}
+    env:
+      # Hosted runners expose MANA devices without usable RDMA.
+      OMPI_MCA_pml: ob1
+      OMPI_MCA_btl: self,tcp
     strategy:
       fail-fast: false
       matrix:
