@@ -38,7 +38,8 @@ Fortran ownership tests, and the exported-symbol ABI check remain available.
 
 Linux serial and MPI CI run on GitHub-hosted Ubuntu runners. MPI uses Open MPI's
 `ob1` PML with self/TCP transports to avoid unavailable RDMA on those VMs.
-CUDA 12 and 13
+MPI launchers allow oversubscription so three-rank tests also run on two-core
+runners. CUDA 12 and 13
 builds, runtime tests, and package tests share `microsoft-skala-small-gpu-pool`;
 its NVIDIA driver must support both toolkit families. Runtime tests detect the
 GPU's compute capability rather than assuming a particular device model.

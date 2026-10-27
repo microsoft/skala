@@ -108,6 +108,7 @@ jobs:
           -DSKALAXC_BUILD_EXAMPLES=ON
           -DSKALAXC_ENABLE_HDF5=${{ matrix.hdf5 }}
           -DSKALAXC_ENABLE_MPI=${{ matrix.mpi }}
+          -DMPIEXEC_PREFLAGS=--oversubscribe
           -DSKALAXC_ENABLE_OPENMP=${{ matrix.openmp }}
 
       - name: Build
