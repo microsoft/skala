@@ -1,0 +1,23 @@
+#pragma once
+/**
+ * @file
+ * @brief Generated SkalaXC build configuration.
+ *
+ * Internal header; not part of the public ABI-isolated API.
+ */
+
+#define SKALAXC_VERSION_STRING "@PROJECT_VERSION@"
+
+/** @name Filesystem locations for bundled ML model checkpoints (*.fun). */
+/** @{ */
+#cmakedefine SKALAXC_MODEL_PATH_INSTALL "@SKALAXC_MODEL_PATH_INSTALL@"
+/** @} */
+
+/** @name Feature flags mirroring SKALAXC_ENABLE_* options. */
+/** @{ */
+#cmakedefine SKALAXC_HAS_SKALA
+#cmakedefine SKALAXC_HAS_CUDA
+#cmakedefine SKALAXC_HAS_MPI
+#cmakedefine SKALAXC_HAS_OPENMP
+#cmakedefine SKALAXC_HAS_HDF5
+/** @} */

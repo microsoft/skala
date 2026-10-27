@@ -7,8 +7,6 @@ on:
       - '.github/workflows/docs.yml'
       - '.github/actions/setup-pixi/**'
       - 'benchmark/pyproject.toml'
-      - 'gauxc/docs/**'
-      - 'gauxc/examples/**'
       - 'model/examples/**'
       - 'pixi.lock'
       - 'pixi.toml'

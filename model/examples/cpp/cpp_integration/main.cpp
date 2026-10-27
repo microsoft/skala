@@ -1,7 +1,7 @@
 // docs-start: imports
-#include <torch/script.h>
-#include <torch/csrc/autograd/autograd.h>
 #include <nlohmann/json.hpp>
+#include <torch/csrc/autograd/autograd.h>
+#include <torch/script.h>
 
 #include <iostream>
 #include <memory>
@@ -13,28 +13,23 @@ using FeatureDict = c10::Dict<std::string, at::Tensor>;
 // docs-end: imports
 
 // docs-start: load-features
-at::Tensor
-load_feature(const std::string &filename, torch::DeviceType device)
-{
+at::Tensor load_feature(const std::string &filename, torch::DeviceType device) {
   std::ifstream input(filename, std::ios::binary);
-  if (!input.is_open())
-  {
+  if (!input.is_open()) {
     throw std::runtime_error("Failed to open feature file: " + filename);
   }
-  std::vector<char> bytes(
-      (std::istreambuf_iterator<char>(input)),
-      (std::istreambuf_iterator<char>()));
+  std::vector<char> bytes((std::istreambuf_iterator<char>(input)),
+                          (std::istreambuf_iterator<char>()));
 
   input.close();
   return torch::jit::pickle_load(bytes).toTensor().to(device);
 }
 
-FeatureDict
-load_features(const std::string &prefix, const std::vector<std::string> &keys, torch::DeviceType device)
-{
+FeatureDict load_features(const std::string &prefix,
+                          const std::vector<std::string> &keys,
+                          torch::DeviceType device) {
   FeatureDict featmap;
-  for (const auto &key : keys)
-  {
+  for (const auto &key : keys) {
     featmap.insert(key, load_feature(prefix + "/" + key + ".pt", device));
   }
   return featmap;
@@ -43,38 +38,33 @@ load_features(const std::string &prefix, const std::vector<std::string> &keys, t
 
 // docs-start: load-model
 std::tuple<torch::jit::Method, std::vector<std::string>>
-load_model(const std::string &filename, torch::DeviceType device)
-{
+load_model(const std::string &filename, torch::DeviceType device) {
   torch::jit::script::Module mod;
-  torch::jit::ExtraFilesMap extra_files{{"features", ""}, {"protocol_version", ""}};
+  torch::jit::ExtraFilesMap extra_files{{"features", ""},
+                                        {"protocol_version", ""}};
   std::vector<std::string> keys;
 
-  try
-  {
+  try {
     // Deserialize the ScriptModule from a file using torch::jit::load().
     mod = torch::jit::load(filename, device, extra_files);
-  }
-  catch (const c10::Error &e)
-  {
-    throw std::runtime_error("Error loading the model from " + filename + ": " + e.what());
+  } catch (const c10::Error &e) {
+    throw std::runtime_error("Error loading the model from " + filename + ": " +
+                             e.what());
   }
 
   auto version = json::parse(extra_files.at("protocol_version")).get<int>();
-  if (version != 2)
-  {
-    throw std::runtime_error("Unsupported protocol version " + std::to_string(version));
+  if (version != 2) {
+    throw std::runtime_error("Unsupported protocol version " +
+                             std::to_string(version));
   }
 
   auto features = json::parse(extra_files.at("features"));
   // check if features is array
-  if (!features.is_array())
-  {
+  if (!features.is_array()) {
     throw std::runtime_error("features is not an array");
   }
-  for (const auto &feature : features)
-  {
-    if (!feature.is_string())
-    {
+  for (const auto &feature : features) {
+    if (!feature.is_string()) {
       throw std::runtime_error("feature is not a string");
     }
     keys.push_back(feature.get<std::string>());
@@ -85,9 +75,8 @@ load_model(const std::string &filename, torch::DeviceType device)
 // docs-end: load-model
 
 // docs-start: evaluate-energy
-at::Tensor
-get_exc(const torch::jit::Method &exc_func, const FeatureDict &features)
-{
+at::Tensor get_exc(const torch::jit::Method &exc_func,
+                   const FeatureDict &features) {
   IValueList args;
   IValueMap kwargs;
   kwargs["mol"] = features;
@@ -97,16 +86,19 @@ get_exc(const torch::jit::Method &exc_func, const FeatureDict &features)
 
 // docs-start: evaluate-gradients
 std::tuple<at::Tensor, c10::Dict<std::string, at::Tensor>>
-get_exc_and_grad(const torch::jit::Method &exc_func, const FeatureDict &features)
-{
+get_exc_and_grad(const torch::jit::Method &exc_func,
+                 const FeatureDict &features) {
   // Create a mutable copy only for the tensors that need gradients
   FeatureDict features_with_grad;
   std::vector<at::Tensor> input_tensors;
   std::vector<std::string> tensor_keys;
 
-  for (const auto& entry : features) {
-    std::string key = entry.key();
-    bool requires_grad = (key == "density" || key == "grad" || key == "kin" || key == "coarse_0_atomic_coords" || key == "grid_coords" || key == "grid_weights");
+  for (const auto &entry : features) {
+    const std::string key = entry.key();
+    const bool requires_grad =
+        (key == "density" || key == "grad" || key == "kin" ||
+         key == "coarse_0_atomic_coords" || key == "grid_coords" ||
+         key == "grid_weights");
 
     auto tensor = entry.value().clone().requires_grad_(requires_grad);
     if (requires_grad) {
@@ -133,8 +125,7 @@ get_exc_and_grad(const torch::jit::Method &exc_func, const FeatureDict &features
   );
 
   c10::Dict<std::string, at::Tensor> grad;
-  for (size_t i = 0; i < tensor_keys.size(); ++i)
-  {
+  for (size_t i = 0; i < tensor_keys.size(); ++i) {
     grad.insert(tensor_keys[i], gradients[i]);
   }
 
@@ -143,18 +134,19 @@ get_exc_and_grad(const torch::jit::Method &exc_func, const FeatureDict &features
 // docs-end: evaluate-gradients
 
 // docs-start: main
-int main(int argc, const char *argv[])
-{
-  if (argc != 3)
-  {
-    std::cerr << "usage: skala_cpp_integration <path-to-fun-file> <feature-file-directory>\n";
+int main(int argc, const char *argv[]) {
+  if (argc != 3) {
+    std::cerr << "usage: skala_cpp_integration <path-to-fun-file> "
+                 "<feature-file-directory>\n";
     return -1;
   }
 
   const torch::DeviceType device = torch::kCPU;
 
-  const auto [exc_func, feature_keys] = load_model(std::string(argv[1]), device);
-  const auto features = load_features(std::string(argv[2]), feature_keys, device);
+  const auto [exc_func, feature_keys] =
+      load_model(std::string(argv[1]), device);
+  const auto features =
+      load_features(std::string(argv[2]), feature_keys, device);
 
   std::cout << "Compute Exc..." << std::endl;
 
@@ -169,9 +161,9 @@ int main(int argc, const char *argv[])
   const auto exc2 = (exc_on_grid2 * features.at("grid_weights")).sum();
 
   std::cout << "Exc = " << exc2.item() << std::endl;
-  for (const auto &kv : grad)
-  {
-    std::cout << "|dExc/d(" << kv.key() << ")| = " << kv.value().norm().item() << std::endl;
+  for (const auto &kv : grad) {
+    std::cout << "|dExc/d(" << kv.key() << ")| = " << kv.value().norm().item()
+              << std::endl;
   }
 
   return 0;

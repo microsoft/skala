@@ -1,0 +1,17 @@
+/**
+ * @file
+ * @brief SkalaXC public build-configuration flags.
+ *
+ * These mirror the SKALAXC_ENABLE_* CMake options and are safe to include from
+ * both C and C++ public headers. They let a consumer conditionally compile
+ * against optional features -- most importantly SKALAXC_HAS_MPI, which gates the
+ * MPI_Comm-taking calculator constructors.
+ */
+#pragma once
+
+#cmakedefine SKALAXC_HAS_SKALA
+#cmakedefine SKALAXC_HAS_CUDA
+#cmakedefine SKALAXC_HAS_MPI
+#cmakedefine SKALAXC_HAS_OPENMP
+#cmakedefine SKALAXC_HAS_HDF5
+

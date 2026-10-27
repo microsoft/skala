@@ -37,10 +37,10 @@ C++ and Fortran examples
    Minimal programs that load a Skala checkpoint and evaluate the exchange-correlation energy and its derivatives directly from :doc:`C++ with LibTorch <cpp>` and from :doc:`Fortran with FTorch <ftorch>`.
    They start from precomputed input features and are the starting point if you want to call the model from your own code.
 
-GauXC
-   `GauXC <https://github.com/wavefunction91/GauXC>`__ is a CPU/GPU library for the numerical integration of exchange-correlation functionals used by electronic structure codes.
-   We provide a version of GauXC with Skala support and `bindings for C++, C, and Fortran <https://microsoft.github.io/skala/gauxc/>`__.
-   GauXC builds the integration grid and the density features from a density matrix and returns the exchange-correlation energy and potential, which makes it the recommended way to add Skala to an existing DFT code.
+SkalaXC
+   `SkalaXC <https://github.com/microsoft/skala/tree/main/SkalaXC>`__ is a standalone library with C++, C, and Fortran APIs for integrating Skala into electronic structure codes.
+   It uses GauXC internally to build integration grids and density features from a density matrix and evaluates exchange-correlation energies, potentials, and gradients.
+   The validated backend supports host CPU unrestricted calculations; restricted calculations and device orchestration are not yet supported.
 
 Benchmarks
    A reproducible :doc:`timing benchmark <benchmarks>` that compares Skala with traditional functionals in PySCF and GPU4PySCF on molecules of increasing size, together with an interactive report.
@@ -77,7 +77,7 @@ Refer to their documentation for installation and input options.
 
    C++ (LibTorch) <cpp>
    Fortran (FTorch) <ftorch>
-   GauXC (C++, C, Fortran) <https://microsoft.github.io/skala/gauxc/>
+   SkalaXC (C++, C, Fortran) <https://github.com/microsoft/skala/tree/main/SkalaXC>
 
 .. toctree::
    :maxdepth: 1

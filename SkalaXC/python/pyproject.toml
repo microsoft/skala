@@ -1,0 +1,43 @@
+[build-system]
+requires = [
+  "scikit-build-core>=0.11",
+  "nanobind>=2.4",
+]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "skalaxc"
+version = "0.1.0"
+description = "Direct Python bindings for the SkalaXC C++ library"
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+  "numpy>=1.23",
+  "torch>=2.13,<2.14",
+]
+
+[project.optional-dependencies]
+test = [
+  "h5py>=3.10",
+  "mypy>=1.11",
+  "pytest>=8",
+  "typing-extensions>=4.0",
+]
+mpi = ["mpi4py>=4"]
+
+[tool.scikit-build]
+minimum-version = "build-system.requires"
+cmake.version = ">=3.21"
+build-dir = "build/{wheel_tag}"
+wheel.packages = ["src/skalaxc"]
+
+[tool.scikit-build.cmake.define]
+SkalaXC_DIR = { env = "SkalaXC_DIR" }
+SKALAXC_PYTHON_LAYOUT = { env = "SKALAXC_PYTHON_LAYOUT", default = "WHEEL" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.mypy]
+strict = true
+warn_unused_ignores = true

@@ -1,0 +1,15 @@
+Checks: >
+  -*,
+  clang-analyzer-*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-exception-escape,
+  -bugprone-forward-declaration-namespace,
+  -bugprone-implicit-widening-of-multiplication-result,
+  -bugprone-narrowing-conversions,
+  performance-*,
+  -performance-enum-size,
+  -performance-unnecessary-value-param
+WarningsAsErrors: '*'
+HeaderFilterRegex: '^(.*[/\\])?SkalaXC/(include|src|tests|examples)/'
+FormatStyle: file

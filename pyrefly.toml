@@ -3,7 +3,6 @@ python-version = "3.11.0"
 project-includes = [
     "skala",
     "model",
-    "gauxc",
     "benchmark",
     "website",
 ]
@@ -16,7 +15,6 @@ project-excludes = [
 search-path = [
     "skala/src",
     "model/src",
-    "gauxc/src",
     "benchmark/src",
     "skala",
     ".",

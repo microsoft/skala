@@ -1,0 +1,10 @@
+self-hosted-runner:
+  labels:
+    - microsoft-skala-cpu-pool
+    - microsoft-skala-gpu-pool
+    - microsoft-skala-small-gpu-pool
+
+paths:
+  .github/workflows/**/*.{yml,yaml}:
+    ignore:
+      - '"paths" section must be sequence node but got alias node'
