@@ -121,7 +121,7 @@ jobs:
             runner: microsoft-skala-small-gpu-pool
           - name: CUDA 13
             variant: cuda13
-            runner: microsoft-skala-gpu-pool
+            runner: microsoft-skala-small-gpu-pool
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4

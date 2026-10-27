@@ -44,13 +44,13 @@ jobs:
           - name: CUDA 13
             environment: skalaxc-cuda13
             version: "13"
-            runner: microsoft-skala-gpu-pool
+            runner: microsoft-skala-small-gpu-pool
             c_compiler: x86_64-conda-linux-gnu-gcc
             cxx_compiler: x86_64-conda-linux-gnu-g++
           - name: CUDA 13 / Clang 20
             environment: skalaxc-cuda13-clang
             version: "13-clang20"
-            runner: microsoft-skala-gpu-pool
+            runner: microsoft-skala-small-gpu-pool
             c_compiler: x86_64-conda-linux-gnu-clang
             cxx_compiler: x86_64-conda-linux-gnu-clang++
 
@@ -118,7 +118,7 @@ jobs:
           - name: CUDA 13
             environment: skalaxc-cuda13
             version: "13"
-            runner: microsoft-skala-gpu-pool
+            runner: microsoft-skala-small-gpu-pool
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -204,7 +204,7 @@ jobs:
           - name: CUDA 13
             environment: skalaxc-cuda13
             version: "13"
-            runner: microsoft-skala-gpu-pool
+            runner: microsoft-skala-small-gpu-pool
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4

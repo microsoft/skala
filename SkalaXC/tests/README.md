@@ -36,6 +36,11 @@ driven host/device tests and the C, C++, and Fortran numerical consumer tests
 are not built. Constructed-system units, traditional-functional parity, the
 Fortran ownership tests, and the exported-symbol ABI check remain available.
 
+Linux serial and MPI CI run on GitHub-hosted Ubuntu runners. CUDA 12 and 13
+builds, runtime tests, and package tests share `microsoft-skala-small-gpu-pool`;
+its NVIDIA driver must support both toolkit families. Runtime tests detect the
+GPU's compute capability rather than assuming a particular device model.
+
 ## Shared C++ setup
 
 `test_utils.hpp` and `test_utils.cxx` build as the private

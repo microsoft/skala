@@ -52,13 +52,13 @@ jobs:
             hdf5: ON
             build_type: Debug
           - name: mpi-release
-            runner: microsoft-skala-cpu-pool
+            runner: ubuntu-latest
             mpi: ON
             openmp: ON
             hdf5: ON
             build_type: Release
           - name: mpi-debug
-            runner: microsoft-skala-cpu-pool
+            runner: ubuntu-latest
             mpi: ON
             openmp: ON
             hdf5: ON
