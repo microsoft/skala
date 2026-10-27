@@ -2,6 +2,8 @@
 
 """Modification of PySCF nuclear gradient object to work with Skala functional."""
 
+from __future__ import annotations
+
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any
 
@@ -110,7 +112,7 @@ class SkalaRKSGradient(RHFGradient):
 
     def __init__(
         self,
-        ks: "SkalaRKS | SkalaUKS",
+        ks: SkalaRKS | SkalaUKS,
         verbose: bool = False,
         nuc_grad_feats: set[Feature] | None = None,
     ):
@@ -204,7 +206,7 @@ class SkalaRKSGradient(RHFGradient):
     ) -> int:
         return 0
 
-    def reset(self, mol: gto.Mole | None = None) -> "SkalaRKSGradient":
+    def reset(self, mol: gto.Mole | None = None) -> SkalaRKSGradient:
         # This GPU4PySCF method retains the borrowed CPU receiver type.
         # pyrefly: ignore[bad-argument-type]
         super().reset(mol)
@@ -229,7 +231,7 @@ class SkalaUKSGradient(UHFGradient):
 
     def __init__(
         self,
-        ks: "SkalaRKS | SkalaUKS",
+        ks: SkalaRKS | SkalaUKS,
         verbose: bool = False,
         nuc_grad_feats: set[Feature] | None = None,
     ):
@@ -325,7 +327,7 @@ class SkalaUKSGradient(UHFGradient):
     ) -> int:
         return 0
 
-    def reset(self, mol: gto.Mole | None = None) -> "SkalaUKSGradient":
+    def reset(self, mol: gto.Mole | None = None) -> SkalaUKSGradient:
         # This GPU4PySCF method retains the borrowed CPU receiver type.
         # pyrefly: ignore[bad-argument-type]
         super().reset(mol)
