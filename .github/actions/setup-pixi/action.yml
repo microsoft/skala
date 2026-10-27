@@ -32,3 +32,9 @@ runs:
         locked: true
         cache: false
         post-cleanup: ${{ inputs.post-cleanup }}
+
+    - name: Add Pixi libraries to the dynamic linker path
+      if: contains(inputs.environment, 'gpu-')
+      shell: bash
+      run: |
+        echo "LD_LIBRARY_PATH=$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
