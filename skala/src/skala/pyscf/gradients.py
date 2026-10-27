@@ -76,7 +76,7 @@ class SkalaRKSGradient(RHFGradient):
     """LivDFT functional"""
     nuc_grad_feats: set[Feature] | None
     """Which partial derivatives to take into account. None defaults to all."""
-    veff_nuc_grad_: torch.Tensor
+    veff_nuc_grad_: torch.Tensor | None = None
     """Contribution of the coordinate dependence of density, grad, kin, etc."""
     with_dftd3: DFTD3Dispersion | None = None
     """DFTD3 dispersion correction"""
@@ -139,6 +139,8 @@ class SkalaRKSGradient(RHFGradient):
             mo_coeff = self.base.mo_coeff
 
         grad = super().grad_elec(mo_energy, mo_coeff, mo_occ, atmlst)
+        if self.veff_nuc_grad_ is None:
+            raise RuntimeError("Nuclear gradient contribution was not computed")
         result = grad + (self.veff_nuc_grad_).numpy()
         assert isinstance(result, np.ndarray)
         return result
@@ -163,13 +165,24 @@ class SkalaRKSGradient(RHFGradient):
     ) -> int:
         return 0
 
+    @override
+    def reset(
+        self,
+        mol: gto.Mole | None = None,
+    ) -> "SkalaRKSGradient":
+        super().reset(mol)
+        if self.with_dftd3:
+            self.with_dftd3.reset(self.mol)
+        self.veff_nuc_grad_ = None
+        return self
+
 
 class SkalaUKSGradient(UHFGradient):
     functional: ExcFunctionalBase
     """LivDFT functional"""
     nuc_grad_feats: set[Feature] | None
     """Which partial derivatives to take into account. None defaults to all."""
-    veff_nuc_grad_: torch.Tensor
+    veff_nuc_grad_: torch.Tensor | None = None
     """Contribution of the coordinate dependence of density, grad, kin, etc."""
     with_dftd3: DFTD3Dispersion | None = None
     """DFTD3 dispersion correction"""
@@ -231,6 +244,8 @@ class SkalaUKSGradient(UHFGradient):
             mo_coeff = self.base.mo_coeff
 
         grad = super().grad_elec(mo_energy, mo_coeff, mo_occ, atmlst)
+        if self.veff_nuc_grad_ is None:
+            raise RuntimeError("Nuclear gradient contribution was not computed")
         result = grad + (self.veff_nuc_grad_).numpy()
         assert isinstance(result, np.ndarray)
         return result
@@ -248,3 +263,14 @@ class SkalaUKSGradient(UHFGradient):
             disp_g = disp_g[atmlst]
         nuc_g += disp_g
         return nuc_g
+
+    @override
+    def reset(
+        self,
+        mol: gto.Mole | None = None,
+    ) -> "SkalaUKSGradient":
+        super().reset(mol)
+        if self.with_dftd3:
+            self.with_dftd3.reset(self.mol)
+        self.veff_nuc_grad_ = None
+        return self

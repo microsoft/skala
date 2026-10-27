@@ -110,7 +110,7 @@ class SkalaRKSGradient(RHFGradient):
 
     def __init__(
         self,
-        ks: SkalaRKS | SkalaUKS,
+        ks: "SkalaRKS | SkalaUKS",
         verbose: bool = False,
         nuc_grad_feats: set[Feature] | None = None,
     ):
@@ -208,6 +208,8 @@ class SkalaRKSGradient(RHFGradient):
         # This GPU4PySCF method retains the borrowed CPU receiver type.
         # pyrefly: ignore[bad-argument-type]
         super().reset(mol)
+        if self.with_dftd3:
+            self.with_dftd3.reset(self.mol)
         self.veff_nuc_grad_ = None
         return self
 
@@ -329,5 +331,7 @@ class SkalaUKSGradient(UHFGradient):
         # This GPU4PySCF method retains the borrowed CPU receiver type.
         # pyrefly: ignore[bad-argument-type]
         super().reset(mol)
+        if self.with_dftd3:
+            self.with_dftd3.reset(self.mol)
         self.veff_nuc_grad_ = None
         return self
