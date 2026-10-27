@@ -115,7 +115,8 @@ def hartree_gradient(
 @pytest.fixture(scope="module")
 def gpu4pyscf_grid(molecule: gto.Mole) -> SkalaGrids:
     grid = SkalaGrids(molecule)
-    grid.level = 5
+    # Match SkalaXC's FINE grid while fitting neural backward on 4 GiB GPUs.
+    grid.atom_grid = (75, 302)
     grid.prune = None
     grid.radi_method = dft.radi.mura_knowles
     grid.build()
@@ -208,6 +209,7 @@ def test_gpu_exc_vxc_parity(
         molecule,
         functional_case.model,
         execution_space=DEVICE_EXECUTION_SPACE,
+        grid_size=skalaxc.AtomicGridSize.FINE,
     )
     energy, scalar_potential, spin_potential = integrator.eval_exc_vxc(
         scalar_density,
@@ -259,6 +261,7 @@ def test_gpu_exc_gradient_parity(
         molecule,
         functional_case.model,
         execution_space=DEVICE_EXECUTION_SPACE,
+        grid_size=skalaxc.AtomicGridSize.FINE,
     )
     skalaxc_gradient = integrator.eval_exc_grad(scalar_density, spin_density)
     max_error = float(np.max(np.abs(skalaxc_gradient - gpu4pyscf_gradient)))
