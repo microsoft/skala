@@ -270,6 +270,11 @@ toolchain. The root environments currently use these validated combinations:
 | `skalaxc-cuda13` | `>=13,<14` | GCC 15 |
 | `skalaxc-cuda13-clang` | `>=13,<14` | Clang 20 |
 
+The CUDA 12 environment also pins a GCC 14 build of HDF5 1.14.6. HDF5 builds
+produced with GCC 15 have a different Fortran module format and cannot be used
+by the GCC 14 Fortran API tests. Update this pin together with the CUDA 12
+compiler constraints, rather than selecting HDF5 solely by its library ABI.
+
 The CMake compatibility table follows PyTorch's
 [`CUDA_GCC_VERSIONS` and `CUDA_CLANG_VERSIONS`](https://github.com/pytorch/pytorch/blob/v2.13.0/torch/utils/cpp_extension.py).
 

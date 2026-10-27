@@ -247,6 +247,8 @@ cuda-compiler = ">=12.8,<13"
 gcc_linux-64 = "14.*"
 gfortran_linux-64 = "14.*"
 gxx_linux-64 = "14.*"
+# Newer HDF5 builds use GCC 15's incompatible Fortran module format.
+hdf5 = { version = "==1.14.6", build = "nompi_h19486de_110" }
 
 [feature.skalaxc-cuda12-build.activation.env]
 CUDACXX = "$CONDA_PREFIX/bin/nvcc"
