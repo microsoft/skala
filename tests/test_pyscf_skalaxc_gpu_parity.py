@@ -115,8 +115,7 @@ def hartree_gradient(
 @pytest.fixture(scope="module")
 def gpu4pyscf_grid(molecule: gto.Mole) -> SkalaGrids:
     grid = SkalaGrids(molecule)
-    # Match SkalaXC's FINE grid while fitting neural backward on 4 GiB GPUs.
-    grid.atom_grid = (75, 302)
+    grid.level = 5
     grid.prune = None
     grid.radi_method = dft.radi.mura_knowles
     grid.build()
@@ -209,7 +208,6 @@ def test_gpu_exc_vxc_parity(
         molecule,
         functional_case.model,
         execution_space=DEVICE_EXECUTION_SPACE,
-        grid_size=skalaxc.AtomicGridSize.FINE,
     )
     energy, scalar_potential, spin_potential = integrator.eval_exc_vxc(
         scalar_density,
@@ -246,13 +244,15 @@ def test_gpu_exc_gradient_parity(
 ) -> None:
     functional = load_functional(functional_case.name, device=torch.device("cuda:0"))
     assert isinstance(functional, ExcFunctionalBase)
-    gpu4pyscf_gradient = _fixed_density_xc_gradient(
-        functional,
-        molecule,
-        gpu4pyscf_grid,
-        reference_mean_field,
-        hartree_gradient,
-    )
+    # Offload saved tensors, not computation, to fit dense grids on 4 GiB GPUs.
+    with torch.autograd.graph.save_on_cpu(pin_memory=True):
+        gpu4pyscf_gradient = _fixed_density_xc_gradient(
+            functional,
+            molecule,
+            gpu4pyscf_grid,
+            reference_mean_field,
+            hartree_gradient,
+        )
     del functional
     _release_gpu_memory()
 
@@ -261,7 +261,6 @@ def test_gpu_exc_gradient_parity(
         molecule,
         functional_case.model,
         execution_space=DEVICE_EXECUTION_SPACE,
-        grid_size=skalaxc.AtomicGridSize.FINE,
     )
     skalaxc_gradient = integrator.eval_exc_grad(scalar_density, spin_density)
     max_error = float(np.max(np.abs(skalaxc_gradient - gpu4pyscf_gradient)))
