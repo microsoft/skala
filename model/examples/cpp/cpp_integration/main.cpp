@@ -1,3 +1,4 @@
+// docs-start: imports
 #include <nlohmann/json.hpp>
 #include <torch/csrc/autograd/autograd.h>
 #include <torch/script.h>
@@ -9,7 +10,9 @@ using json = nlohmann::json;
 using IValueList = std::vector<c10::IValue>;
 using IValueMap = std::unordered_map<std::string, c10::IValue>;
 using FeatureDict = c10::Dict<std::string, at::Tensor>;
+// docs-end: imports
 
+// docs-start: load-features
 at::Tensor load_feature(const std::string &filename, torch::DeviceType device) {
   std::ifstream input(filename, std::ios::binary);
   if (!input.is_open()) {
@@ -31,7 +34,9 @@ FeatureDict load_features(const std::string &prefix,
   }
   return featmap;
 }
+// docs-end: load-features
 
+// docs-start: load-model
 std::tuple<torch::jit::Method, std::vector<std::string>>
 load_model(const std::string &filename, torch::DeviceType device) {
   torch::jit::script::Module mod;
@@ -67,7 +72,9 @@ load_model(const std::string &filename, torch::DeviceType device) {
 
   return std::make_tuple(mod.get_method("get_exc_density"), keys);
 }
+// docs-end: load-model
 
+// docs-start: evaluate-energy
 at::Tensor get_exc(const torch::jit::Method &exc_func,
                    const FeatureDict &features) {
   IValueList args;
@@ -75,7 +82,9 @@ at::Tensor get_exc(const torch::jit::Method &exc_func,
   kwargs["mol"] = features;
   return exc_func(args, kwargs).toTensor();
 }
+// docs-end: evaluate-energy
 
+// docs-start: evaluate-gradients
 std::tuple<at::Tensor, c10::Dict<std::string, at::Tensor>>
 get_exc_and_grad(const torch::jit::Method &exc_func,
                  const FeatureDict &features) {
@@ -86,10 +95,10 @@ get_exc_and_grad(const torch::jit::Method &exc_func,
 
   for (const auto &entry : features) {
     const std::string key = entry.key();
-    const bool requires_grad = key == "density" || key == "grad" ||
-                               key == "kin" ||
-                               key == "coarse_0_atomic_coords" ||
-                               key == "grid_coords" || key == "grid_weights";
+    const bool requires_grad =
+        (key == "density" || key == "grad" || key == "kin" ||
+         key == "coarse_0_atomic_coords" || key == "grid_coords" ||
+         key == "grid_weights");
 
     auto tensor = entry.value().clone().requires_grad_(requires_grad);
     if (requires_grad) {
@@ -122,7 +131,9 @@ get_exc_and_grad(const torch::jit::Method &exc_func,
 
   return std::make_tuple(exc_on_grid, grad);
 }
+// docs-end: evaluate-gradients
 
+// docs-start: main
 int main(int argc, const char *argv[]) {
   if (argc != 3) {
     std::cerr << "usage: skala_cpp_integration <path-to-fun-file> "
@@ -157,3 +168,4 @@ int main(int argc, const char *argv[]) {
 
   return 0;
 }
+// docs-end: main

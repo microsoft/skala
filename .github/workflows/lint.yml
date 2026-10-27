@@ -19,7 +19,7 @@ jobs:
     - name: Setup Pixi
       uses: ./.github/actions/setup-pixi
       with:
-        environment: lint
+        environment: default
 
     - name: Run pre-commit hooks
       run: pre-commit run --all-files

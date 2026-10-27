@@ -8,9 +8,27 @@ from ase.calculators import calculator
 from skala.ase import Skala
 
 
+@pytest.mark.parametrize(
+    ("parameters", "message"),
+    [
+        ({"xc": object()}, "XC functional must be a string or ExcFunctionalBase."),
+        ({"basis": 1}, "Basis set must be a string or None."),
+        ({"auxbasis": 1}, "Auxiliary basis set must be a string or None."),
+        ({"ks_config": []}, "KS configuration must be a dictionary or None."),
+        ({"ks_config": {1: "value"}}, "KS configuration keys must be strings."),
+        ({"device": "tpu"}, "Unsupported device type: tpu"),
+        ({"verbose": "quiet"}, "verbose must be an integer"),
+    ],
+)
+def test_invalid_parameters(parameters: dict[str, object], message: str) -> None:
+    skala = Skala()
+    with pytest.raises(calculator.InputError, match=message):
+        skala.set(**parameters)
+
+
 @pytest.mark.parametrize("xc", ["pbe", "tpss", "skala-1.0", "skala-1.1"])
 def test_calc(xc: str) -> None:
-    atoms = molecule("H2O")  # type: ignore[no-untyped-call]
+    atoms = molecule("H2O")
     atoms.calc = Skala(
         xc=xc,
         basis="def2-svp",
@@ -45,7 +63,7 @@ def test_calc(xc: str) -> None:
 
 
 def test_missing_basis() -> None:
-    atoms = molecule("H2O")  # type: ignore[no-untyped-call]
+    atoms = molecule("H2O")
     atoms.calc = Skala(xc="pbe", with_density_fit=True, auxbasis="def2-svp-jkfit")
 
     with pytest.raises(
@@ -55,7 +73,7 @@ def test_missing_basis() -> None:
 
 
 def test_ks_config() -> None:
-    atoms = molecule("H2O")  # type: ignore[no-untyped-call]
+    atoms = molecule("H2O")
     atoms.calc = Skala(
         xc="pbe",
         basis="def2-svp",
@@ -66,7 +84,10 @@ def test_ks_config() -> None:
 
     energy = atoms.get_potential_energy()
 
-    assert atoms.calc._ks.base.conv_tol == 1e-6, (
+    calculator = atoms.calc
+    assert isinstance(calculator, Skala)
+    assert calculator._ks is not None
+    assert calculator._ks.base.conv_tol == 1e-6, (
         "KS solver convergence tolerance not set correctly"
     )
 

@@ -11,10 +11,10 @@ import json
 import math
 import sys
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NotRequired, TypedDict, cast
 
 from skala_benchmark.models import Molecule
 from skala_benchmark.protocol import Device, FunctionalKind, FunctionalSpec
@@ -38,10 +38,35 @@ _WARMUP_BASIS = "def2-svp"
 
 if TYPE_CHECKING:
     import torch
-    from pyscf.scf.hf import SCF
     from skala.functional.base import ExcFunctionalBase
+    from skala.pyscf.backend import KS
 
     from pyscf import gto
+
+
+class _MoleculeConfig(TypedDict):
+    atomic_numbers: list[int]
+    geometry_bohr: list[list[float]]
+    charge: NotRequired[int]
+    multiplicity: NotRequired[int]
+
+
+class _FunctionalConfig(TypedDict):
+    name: str
+    kind: str
+
+
+class _RunConfigJson(TypedDict):
+    molecule: _MoleculeConfig
+    basis: str
+    functional: _FunctionalConfig
+    device: str
+    ansatz: NotRequired[str]
+    density_fit: NotRequired[bool]
+    auxbasis: NotRequired[str | None]
+    grid_level: NotRequired[int]
+    conv_tol: NotRequired[float]
+    conv_tol_grad: NotRequired[float | None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,17 +98,28 @@ class RunConfig:
     @classmethod
     def from_json(cls, path: str | Path) -> RunConfig:
         with Path(path).open(encoding="utf-8") as fh:
-            data = json.load(fh)
+            data: _RunConfigJson = json.load(fh)
+        molecule = data["molecule"]
+        functional = data["functional"]
         return cls(
-            **{
-                **data,
-                "molecule": Molecule(**data["molecule"]),
-                "functional": FunctionalSpec(
-                    name=data["functional"]["name"],
-                    kind=FunctionalKind(data["functional"]["kind"]),
-                ),
-                "device": Device(data["device"]),
-            }
+            molecule=Molecule(
+                atomic_numbers=molecule["atomic_numbers"],
+                geometry_bohr=molecule["geometry_bohr"],
+                charge=molecule.get("charge", 0),
+                multiplicity=molecule.get("multiplicity", 1),
+            ),
+            basis=data["basis"],
+            functional=FunctionalSpec(
+                name=functional["name"],
+                kind=FunctionalKind(functional["kind"]),
+            ),
+            device=Device(data["device"]),
+            ansatz=data.get("ansatz", "UKS"),
+            density_fit=data.get("density_fit", True),
+            auxbasis=data.get("auxbasis"),
+            grid_level=data.get("grid_level", 3),
+            conv_tol=data.get("conv_tol", 5e-6),
+            conv_tol_grad=data.get("conv_tol_grad"),
         )
 
 
@@ -248,9 +284,12 @@ def _run_scf(config: RunConfig, launched_at: float | None = None) -> RunOutcome:
         conv_tol_grad = float(
             getattr(mf, "conv_tol_grad", None) or math.sqrt(config.conv_tol)
         )
+        weights = mf.grids.weights
+        if weights is None:
+            raise RuntimeError("SCF completed without initialized grid weights")
         return RunResult(
             total_energy=energy,
-            is_converged=bool(mf.converged),
+            is_converged=mf.converged,
             num_scf_iterations=len(timing.cycles),
             num_atoms=int(mf.mol.natm),
             num_electrons=int(mf.mol.nelectron),
@@ -258,7 +297,7 @@ def _run_scf(config: RunConfig, launched_at: float | None = None) -> RunOutcome:
             num_aux_basis_functions=(
                 _num_aux_basis_functions(mf) if config.density_fit else None
             ),
-            grid_size=int(mf.grids.weights.shape[0]),
+            grid_size=int(weights.shape[0]),
             conv_tol_grad=conv_tol_grad,
             device=device.value,
             worker_ms=1e3 * (t_end - t_start),
@@ -282,7 +321,7 @@ def _run_scf(config: RunConfig, launched_at: float | None = None) -> RunOutcome:
 
 
 def _settle_xc_evaluation(
-    mf: SCF,
+    mf: KS,
     device: Device,
     *,
     max_evaluations: int = 10,
@@ -370,7 +409,12 @@ def _num_profiled_runs(default: int = 1) -> int:
     import torch
 
     try:
-        return max(int(torch._C._jit_get_num_profiled_runs()), 1)  # type: ignore[attr-defined]
+        return max(
+            int(
+                torch._C._jit_get_num_profiled_runs()  # pyrefly: ignore[missing-attribute]
+            ),
+            1,
+        )
     except (AttributeError, TypeError, ValueError):
         return default
 
@@ -421,7 +465,7 @@ def count_atomic_orbitals(molecule: Molecule, basis: str) -> int:
     return int(_build_mol(molecule, basis).nao_nr())
 
 
-def _num_aux_basis_functions(mf: SCF) -> int | None:
+def _num_aux_basis_functions(mf: KS) -> int | None:
     """Number of density-fitting auxiliary basis functions (CPU or GPU backend)."""
     df = getattr(mf, "with_df", None)
     if df is None:
@@ -429,14 +473,14 @@ def _num_aux_basis_functions(mf: SCF) -> int | None:
     if hasattr(df, "get_naoaux"):  # pyscf CPU DF
         return int(df.get_naoaux())
     auxmol = getattr(df, "auxmol", None)  # gpu4pyscf DF exposes the aux Mole
-    return int(auxmol.nao_nr()) if auxmol is not None else None
+    return auxmol.nao_nr() if auxmol is not None else None
 
 
 def _build_mol(molecule: Molecule, basis: str) -> gto.Mole:
     from pyscf import gto
 
     atoms = [
-        [int(number), (float(x), float(y), float(z))]
+        [number, (float(x), float(y), float(z))]
         for number, (x, y, z) in zip(
             molecule.atomic_numbers, molecule.geometry_bohr, strict=True
         )
@@ -457,7 +501,7 @@ def _build_mf(
     device: Device,
     *,
     functional: ExcFunctionalBase | str | None = None,
-) -> SCF:
+) -> KS:
     func = (
         functional
         if functional is not None
@@ -466,7 +510,9 @@ def _build_mf(
     mf = _make_ks(mol, func, ansatz=config.ansatz, device=device)
 
     if config.density_fit:
-        mf = mf.density_fit(auxbasis=config.auxbasis)
+        # GPU4PySCF borrows RHF.density_fit for UKS, retaining the RHF receiver type.
+        density_fit = cast("Callable[[str | None], KS]", mf.density_fit)
+        mf = density_fit(config.auxbasis)
 
     mf.grids.level = config.grid_level
     mf.grids.reset()  # force a rebuild at the requested level
@@ -495,7 +541,7 @@ def _resolve_functional(
 
 def _make_ks(
     mol: gto.Mole, func: ExcFunctionalBase | str, *, ansatz: str, device: Device
-) -> SCF:
+) -> KS:
     """Construct the (Skala or PySCF-native) KS object on the chosen device."""
     unrestricted = ansatz == "UKS"
     if isinstance(func, str):

@@ -16,6 +16,7 @@ pytestmark = pytest.mark.gpu
 
 cupy = require_gpu()
 
+from gpu4pyscf.dft import numint as gpu_numint  # noqa: E402
 from skala.features import AOFeatureSpec, Feature  # noqa: E402
 from skala.functional.base import ExcFunctionalBase  # noqa: E402
 from skala.gpu4pyscf import SkalaKS  # noqa: E402
@@ -46,6 +47,8 @@ def test_prepare_spatially_sorted_gpu_grids() -> None:
         [[20.0, 0.0, 0.0], [0.0, 0.0, 0.0], [21.0, 0.0, 0.0], [1.0, 0.0, 0.0]]
     )
     weights = cupy.arange(coords.shape[0], dtype=cupy.float64)
+    # GPU4PySCF borrows the CPU constructor without changing its receiver type.
+    # pyrefly: ignore[bad-argument-type]
     grids = dft_gpu.Grids(mol)
     grids.coords = coords
     grids.weights = weights
@@ -64,6 +67,7 @@ def test_prepare_spatially_sorted_gpu_grids() -> None:
     assert grids._non0ao_idx is original_screening_cache
     assert isinstance(sorted_grids.coords, cupy.ndarray)
     assert isinstance(sorted_grids.weights, cupy.ndarray)
+    # pyrefly: ignore[missing-attribute]
     assert sorted_grids._non0ao_idx is None
     assert np.array_equal(
         cupy.asnumpy(sorted_grids.coords), cupy.asnumpy(coords)[forward]
@@ -80,6 +84,8 @@ def test_prepare_spatially_sorted_gpu_grids() -> None:
 
 def test_gpu_atom_major_features_require_skala_grids() -> None:
     mol = gto.M(atom="H 0 0 0", basis="sto-3g", spin=1, verbose=0)
+    # GPU4PySCF borrows the CPU constructor without changing its receiver type.
+    # pyrefly: ignore[bad-argument-type]
     grids = dft_gpu.Grids(mol)
     integrator = XCIntegrator(QuadraticFunctional(), device=torch.device("cuda:0"))
     dm = torch.eye(mol.nao_nr(), dtype=torch.float64, device="cuda:0")
@@ -210,7 +216,8 @@ def test_gpu_multiblock_mgga_response_dense_screened_equivalence() -> None:
     ks.grids.level = 1
     ks.grids.alignment = 1
     ks.grids.build(sort_grids=False)
-    assert ks.grids.weights.size > dft_gpu.numint.MIN_BLK_SIZE
+    assert ks.grids.weights is not None
+    assert ks.grids.weights.size > gpu_numint.MIN_BLK_SIZE
     mo_coeff = cupy.eye(mol.nao_nr())
     mo_occ = cupy.ones(mol.nao_nr())
     dm1 = cupy.eye(mol.nao_nr())
@@ -263,15 +270,19 @@ def test_gpu_screened_skala_matches_cpu_on_carbon_chain(
     gpu_grids.alignment = 1
     gpu_grids.build(sort_grids=False)
     dm = dft.RKS(mol).get_init_guess()
+    cpu_coords = cpu_grids.coords
+    cpu_weights = cpu_grids.weights
+    assert cpu_coords is not None
+    assert cpu_weights is not None
 
     np.testing.assert_allclose(
-        cpu_grids.coords,
+        cpu_coords,
         cupy.asnumpy(gpu_grids.coords),
         rtol=0.0,
         atol=0.0,
     )
     np.testing.assert_allclose(
-        cpu_grids.weights,
+        cpu_weights,
         cupy.asnumpy(gpu_grids.weights),
         rtol=1e-12,
         atol=1e-12,
@@ -315,11 +326,11 @@ def test_gpu_screened_skala_matches_cpu_on_carbon_chain(
 def test_gpu_empty_ao_block_matches_dense_reference() -> None:
     """Preserve grid alignment when GPU4PySCF finds no AOs in a block.
 
-    GPU4PySCF normally omits fixed-size grid blocks whose screening mask contains
-    no active atomic orbitals. Skala assigns each yielded result to a cumulative
-    grid slice, so omitting an empty block would shift every later result into the
-    wrong positions. ``strict_grid_order=True`` makes the backend yield the empty
-    block and allows Skala to advance that slice before processing active blocks.
+    GPU4PySCF 1.9.0 yields fixed-size grid blocks even when their screening mask
+    contains no active atomic orbitals. Skala must advance its cumulative grid
+    slice before skipping an empty block, or later results would be placed at
+    the wrong positions. No extra backend keyword is needed to preserve order.
+    GPU4PySCF 1.8.1 fails this contract unless ``strict_grid_order=True`` is used.
 
     The first block is placed far from the molecule to make its active-AO set
     empty, while the second block samples the molecular region. Comparing MGGA
@@ -328,22 +339,29 @@ def test_gpu_empty_ao_block_matches_dense_reference() -> None:
     """
     mol = gto.M(atom="C 0 0 0", basis="sto-3g", spin=2, verbose=0)
     assert dft_gpu is not None
-    block_size = int(dft_gpu.numint.MIN_BLK_SIZE)
+    block_size = int(gpu_numint.MIN_BLK_SIZE)
     far_coords = cupy.full((block_size, 3), 100.0, dtype=cupy.float64)
     near_coords = cupy.linspace(-0.5, 0.5, block_size * 3, dtype=cupy.float64).reshape(
         block_size, 3
     )
     coords = cupy.concatenate((far_coords, near_coords))
+    # GPU4PySCF borrows the CPU constructor without changing its receiver type.
+    # pyrefly: ignore[bad-argument-type]
     grids = dft_gpu.Grids(mol)
     grids.coords = coords
     grids.weights = cupy.ones(coords.shape[0], dtype=cupy.float64)
 
-    screening_numint = dft_gpu.numint.NumInt().build(mol, coords)
+    screening_numint = gpu_numint.NumInt().build(mol, coords)
     active_ao_counts = [
         len(block[1]) for block in grids.get_non0ao_idx(screening_numint.gdftopt)
     ]
     assert active_ao_counts[0] == 0
     assert active_ao_counts[1] > 0
+    blocks = list(screening_numint.block_loop(mol, grids, deriv=1, blksize=block_size))
+    assert [int(block[1].size) for block in blocks] == active_ao_counts
+    assert [int(block[2].size) for block in blocks] == [block_size, block_size]
+    cupy.testing.assert_array_equal(blocks[0][3], far_coords)
+    cupy.testing.assert_array_equal(blocks[1][3], near_coords)
     grids._non0ao_idx = None
 
     feature_function = MGGAFeatureFunction(
@@ -366,7 +384,7 @@ def test_gpu_sparse_mask_sorts_scatters_and_unsorts(
 ) -> None:
     mol = gto.M(atom="C 0 0 0", basis="sto-3g", spin=2, verbose=0)
     assert dft_gpu is not None
-    block_size = int(dft_gpu.numint.MIN_BLK_SIZE)
+    block_size = int(gpu_numint.MIN_BLK_SIZE)
     ngrids = 2 * block_size
     sort_idx = np.array([2, 0, 4, 1, 3])
     active_sorted_aos = np.array([0, 2, 4])
@@ -375,7 +393,9 @@ def test_gpu_sparse_mask_sorts_scatters_and_unsorts(
     )
     weights = cupy.ones(ngrids)
     coords = cupy.zeros((ngrids, 3))
-    grids = SimpleNamespace(weights=weights, coords=coords)
+    grids = GPU4PySCFSkalaGrids(mol)
+    grids.weights = weights
+    grids.coords = coords
 
     class FakeGpuNumInt:
         def build(self, mol: gto.Mole, coords: Array[D2, F64]) -> FakeGpuNumInt:
@@ -385,7 +405,7 @@ def test_gpu_sparse_mask_sorts_scatters_and_unsorts(
         def block_loop(
             self, *args: object, **kwargs: object
         ) -> Iterator[tuple[object, object, object, object]]:
-            assert kwargs["strict_grid_order"] is True
+            assert "strict_grid_order" not in kwargs
             yield (
                 cupy.empty((0, block_size), dtype=cupy.float64),
                 cupy.empty(0, dtype=cupy.int64),
@@ -399,7 +419,7 @@ def test_gpu_sparse_mask_sorts_scatters_and_unsorts(
                 coords[block_size:],
             )
 
-    monkeypatch.setattr(dft_gpu.numint, "NumInt", FakeGpuNumInt)
+    monkeypatch.setattr(gpu_numint, "NumInt", FakeGpuNumInt)
 
     feature_function = MGGAFeatureFunction(AOFeatureSpec([Feature.DENSITY]))
     dm = torch.diag(

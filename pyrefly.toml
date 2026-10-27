@@ -1,0 +1,54 @@
+preset = "strict"
+python-version = "3.11.0"
+project-includes = [
+    "skala",
+    "model",
+    "benchmark",
+    "website",
+]
+project-excludes = [
+    "**/build/",
+    "**/website/_build/",
+    "**/htmlcov/",
+    "**/third_party/",
+]
+search-path = [
+    "skala/src",
+    "model/src",
+    "benchmark/src",
+    "skala",
+    ".",
+]
+ignore-missing-imports = [
+    "cupy",
+    "cupy.*",
+    "e3nn",
+    "e3nn.*",
+    "gpu4pyscf",
+    "gpu4pyscf.*",
+    "h5py",
+    "h5py.*",
+    "opt_einsum_fx",
+    "opt_einsum_fx.*",
+    "pyscf",
+    "pyscf.*",
+]
+check-unannotated-defs = true
+infer-return-types = "never"
+type-ignore-unknown-tag-behavior = "no-effect"
+
+[[sub-config]]
+matches = "skala/src/skala/gpu4pyscf/**"
+# Receiver-type suppressions for borrowed GPU4PySCF methods are unused when
+# optional GPU dependencies are absent. Keep all other type checks enabled.
+[sub-config.errors]
+unused-ignore = false
+# Missing optional GPU bases make @override unverifiable in CPU-only environments.
+# Signature compatibility checks remain enabled.
+missing-override-decorator = false
+
+[[sub-config]]
+matches = "skala/tests/test_gpu4pyscf_*.py"
+# GPU-only tests need the same optional-dependency suppressions as the GPU modules.
+[sub-config.errors]
+unused-ignore = false

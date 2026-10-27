@@ -24,7 +24,7 @@ This repository contains five components:
 5. [`website/`](website) contains the main Sphinx site.
 
 Compiled-code examples include:
-    - [Skala in C++ with libtorch](model/examples/cpp/cpp_integration)
+   - [Skala in C++ with libtorch](https://microsoft.github.io/skala/cpp)
    - [Skala in Fortran with FTorch](https://microsoft.github.io/skala/ftorch)
 
 Development-only imports use separate namespaces: `skala_model` and `skala_benchmark`. They are
@@ -79,7 +79,7 @@ ks.kernel()
 
 The GPU install is more involved because `gpu4pyscf` ships CUDA-version-specific
 wheels that must match your CUDA toolkit. GPU environments and helper packages
-use the latest tested GPU4PySCF release, 1.8.1.
+use the latest tested GPU4PySCF release, 1.9.0.
 
 To install all dependencies from PyPI, use the GPU specific package with the
 matching CUDA version, e.g., for CUDA 12:

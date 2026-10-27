@@ -42,18 +42,12 @@ repos:
 
   - repo: local
     hooks:
-      - id: mypy
-        name: mypy
-        entry: mypy
+      - id: pyrefly
+        name: pyrefly
+        entry: pyrefly check
         language: system
         args:
-          - --config-file
-          - pyproject.toml
-          - --num-workers
-          - "4"
-          - skala
-          - model
-          - benchmark
-          - website
+          - --config
+          - pyrefly.toml
         pass_filenames: false
         always_run: true

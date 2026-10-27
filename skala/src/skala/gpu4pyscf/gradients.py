@@ -3,12 +3,13 @@
 """Modification of PySCF nuclear gradient object to work with Skala functional."""
 
 from collections.abc import Iterator
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import cupy as cp
 import numpy as np
 import torch
 from gpu4pyscf import dft
+from gpu4pyscf.dft import numint
 from gpu4pyscf.grad.rhf import Gradients as RHFGradient
 from gpu4pyscf.grad.rks import grids_noresponse_cc, grids_response_cc
 from gpu4pyscf.grad.uhf import Gradients as UHFGradient
@@ -23,6 +24,9 @@ from skala.pyscf.gradient_core import (
     assemble_nuclear_gradient,
     evaluate_nuclear_feature_derivatives,
 )
+
+if TYPE_CHECKING:
+    from skala.gpu4pyscf.dft import SkalaRKS, SkalaUKS
 
 
 def _veff_and_expl_nuc_grad(
@@ -62,7 +66,7 @@ def _veff_and_expl_nuc_grad(
         for coords, weight, weight1 in grids_response_cc(grid):
             mask = dft.gen_grid.make_mask(mol, coords)
             ao = from_dlpack(
-                dft.numint.eval_ao(
+                numint.eval_ao(
                     mol,
                     coords,
                     deriv=ao_deriv,
@@ -89,7 +93,12 @@ def nuc_grad_from_veff(
     return grad
 
 
-class SkalaRKSGradient(RHFGradient):  # type: ignore[misc]
+class SkalaRKSGradient(RHFGradient):
+    # GPU4PySCF borrows the CPU constructor without inheriting its attribute types.
+    mol: gto.Mole
+    base: SCF
+    verbose: int
+
     functional: ExcFunctionalBase
     """Skala functional"""
     nuc_grad_feats: set[Feature] | None
@@ -101,10 +110,12 @@ class SkalaRKSGradient(RHFGradient):  # type: ignore[misc]
 
     def __init__(
         self,
-        ks: SCF,
+        ks: SkalaRKS | SkalaUKS,
         verbose: bool = False,
         nuc_grad_feats: set[Feature] | None = None,
     ):
+        # GPU4PySCF assigns the CPU GradientsBase constructor to its GPU base class.
+        # pyrefly: ignore[bad-argument-type]
         super().__init__(ks)
         self.functional = ks._numint.func
         self.grids = ks.grids
@@ -176,6 +187,8 @@ class SkalaRKSGradient(RHFGradient):  # type: ignore[misc]
     def grad_nuc(
         self, mol: gto.Mole | None = None, atmlst: list[int] | None = None
     ) -> np.ndarray:
+        # This GPU4PySCF method retains the borrowed CPU receiver type.
+        # pyrefly: ignore[bad-argument-type]
         nuc_g = super().grad_nuc(mol, atmlst)
         assert isinstance(nuc_g, np.ndarray)
         if self.with_dftd3 is None:
@@ -192,12 +205,19 @@ class SkalaRKSGradient(RHFGradient):  # type: ignore[misc]
         return 0
 
     def reset(self, mol: gto.Mole | None = None) -> "SkalaRKSGradient":
+        # This GPU4PySCF method retains the borrowed CPU receiver type.
+        # pyrefly: ignore[bad-argument-type]
         super().reset(mol)
         self.veff_nuc_grad_ = None
         return self
 
 
-class SkalaUKSGradient(UHFGradient):  # type: ignore[misc]
+class SkalaUKSGradient(UHFGradient):
+    # GPU4PySCF borrows the CPU constructor without inheriting its attribute types.
+    mol: gto.Mole
+    base: SCF
+    verbose: int
+
     functional: ExcFunctionalBase
     """Skala functional"""
     nuc_grad_feats: set[Feature] | None
@@ -209,10 +229,12 @@ class SkalaUKSGradient(UHFGradient):  # type: ignore[misc]
 
     def __init__(
         self,
-        ks: SCF,
+        ks: "SkalaRKS | SkalaUKS",
         verbose: bool = False,
         nuc_grad_feats: set[Feature] | None = None,
     ):
+        # GPU4PySCF assigns the CPU GradientsBase constructor to its GPU base class.
+        # pyrefly: ignore[bad-argument-type]
         super().__init__(ks)
         self.functional = ks._numint.func
         self.grids = ks.grids
@@ -242,6 +264,8 @@ class SkalaUKSGradient(UHFGradient):  # type: ignore[misc]
         veff_grad = (
             2 * nuc_grad_from_veff(mol, veff, from_dlpack(dm)).detach().cpu().numpy()
         )
+        # GPU4PySCF assigns this RHF method to UHF without changing its receiver type.
+        # pyrefly: ignore[bad-argument-type]
         result = veff_grad + self.jk_energy_per_atom(
             dm, k_factor=0, verbose=self.verbose
         )
@@ -284,6 +308,8 @@ class SkalaUKSGradient(UHFGradient):  # type: ignore[misc]
     def grad_nuc(
         self, mol: gto.Mole | None = None, atmlst: list[int] | None = None
     ) -> np.ndarray:
+        # This GPU4PySCF method retains the borrowed CPU receiver type.
+        # pyrefly: ignore[bad-argument-type]
         nuc_g = super().grad_nuc(mol, atmlst)
         assert isinstance(nuc_g, np.ndarray)
         if self.with_dftd3 is None:
@@ -300,6 +326,8 @@ class SkalaUKSGradient(UHFGradient):  # type: ignore[misc]
         return 0
 
     def reset(self, mol: gto.Mole | None = None) -> "SkalaUKSGradient":
+        # This GPU4PySCF method retains the borrowed CPU receiver type.
+        # pyrefly: ignore[bad-argument-type]
         super().reset(mol)
         self.veff_nuc_grad_ = None
         return self

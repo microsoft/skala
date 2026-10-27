@@ -265,6 +265,8 @@ def SkalaUKS(
             )
 
     if with_newton:
+        # GPU4PySCF assigns RHF.newton to UHF without changing its receiver type.
+        # pyrefly: ignore[bad-argument-type]
         ks = ks.newton()
         if soscf_config is not None:
             ks.__dict__.update(soscf_config)

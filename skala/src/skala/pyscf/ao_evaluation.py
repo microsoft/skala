@@ -14,6 +14,7 @@ from torch import Tensor
 from torch.autograd import Function
 from torch.autograd.function import FunctionCtx
 from torch.utils.dlpack import from_dlpack
+from typing_extensions import override
 
 from pyscf import dft, gto
 from skala.pyscf import feature_math
@@ -21,7 +22,6 @@ from skala.pyscf.backend import (
     Array,
     Grid,
     check_gpu_imports_were_successful,
-    dft_gpu,
     from_numpy_or_cupy,
 )
 from skala.typing import D1, D2, F64, I64, U8
@@ -34,9 +34,8 @@ class _BlockwiseAOFeatureOperatorContext(Protocol):
     blksize: int | None
     compile_feature_function: bool
     adjoint: bool
-    output_shape: torch.Size
-    output_device: torch.device
-    output_dtype: torch.dtype
+    result_shape: torch.Size
+    result_options: tuple[torch.device, torch.dtype]
 
 
 def _active_cpu_ao_indices(
@@ -232,11 +231,13 @@ class _GPUAOBlockLoop:
         blksize: int | None,
     ) -> None:
         check_gpu_imports_were_successful()
+        from gpu4pyscf.dft import numint as gpu_numint
+
         self.mol = mol
         self.grids = grids
         self.feature_function = feature_function
         self.blksize = blksize
-        self.numint = dft_gpu.numint.NumInt().build(mol, grids.coords)
+        self.numint = gpu_numint.NumInt().build(mol, grids.coords)
         self.numint.grid_blksize = blksize
         self.sort_idx = torch.as_tensor(self.numint.gdftopt._ao_idx, device=device)
         self.unsort_idx = torch.argsort(self.sort_idx)
@@ -261,9 +262,8 @@ class _GPUAOBlockLoop:
             deriv=self.feature_function.deriv,
             blksize=self.blksize,
             non0tab=None,
-            # GPU4PySCF otherwise omits zero-AO blocks, shifting later grid slices.
-            strict_grid_order=True,
         ):
+            # Advance over zero-AO blocks before skipping their contractions.
             start, end = end, end + block_weights.size
             if active_ao_indices.size == 0:
                 continue
@@ -301,7 +301,7 @@ def _evaluate_blockwise_ao_features(
     :func:`evaluate_ao_features_blockwise`, which supplies explicit reverse-
     and forward-mode rules without retaining every block's AO intermediates.
     """
-    ngrids = grids.weights.size
+    ngrids = grids.size
     block_loop = _make_ao_block_loop(dm.device, mol, grids, feature_function, blksize)
 
     features = torch.zeros(
@@ -370,6 +370,7 @@ class _BlockwiseAOFeatureOperator(Function):
     """
 
     @staticmethod
+    @override
     def setup_context(
         ctx: FunctionCtx,
         inputs: tuple[
@@ -393,12 +394,14 @@ class _BlockwiseAOFeatureOperator(Function):
             context.compile_feature_function,
             context.adjoint,
         ) = inputs
-        context.output_shape = output.shape
-        context.output_device = output.device
-        context.output_dtype = output.dtype
+        context.result_shape = output.shape
+        context.result_options = output.device, output.dtype
 
+    # Custom Functions intentionally specialize PyTorch's variadic forward signature;
+    # setup_context additionally requires this override to remain ctx-free.
     @staticmethod
-    def forward(
+    @override
+    def forward(  # pyrefly: ignore[bad-override]
         value: torch.Tensor,
         mol: gto.Mole,
         grids: Grid,
@@ -426,20 +429,22 @@ class _BlockwiseAOFeatureOperator(Function):
         )
 
     @staticmethod
+    @override
     def jvp(
         ctx: _BlockwiseAOFeatureOperatorContext,
         *grad_inputs: torch.Tensor | None,
     ) -> torch.Tensor:
         value_tangent = grad_inputs[0]
         if value_tangent is None:
+            result_device, result_dtype = ctx.result_options
             return torch.zeros(
-                ctx.output_shape,
-                device=ctx.output_device,
-                dtype=ctx.output_dtype,
+                ctx.result_shape,
+                device=result_device,
+                dtype=result_dtype,
             )
         return cast(
             Tensor,
-            _BlockwiseAOFeatureOperator.apply(  # type: ignore[no-untyped-call]
+            _BlockwiseAOFeatureOperator.apply(
                 value_tangent,
                 ctx.mol,
                 ctx.grids,
@@ -451,11 +456,12 @@ class _BlockwiseAOFeatureOperator(Function):
         )
 
     @staticmethod
+    @override
     def backward(
         ctx: _BlockwiseAOFeatureOperatorContext,
         *grad_outputs: torch.Tensor,
     ) -> tuple[torch.Tensor | None, ...]:
-        input_cotangent = _BlockwiseAOFeatureOperator.apply(  # type: ignore[no-untyped-call]
+        input_cotangent = _BlockwiseAOFeatureOperator.apply(
             grad_outputs[0],
             ctx.mol,
             ctx.grids,
@@ -507,7 +513,7 @@ def evaluate_ao_features_blockwise(
     """
     return cast(
         Tensor,
-        _BlockwiseAOFeatureOperator.apply(  # type: ignore[no-untyped-call]
+        _BlockwiseAOFeatureOperator.apply(
             value,
             mol,
             grids,
@@ -530,7 +536,9 @@ def evaluate_full_grid(
     """Evaluate raw features over the full grid without block chunking."""
     if gpu:
         check_gpu_imports_were_successful()
-        ni = dft_gpu.numint.NumInt().build(mol, coords)
+        from gpu4pyscf.dft import numint as gpu_numint
+
+        ni = gpu_numint.NumInt().build(mol, coords)
     else:
         ni = dft.numint.NumInt()
     ao = from_numpy_or_cupy(
@@ -591,7 +599,7 @@ def evaluate_raw_features_auto_chunk(
 
     blksize = _resolve_ao_block_size(mol, feature_function, block_size, max_memory, gpu)
 
-    if blksize is not None and blksize >= grids.weights.shape[0]:
+    if blksize is not None and blksize >= grids.size:
         features = evaluate_full_grid(dm.double(), mol, grids.coords, feature_function)
     else:
         features = evaluate_ao_features_blockwise(

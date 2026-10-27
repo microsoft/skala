@@ -1,11 +1,14 @@
 # SPDX-License-Identifier: MIT
 
 from collections.abc import Callable
+from types import ModuleType
 from typing import Any, ClassVar, Generic, cast
 
 import numpy as np
 import torch
+from pyscf.dft.numint import NumInt
 from torch import Tensor
+from typing_extensions import override
 
 from pyscf import gto
 from skala.functional.base import ExcFunctionalBase
@@ -20,11 +23,11 @@ from skala.pyscf.backend import (
 from skala.pyscf.xc_integrator import XCIntegrator, XCResult
 
 
-class SkalaNumInt(Generic[ArrayF64]):
+class SkalaNumInt(NumInt, Generic[ArrayF64]):
     """Skala implementation of the ``pyscf.dft.numint.NumInt`` interface.
 
-    This class mimics the methods that PySCF and GPU4PySCF use from
-    :class:`pyscf.dft.numint.NumInt` without inheriting from it.
+    This class overrides the methods that PySCF and GPU4PySCF use from
+    :class:`pyscf.dft.numint.NumInt`.
 
     Evaluation of atomic orbitals and one-electron integrals on a grid
     is cached for speed.
@@ -57,6 +60,7 @@ class SkalaNumInt(Generic[ArrayF64]):
         chunk_size: int | None = None,
         device: torch.device | None = None,
     ):
+        super().__init__()
         self.integrator = XCIntegrator(functional, chunk_size=chunk_size, device=device)
 
     @property
@@ -69,6 +73,7 @@ class SkalaNumInt(Generic[ArrayF64]):
         """Functional retained for gradient-adapter compatibility."""
         return self.integrator.functional
 
+    @override
     def reset(self) -> "SkalaNumInt[ArrayF64]":
         """Retain the GPU4PySCF cache-reset interface."""
         return self
@@ -85,13 +90,13 @@ class SkalaNumInt(Generic[ArrayF64]):
         assert result.dtype == np.dtype(np.float64)
         return cast(ArrayF64, result)
 
+    @override
     def get_rho(
         self,
         mol: gto.Mole,
         dm: ArrayF64,
         grids: Grid,
         max_memory: int = 2000,
-        verbose: int = 0,
     ) -> ArrayF64:
         density = self.integrator.density(
             mol,
@@ -130,18 +135,23 @@ class SkalaNumInt(Generic[ArrayF64]):
 
         return self.integrator(mol, grids, dm, max_memory=max_memory)
 
+    @override
     def nr_rks(
         self,
         mol: gto.Mole,
         grids: Grid,
         xc_code: str | None,
-        dm: ArrayF64,
+        dms: ArrayF64,
+        relativity: int = 0,
+        hermi: int = 1,
         max_memory: int = 2000,
+        verbose: Any = None,
     ) -> tuple[float, float, ArrayF64]:
         """Restricted Kohn-Sham method, applicable if both spin-densities as equal."""
-        assert len(dm.shape) == 2
+        self._validate_numint_mode(relativity, hermi)
+        assert len(dms.shape) == 2
         result = self(
-            mol, grids, xc_code, self._from_backend(dm), max_memory=max_memory
+            mol, grids, xc_code, self._from_backend(dms), max_memory=max_memory
         )
         return (
             result.electron_count.sum().item(),
@@ -149,18 +159,23 @@ class SkalaNumInt(Generic[ArrayF64]):
             self._to_backend(result.potential),
         )
 
+    @override
     def nr_uks(
         self,
         mol: gto.Mole,
         grids: Grid,
         xc_code: str | None,
-        dm: ArrayF64,
+        dms: ArrayF64,
+        relativity: int = 0,
+        hermi: int = 1,
         max_memory: int = 2000,
+        verbose: Any = None,
     ) -> tuple[ArrayF64, float, ArrayF64]:
         """Unrestricted Kohn-Sham method, spin densities can be different."""
-        assert len(dm.shape) == 3 and dm.shape[0] == 2
+        self._validate_numint_mode(relativity, hermi)
+        assert len(dms.shape) == 3 and dms.shape[0] == 2
         result = self(
-            mol, grids, xc_code, self._from_backend(dm), max_memory=max_memory
+            mol, grids, xc_code, self._from_backend(dms), max_memory=max_memory
         )
         return (
             self._to_backend(result.electron_count),
@@ -168,13 +183,23 @@ class SkalaNumInt(Generic[ArrayF64]):
             self._to_backend(result.potential),
         )
 
+    @staticmethod
+    def _validate_numint_mode(relativity: int, hermi: int) -> None:
+        if relativity != 0:
+            raise NotImplementedError("Relativistic Skala integration is not supported")
+        if hermi != 1:
+            raise NotImplementedError(
+                "Skala integration requires a Hermitian density matrix"
+            )
+
+    @override
     def rsh_and_hybrid_coeff(
         self, xc_code: str | None = None, spin: int = 0
     ) -> tuple[float, float, float]:
         """Return zero range-separation and hybrid coefficients for Skala."""
         return 0, 0, 0
 
-    class libxc:
+    class _SkalaLibXC(ModuleType):
         __version__: ClassVar[str | None] = None
         __reference__: ClassVar[str | None] = None
 
@@ -185,6 +210,8 @@ class SkalaNumInt(Generic[ArrayF64]):
         @staticmethod
         def is_nlc(xc: str) -> bool:
             return False
+
+    libxc = _SkalaLibXC("skala.pyscf.libxc")  # pyrefly: ignore[bad-override-mutable-attribute]
 
     # Overrides PySCF's base with a wider array type for mo_coeff/mo_occ.
     def gen_response(

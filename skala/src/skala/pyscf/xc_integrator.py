@@ -241,13 +241,8 @@ class XCIntegrator:
                 raw_hessian_action.index_copy_(
                     -1, chunk.grid_indices, local_hessian_action.detach()
                 )
-                del (
-                    energy_chunk,
-                    local_gradient,
-                    local_hessian_action,
-                    local_raw_features,
-                    mol_features,
-                )
+                del energy_chunk, local_gradient, local_hessian_action
+                del local_raw_features, mol_features
 
             (hvp_total,) = torch.autograd.grad(
                 raw_features,

@@ -4,6 +4,7 @@ from typing import Any, cast
 import pytest
 import torch
 from torch.utils.dlpack import from_dlpack
+from typing_extensions import override
 
 from tests.utils import FULL_GRAD_REF, force_ao_screening, require_gpu
 
@@ -12,10 +13,12 @@ pytestmark = pytest.mark.gpu
 cupy = require_gpu()
 
 
-from gpu4pyscf import dft, scf  # noqa: E402
+from gpu4pyscf import dft  # noqa: E402
+from gpu4pyscf.dft import radi  # noqa: E402
 from skala.features import Feature, FeatureMap  # noqa: E402
 from skala.functional.base import ExcFunctionalBase  # noqa: E402
 from skala.gpu4pyscf import SkalaKS  # noqa: E402
+from skala.gpu4pyscf.dft import SkalaRKS, SkalaUKS  # noqa: E402
 from skala.gpu4pyscf.gradients import (  # noqa: E402
     SkalaRKSGradient,
     SkalaUKSGradient,
@@ -24,7 +27,6 @@ from skala.gpu4pyscf.gradients import (  # noqa: E402
 )
 from skala.pyscf import SkalaKS as CpuSkalaKS  # noqa: E402
 from skala.pyscf.evaluation import FeatureSpec  # noqa: E402
-from skala.pyscf.gradients import SkalaRKSGradient as CpuSkalaRKSGradient  # noqa: E402
 from skala.pyscf.model_chunking import evaluate_model_features  # noqa: E402
 from skala.utils import torch_allocator  # noqa: E402
 
@@ -58,7 +60,7 @@ def test_torch_allocator_is_active_after_import() -> None:
 
 def test_torch_allocator_uses_shared_non_default_stream() -> None:
     cupy_stream = cupy.cuda.Stream(non_blocking=True)
-    torch_stream = torch.cuda.ExternalStream(  # type: ignore[no-untyped-call]
+    torch_stream = torch.cuda.ExternalStream(
         cupy_stream.ptr,
         device=cupy_stream.device_id,
     )
@@ -79,7 +81,7 @@ def test_torch_allocator_uses_shared_non_default_stream() -> None:
 
 
 def test_torch_allocator_rejects_mismatched_streams() -> None:
-    torch_stream = torch.cuda.Stream()  # type: ignore[no-untyped-call]
+    torch_stream = torch.cuda.Stream()
 
     with torch.cuda.stream(torch_stream), cupy.cuda.Stream.null:
         torch_allocator.use_torch_mempool_in_cupy()
@@ -141,7 +143,9 @@ def get_mol(molname: str) -> gto.Mole:
 
 
 def minimal_grid(mol: gto.Mole) -> dft.Grids:
-    return dft.Grids(mol)(level=1, radi_method=dft.radi.treutler).build()
+    # GPU4PySCF borrows the CPU constructor without changing its receiver type.
+    # pyrefly: ignore[bad-argument-type]
+    return dft.Grids(mol)(level=1, radi_method=radi.treutler).build()
 
 
 def get_grid_and_rdm1(mol: gto.Mole) -> tuple[dft.Grids, torch.Tensor]:
@@ -179,6 +183,7 @@ def test_grid_coords_gradient(mol_name: str) -> None:
             super().__init__()
             self.features = [Feature.GRID_COORDS]
 
+        @override
         def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             """This actually calculates the total electron number"""
             return mol[Feature.GRID_COORDS].sum()
@@ -189,9 +194,7 @@ def test_grid_coords_gradient(mol_name: str) -> None:
     ana_grad = _evaluate_nuclear_gradient(exc_test, mol, grid, rdm1)[1]
 
     # calculate exact result
-    atom_grids_tab = grid.gen_atomic_grids(
-        mol, grid.atom_grid, grid.radi_method, grid.level, grid.prune
-    )
+    atom_grids_tab = grid.gen_atomic_grids(mol)
     exact_grad = torch.empty_like(ana_grad)
     for iatm in range(mol.natm):
         n_atom_grid_points = atom_grids_tab[mol.atom_symbol(iatm)][0].shape[0]
@@ -206,6 +209,7 @@ def test_coarse_0_atomic_coords_gradient(mol_name: str) -> None:
             super().__init__()
             self.features = [Feature.COARSE_0_ATOMIC_COORDS]
 
+        @override
         def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             """This actually calculates the total electron number"""
             return torch.einsum("nx->", mol[Feature.COARSE_0_ATOMIC_COORDS])
@@ -229,6 +233,7 @@ def test_grid_weights_gradient(mol_name: str) -> None:
             super().__init__()
             self.features = [Feature.GRID_WEIGHTS]
 
+        @override
         def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             """This actually calculates the total electron number"""
             return mol[Feature.GRID_WEIGHTS].sum()
@@ -281,6 +286,7 @@ def test_density_veff(mol_name: str) -> None:
             super().__init__()
             self.features = [Feature.DENSITY, Feature.GRID_WEIGHTS]
 
+        @override
         def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             """This actually calculates the total electron number"""
             return (mol[Feature.DENSITY] @ mol[Feature.GRID_WEIGHTS]).sum()
@@ -336,6 +342,7 @@ def test_grad_veff(mol_name: str) -> None:
             super().__init__()
             self.features = [Feature.GRAD, Feature.GRID_WEIGHTS]
 
+        @override
         def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             return (
                 (mol[Feature.GRAD] ** 2 @ mol[Feature.GRID_WEIGHTS])
@@ -399,6 +406,7 @@ def test_kin_veff(mol_name: str) -> None:
             super().__init__()
             self.features = [Feature.KIN, Feature.GRID_WEIGHTS]
 
+        @override
         def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             """This actually calculates the total kinetic energy number"""
             return (mol[Feature.KIN] @ mol[Feature.GRID_WEIGHTS]).sum()
@@ -453,7 +461,7 @@ def run_scf(
     with_dftd3: bool,
     *,
     grid_level: int = 1,
-) -> scf.hf.SCF:
+) -> SkalaRKS | SkalaUKS:
     print(f"{mol.basis = }")
     scf = SkalaKS(mol, xc=functional, with_dftd3=with_dftd3)
     scf.grids.level = grid_level
@@ -539,16 +547,14 @@ def test_nuclear_gradient_cpu_gpu_dense_screened_agree(
             with force_ao_screening(screened):
                 if backend == "cpu":
                     mean_field = CpuSkalaKS(mol, xc=functional, with_dftd3=False)
-                    gradient_type = CpuSkalaRKSGradient
                 else:
                     mean_field = SkalaKS(mol, xc=functional, with_dftd3=False)
-                    gradient_type = SkalaRKSGradient
                 mean_field.grids.level = 0
                 mean_field.grids.build(mol, sort_grids=False)
                 mean_field.conv_tol = 1e-10
                 mean_field.kernel()
                 assert mean_field.converged
-                gradient = gradient_type(mean_field).kernel()
+                gradient = mean_field.nuc_grad_method().kernel()
             route = f"{backend}-{'screened' if screened else 'dense'}"
             gradients[route] = torch.from_numpy(gradient)
 
@@ -583,6 +589,7 @@ def test_cuda_kernel_memory_stability() -> None:
             super().__init__()
             self.features = [Feature.GRAD, Feature.GRID_WEIGHTS]
 
+        @override
         def get_exc(self, mol: FeatureMap) -> torch.Tensor:
             return (
                 (mol[Feature.GRAD] ** 2 @ mol[Feature.GRID_WEIGHTS])

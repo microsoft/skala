@@ -133,10 +133,14 @@ def test_macos_hardware_probes_degrade_gracefully(
         "hw.logicalcpu": "16\n",
         "hw.memsize": f"{32 * 1024**3}\n",
     }
+
+    def fake_run(command: list[str]) -> str:
+        return responses.get(command[-1], "")
+
     monkeypatch.setattr(
         node_info,
         "_run",
-        lambda command: responses.get(command[-1], ""),
+        fake_run,
     )
 
     assert node_info._macos_cpu_info() == {

@@ -5,6 +5,7 @@ from typing import Any
 
 import torch
 from gpu4pyscf.dft import gen_grid, numint
+from typing_extensions import override
 
 from pyscf import gto
 from skala.pyscf.spatial_grid_layout import (
@@ -15,7 +16,7 @@ from skala.pyscf.spatial_grid_layout import (
 LOG = getLogger(__name__)
 
 
-class SkalaGrids(gen_grid.Grids):  # type: ignore
+class SkalaGrids(gen_grid.Grids):
     """GPU4PySCF grids with atom-major ordering and Skala layout caching.
 
     Configure and build the grid before preparing its spatial layout. Assigning
@@ -26,6 +27,9 @@ class SkalaGrids(gen_grid.Grids):  # type: ignore
     and screening state.
     """
 
+    # Initialized by the borrowed CPU constructor, not visible on the GPU base class.
+    atom_grid: dict[str, tuple[int, int] | list[int]] | tuple[int, int] | list[int]
+
     _spatial_grid_layout: "SpatialGridLayout | None"
     _initializing: bool
 
@@ -33,25 +37,28 @@ class SkalaGrids(gen_grid.Grids):  # type: ignore
         # GPU4PySCF installs a non-unit alignment during its constructor. Permit
         # that transient value, then establish the Skala cache and alignment invariants.
         super().__setattr__("_initializing", True)
+        # GPU4PySCF assigns the CPU Grids constructor to its unrelated GPU class.
+        # pyrefly: ignore[bad-argument-type]
         super().__init__(mol)
         super().__setattr__("_spatial_grid_layout", None)
         super().__setattr__("alignment", 1)
         super().__setattr__("_initializing", False)
 
-    def __setattr__(self, key: str, value: Any) -> None:
+    @override
+    def __setattr__(self, key: str, val: Any) -> None:
         # Alignment padding would break the exact atom-major grid layout expected
         # by Skala, so only the base-class constructor may set a non-unit value.
         if (
             key == "alignment"
-            and value != 1
+            and val != 1
             and not getattr(self, "_initializing", False)
         ):
-            raise ValueError(f"SkalaGrids alignment must be 1, got {value}")
+            raise ValueError(f"SkalaGrids alignment must be 1, got {val}")
         # The spatial permutations and screening data are derived from these
         # attributes and must be rebuilt after any assignment.
         if key in {"coords", "weights", "cutoff"}:
             super().__setattr__("_spatial_grid_layout", None)
-        super().__setattr__(key, value)
+        super().__setattr__(key, val)
 
     def build(
         self,

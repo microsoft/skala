@@ -10,6 +10,7 @@ import torch
 from skala.features import Feature, FeatureMap
 from skala.functional.base import ExcFunctionalBase
 from skala.pyscf import xc_integrator as xc_integrator_module
+from typing_extensions import override
 
 
 def require_gpu() -> ModuleType:
@@ -63,6 +64,7 @@ class QuadraticFunctional(ExcFunctionalBase):
         if not self._quadratic_features:
             raise ValueError("At least one AO-derived feature must be selected")
 
+    @override
     def get_exc(self, mol: FeatureMap) -> torch.Tensor:
         """Return the grid-integrated quadratic feature energy.
 

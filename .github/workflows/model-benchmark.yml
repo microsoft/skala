@@ -3,7 +3,7 @@ name: Model benchmarks
 on:
   push:
     branches: [main]
-    paths: &model-benchmark-paths
+    paths:
       - '.github/workflows/model-benchmark.yml'
       - '.github/actions/setup-pixi/**'
       - 'conftest.py'
@@ -14,9 +14,6 @@ on:
       - 'skala/src/skala/__init__.py'
       - 'skala/src/skala/features.py'
       - 'skala/src/skala/functional/**'
-  pull_request:
-    branches: [main]
-    paths: *model-benchmark-paths
   workflow_dispatch:
 
 permissions:
@@ -25,6 +22,7 @@ permissions:
 jobs:
   cpu:
     name: CPU model benchmark
+    if: github.ref == 'refs/heads/main'
     runs-on: microsoft-skala-cpu-pool
     env:
       OMP_NUM_THREADS: 4
@@ -49,6 +47,7 @@ jobs:
 
   gpu:
     name: GPU model benchmark
+    if: github.ref == 'refs/heads/main'
     runs-on: microsoft-skala-small-gpu-pool
     env:
       OMP_NUM_THREADS: 4

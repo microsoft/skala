@@ -104,6 +104,19 @@ def test_skala_dftd3_results(mol: gto.Mole, skala_xc: ExcFunctionalBase) -> None
     assert np.isfinite(gradient).all()
 
 
+def test_uks_gradient_requires_initialized_grids(skala_xc: ExcFunctionalBase) -> None:
+    mol = gto.M(atom="H", basis="sto-3g", spin=1)
+    gradient = SkalaKS(mol, xc=skala_xc, with_dftd3=False).nuc_grad_method()
+    assert isinstance(gradient, SkalaUKSGradient)
+    gradient.grids = None
+    dm = np.zeros((2, mol.nao_nr(), mol.nao_nr()))
+
+    with pytest.raises(
+        RuntimeError, match="UKS grids must be initialized before computing gradients"
+    ):
+        gradient.get_veff(dm=dm)
+
+
 def test_skala_class_with_dftd3_and_native_functional_raises() -> None:
     """Test that using DFT-D3 with a native PySCF functional raises an error."""
     mol = gto.M(atom="H 0 0 0; H 0 0 0.74", basis="sto-3g", verbose=0)

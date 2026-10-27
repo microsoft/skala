@@ -101,7 +101,8 @@ def load_prose(path: str | Path | None) -> dict[str, Any]:
         result["comparison"].get("environments")
     )
     notes = result["comparison"].get("notes")
-    result["comparison"]["notes"] = list(notes) if isinstance(notes, list) else []
+    normalized_notes: list[Any] = list(notes) if isinstance(notes, list) else []
+    result["comparison"]["notes"] = normalized_notes
     result["plots"] = as_mapping(result.get("plots"))
     return result
 

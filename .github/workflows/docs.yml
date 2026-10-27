@@ -7,6 +7,7 @@ on:
       - '.github/workflows/docs.yml'
       - '.github/actions/setup-pixi/**'
       - 'benchmark/pyproject.toml'
+      - 'model/examples/**'
       - 'pixi.lock'
       - 'pixi.toml'
       - 'pyproject.toml'
@@ -44,14 +45,10 @@ jobs:
           environment: docs
 
       - name: Build documentation
-        run: |
-          sphinx-build -b html website website/_build/html
-          touch website/_build/html/.nojekyll
+        run: pixi run --locked docs
 
       - name: Check external links
-        run: >-
-          sphinx-build -D nb_execution_mode=off -b linkcheck
-          website website/_build/linkcheck
+        run: pixi run --locked docs-linkcheck
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3

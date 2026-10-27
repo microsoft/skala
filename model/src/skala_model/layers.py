@@ -12,6 +12,7 @@ from typing import Any
 
 import torch
 from torch import nn
+from typing_extensions import override
 
 
 class Squasher(nn.Module):
@@ -29,6 +30,7 @@ class Squasher(nn.Module):
         super().__init__()
         self.eta = eta
 
+    @override
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Apply squashing function log(|x| + eta)."""
         return (x.abs() + self.eta).log()
@@ -67,6 +69,7 @@ class LinearSkip(nn.Linear):
             self.weight.data, mean=0.0, std=0.0625, a=-0.125, b=0.125
         )  # std value is copied from loaded graph of checkpointed DM21 model
 
+    @override
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         """Apply linear transformation with skip connection."""
         return input + nn.functional.linear(input, self.weight, self.bias)
@@ -91,6 +94,7 @@ class ScaledSigmoid(nn.Sigmoid):
         super().__init__()
         self.scale = scale
 
+    @override
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         """Apply scaled sigmoid activation."""
         return self.scale * super().forward(input / self.scale)

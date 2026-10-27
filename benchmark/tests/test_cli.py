@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
@@ -15,8 +16,14 @@ def test_run_routes_a_typed_request(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     requests: list[SweepRequest] = []
+
+    def fake_run_sweep(request: SweepRequest) -> Path:
+        requests.append(request)
+        return tmp_path
+
     monkeypatch.setattr(
-        "skala_benchmark.__main__.run_sweep", lambda request: requests.append(request)
+        "skala_benchmark.__main__.run_sweep",
+        fake_run_sweep,
     )
 
     main(
@@ -45,9 +52,17 @@ def test_collect_routes_to_the_default_output(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     calls: list[tuple[str, str]] = []
+
+    def fake_collect_results(
+        input_dir: str | Path, output_dir: str | Path
+    ) -> tuple[Path, Path, Path]:
+        calls.append((str(input_dir), str(output_dir)))
+        output_path = Path(output_dir)
+        return output_path, output_path, output_path
+
     monkeypatch.setattr(
         "skala_benchmark.collect_results.collect_results",
-        lambda input_dir, output_dir: calls.append((input_dir, output_dir)),
+        fake_collect_results,
     )
 
     main(["collect", str(tmp_path)])
@@ -59,12 +74,25 @@ def test_report_routes_dry_and_interpreted_reports(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     calls: list[tuple[str, list[str], str | None]] = []
+
+    def fake_generate(
+        output: str | Path,
+        inputs: Sequence[str | Path],
+        prose_path: str | Path | None = None,
+    ) -> Path:
+        calls.append(
+            (
+                str(output),
+                [str(input_path) for input_path in inputs],
+                str(prose_path) if prose_path is not None else None,
+            )
+        )
+        return Path(output)
+
     monkeypatch.setattr(
         importlib.import_module("skala_benchmark.report.generate"),
         "generate",
-        lambda output, inputs, prose_path=None: calls.append(
-            (output, inputs, prose_path)
-        ),
+        fake_generate,
     )
     reference = "benchmark/reference"
     local = str(tmp_path / "benchmark-output" / "collected")

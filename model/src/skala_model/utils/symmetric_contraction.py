@@ -7,8 +7,10 @@ import opt_einsum_fx
 import torch
 import torch.fx
 from e3nn import o3
+from typing_extensions import override
 
 from skala_model.utils.cg import u_matrix_real
+from skala_model.utils.irreps import Irreps
 
 ALPHABET = ["w", "x", "v", "n", "z", "r", "t", "y", "u", "o", "p", "s"]
 
@@ -22,8 +24,8 @@ def get_alphabet_string(i: int) -> str:
 class SymmetricContraction(torch.nn.Module):
     def __init__(
         self,
-        irreps_in: o3.Irreps,
-        irreps_out: o3.Irreps,
+        irreps_in: Irreps,
+        irreps_out: Irreps,
         correlation: int,
         sketch: bool = False,
     ) -> None:
@@ -34,24 +36,27 @@ class SymmetricContraction(torch.nn.Module):
         self.correlation = correlation
         self.sketch = sketch
 
-        hidden_nfs = [mul for mul, _ in irreps_in]
+        hidden_nfs = [mul_ir.mul for mul_ir in irreps_in]
         assert len(set(hidden_nfs)) == 1, (
             "All irreps need to have the same number of channels"
         )
         hidden_nf = hidden_nfs[0]
 
-        self.contractions = torch.nn.ModuleList(
-            [
+        contractions = []
+        for irrep_out in irreps_out:
+            output_irreps = o3.Irreps(str(irrep_out.ir))
+            assert isinstance(output_irreps, o3.Irreps)
+            contractions.append(
                 Contraction(
                     irreps_in=irreps_in,
-                    irrep_out=o3.Irreps(str(irrep_out.ir)),
+                    irrep_out=output_irreps,
                     correlation=correlation,
                     hidden_nf=hidden_nf,
                 )
-                for irrep_out in irreps_out
-            ]
-        )
+            )
+        self.contractions = torch.nn.ModuleList(contractions)
 
+    @override
     def forward(
         self,
         x: torch.Tensor,
@@ -68,7 +73,7 @@ class SymmetricContraction(torch.nn.Module):
 class Contraction(torch.nn.Module):
     def __init__(
         self,
-        irreps_in: o3.Irreps,
+        irreps_in: Irreps,
         irrep_out: o3.Irreps,
         correlation: int,
         hidden_nf: int,
@@ -78,8 +83,10 @@ class Contraction(torch.nn.Module):
         self.correlation = correlation
 
         for nu in range(correlation, 0, -1):
+            input_irreps = o3.Irreps("+".join(str(mul_ir.ir) for mul_ir in irreps_in))
+            assert isinstance(input_irreps, o3.Irreps)
             u_matrix = u_matrix_real(
-                irreps_in=o3.Irreps("+".join(str(irrep.ir) for irrep in irreps_in)),
+                irreps_in=input_irreps,
                 irreps_out=irrep_out,
                 correlation=nu,
                 dtype=torch.get_default_dtype(),
@@ -183,6 +190,7 @@ class Contraction(torch.nn.Module):
     def get_u_tensor(self, nu: int) -> torch.Tensor:
         return dict(self.named_buffers())[f"u_matrix_{nu}"]
 
+    @override
     def forward(
         self,
         *xs: list[torch.Tensor],
@@ -210,11 +218,11 @@ class Contraction(torch.nn.Module):
         return result
 
 
-def pack(x: torch.Tensor, irreps: o3.Irreps) -> torch.Tensor:
+def pack(x: torch.Tensor, irreps: Irreps) -> torch.Tensor:
     return torch.cat(
         [
-            x[..., slice].view(*x.shape[:-1], mul, ir.dim)
-            for (mul, ir), slice in zip(irreps, irreps.slices(), strict=False)
+            x[..., irrep_slice].view(*x.shape[:-1], mul_ir.mul, mul_ir.ir.dim)
+            for mul_ir, irrep_slice in zip(irreps, irreps.slices(), strict=False)
         ],
         dim=-1,
     )

@@ -64,6 +64,7 @@ jobs:
       uses: ./.github/actions/cpu-diagnostics
 
   gpu-test:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ${{ matrix.runner }}
     env:
       OMP_NUM_THREADS: 4

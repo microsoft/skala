@@ -62,3 +62,14 @@ def test_report_metrics_use_the_steady_state_and_partition_the_cycle() -> None:
     )
     assert composition is not None
     assert sum(composition.values()) == pytest.approx(100.0)
+
+
+@pytest.mark.parametrize("count", [None, "invalid", 0, -1])
+def test_iterations_metric_rejects_invalid_counts(count: object) -> None:
+    row = {
+        "is_converged": True,
+        "status": "ok",
+        "num_scf_iterations": count,
+    }
+
+    assert metric_value(row, "iterations") is None
