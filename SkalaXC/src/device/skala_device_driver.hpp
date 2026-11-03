@@ -9,6 +9,7 @@
 #include <gauxc/load_balancer.hpp>
 #include <gauxc/xc_integrator/local_work_driver.hpp>
 
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <vector>
@@ -71,6 +72,8 @@ class SkalaDeviceDriver final : public SkalaDriver {
  private:
   /** @brief CUDA device ordinal selected for every operation. */
   types::DeviceId device_id_;
+  /** @brief Task cap shared by all upstream and Skala CUDA launches. */
+  std::size_t task_limit_;
   /** @brief Weight-partitioned GauXC task owner. */
   GauXC::LoadBalancer lb_;
   /** @brief CUDA local work driver. */

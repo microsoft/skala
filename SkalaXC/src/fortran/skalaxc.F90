@@ -812,7 +812,7 @@ contains
    end function rt_comm_size
 
    !> @brief Finalize the handle (idempotent).
-   subroutine rt_destroy(this)
+   impure elemental subroutine rt_destroy(this)
       type(skalaxc_runtime_environment_t), intent(inout) :: this
       if (c_associated(this%handle)) then
          call c_runtime_destroy(this%handle)
@@ -820,7 +820,7 @@ contains
       end if
    end subroutine rt_destroy
 
-   subroutine rt_assign(lhs, rhs)
+   impure elemental subroutine rt_assign(lhs, rhs)
       class(skalaxc_runtime_environment_t), intent(inout) :: lhs
       class(skalaxc_runtime_environment_t), intent(in)    :: rhs
       call reject_handle_assignment(lhs%is_valid(), rhs%is_valid())
@@ -915,7 +915,7 @@ contains
    end function mol_natoms
 
    !> @brief Destroy the handle (idempotent).
-   subroutine mol_destroy(this)
+   impure elemental subroutine mol_destroy(this)
       type(skalaxc_molecule_t), intent(inout) :: this
       if (c_associated(this%handle)) then
          call c_molecule_destroy(this%handle)
@@ -923,7 +923,7 @@ contains
       end if
    end subroutine mol_destroy
 
-   subroutine mol_assign(lhs, rhs)
+   impure elemental subroutine mol_assign(lhs, rhs)
       class(skalaxc_molecule_t), intent(inout) :: lhs
       class(skalaxc_molecule_t), intent(in)    :: rhs
       call reject_handle_assignment(lhs%is_valid(), rhs%is_valid())
@@ -1066,7 +1066,7 @@ contains
    end function bas_nbf
 
    !> @brief Destroy the handle (idempotent).
-   subroutine bas_destroy(this)
+   impure elemental subroutine bas_destroy(this)
       type(skalaxc_basisset_t), intent(inout) :: this
       if (c_associated(this%handle)) then
          call c_basisset_destroy(this%handle)
@@ -1074,7 +1074,7 @@ contains
       end if
    end subroutine bas_destroy
 
-   subroutine bas_assign(lhs, rhs)
+   impure elemental subroutine bas_assign(lhs, rhs)
       class(skalaxc_basisset_t), intent(inout) :: lhs
       class(skalaxc_basisset_t), intent(in)    :: rhs
       call reject_handle_assignment(lhs%is_valid(), rhs%is_valid())
@@ -1121,7 +1121,7 @@ contains
    end function mg_create_default
 
    !> @brief Destroy the handle (idempotent).
-   subroutine mg_destroy(this)
+   impure elemental subroutine mg_destroy(this)
       type(skalaxc_molgrid_t), intent(inout) :: this
       if (c_associated(this%handle)) then
          call c_molgrid_destroy(this%handle)
@@ -1129,7 +1129,7 @@ contains
       end if
    end subroutine mg_destroy
 
-   subroutine mg_assign(lhs, rhs)
+   impure elemental subroutine mg_assign(lhs, rhs)
       class(skalaxc_molgrid_t), intent(inout) :: lhs
       class(skalaxc_molgrid_t), intent(in)    :: rhs
       call reject_handle_assignment(lhs%is_valid(), rhs%is_valid())
@@ -1173,7 +1173,7 @@ contains
    end function lb_create
 
    !> @brief Destroy the handle (idempotent).
-   subroutine lb_destroy(this)
+   impure elemental subroutine lb_destroy(this)
       type(skalaxc_load_balancer_t), intent(inout) :: this
       if (c_associated(this%handle)) then
          call c_load_balancer_destroy(this%handle)
@@ -1181,7 +1181,7 @@ contains
       end if
    end subroutine lb_destroy
 
-   subroutine lb_assign(lhs, rhs)
+   impure elemental subroutine lb_assign(lhs, rhs)
       class(skalaxc_load_balancer_t), intent(inout) :: lhs
       class(skalaxc_load_balancer_t), intent(in)    :: rhs
       call reject_handle_assignment(lhs%is_valid(), rhs%is_valid())
@@ -1229,7 +1229,7 @@ contains
    end function mw_modify_weights
 
    !> @brief Destroy the handle (idempotent).
-   subroutine mw_destroy(this)
+   impure elemental subroutine mw_destroy(this)
       type(skalaxc_molecular_weights_t), intent(inout) :: this
       if (c_associated(this%handle)) then
          call c_molecular_weights_destroy(this%handle)
@@ -1237,7 +1237,7 @@ contains
       end if
    end subroutine mw_destroy
 
-   subroutine mw_assign(lhs, rhs)
+   impure elemental subroutine mw_assign(lhs, rhs)
       class(skalaxc_molecular_weights_t), intent(inout) :: lhs
       class(skalaxc_molecular_weights_t), intent(in)    :: rhs
       call reject_handle_assignment(lhs%is_valid(), rhs%is_valid())
@@ -1276,7 +1276,7 @@ contains
    end function func_create
 
    !> @brief Destroy the handle (idempotent).
-   subroutine func_destroy(this)
+   impure elemental subroutine func_destroy(this)
       type(skalaxc_functional_t), intent(inout) :: this
       if (c_associated(this%handle)) then
          call c_functional_destroy(this%handle)
@@ -1284,7 +1284,7 @@ contains
       end if
    end subroutine func_destroy
 
-   subroutine func_assign(lhs, rhs)
+   impure elemental subroutine func_assign(lhs, rhs)
       class(skalaxc_functional_t), intent(inout) :: lhs
       class(skalaxc_functional_t), intent(in)    :: rhs
       call reject_handle_assignment(lhs%is_valid(), rhs%is_valid())
@@ -1434,7 +1434,7 @@ contains
    end function xc_reset_diagnostics
 
    !> @brief Destroy the handle (idempotent).
-   subroutine xc_destroy(this)
+   impure elemental subroutine xc_destroy(this)
       type(skalaxc_xc_integrator_t), intent(inout) :: this
       if (c_associated(this%handle)) then
          call c_integrator_destroy(this%handle)
@@ -1442,7 +1442,7 @@ contains
       end if
    end subroutine xc_destroy
 
-   subroutine xc_assign(lhs, rhs)
+   impure elemental subroutine xc_assign(lhs, rhs)
       class(skalaxc_xc_integrator_t), intent(inout) :: lhs
       class(skalaxc_xc_integrator_t), intent(in)    :: rhs
       call reject_handle_assignment(lhs%is_valid(), rhs%is_valid())

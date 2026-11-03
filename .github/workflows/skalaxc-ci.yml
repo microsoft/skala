@@ -85,7 +85,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          submodules: recursive
+          submodules: ${{ matrix.name != 'serial-debug' && 'recursive' || 'false' }}
 
       - name: Setup Pixi
         uses: ./.github/actions/setup-pixi
@@ -143,6 +143,27 @@ jobs:
           cmake --build SkalaXC/build-installed-consumers-${{ matrix.name }}
           ctest --test-dir SkalaXC/build-installed-consumers-${{ matrix.name }} \
             --no-tests=error --output-on-failure
+
+      - name: Install Python binding against tested native package
+        if: matrix.name == 'serial-release' || matrix.name == 'mpi-release'
+        env:
+          SkalaXC_DIR: ${{ github.workspace }}/SkalaXC/install-ci-${{ matrix.name }}/lib/cmake/SkalaXC
+          SKALAXC_PYTHON_LAYOUT: WHEEL
+        run: python -m pip install SkalaXC/python --no-build-isolation --no-deps --force-reinstall
+
+      - name: Test installed CPU binding and generated stubs
+        if: matrix.name == 'serial-release' || matrix.name == 'mpi-release'
+        env:
+          EXPECT_MPI: ${{ matrix.mpi }}
+        run: |
+          python -c "import os, skalaxc, h5py, mypy; assert skalaxc.HDF5_ENABLED and not skalaxc.CUDA_ENABLED; assert skalaxc.MPI_ENABLED == (os.environ['EXPECT_MPI'] == 'ON'); assert skalaxc.PYTHON_LAYOUT == 'WHEEL'"
+          python -m pytest -v -ra SkalaXC/python/tests --ignore=SkalaXC/python/tests/test_mpi.py
+
+      - name: Test installed MPI binding on two ranks
+        if: matrix.name == 'mpi-release'
+        run: |
+          mpiexec --oversubscribe -n 2 python -c "import skalaxc; from mpi4py import MPI; assert skalaxc.MPI_ENABLED and MPI.COMM_WORLD.size == 2"
+          mpiexec --oversubscribe -n 2 python -m pytest -v -ra SkalaXC/python/tests/test_mpi.py
 
   sanitizer:
     name: gcc-asan-ubsan

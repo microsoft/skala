@@ -17,6 +17,7 @@ not be merged merely because they evaluate the same model and fixture.
 | CUDA parity | `skala_device_test.cxx` and `test_pyscf_skalaxc_gpu_parity.py` | Native LDA/PBE host-device gradient parity, TPSS EXC/VXC, lightweight batching/stream/MPI infrastructure checks, and dedicated GPU4PySCF–SkalaXC neural-gradient parity. The Python gradient tests offload saved autograd tensors to CPU memory while keeping computation on the GPU, preserving dense grids and observable tolerances on 4 GiB GPUs. TPSS CUDA-gradient coverage is deferred until its TensorExpr trace is retraced for lower sm_120 register pressure. |
 | Public C++ consumer | CTest `skalaxc_public_api` | Installed-style header use, PIMPL isolation, owning outputs, state/error contracts, gradients, batching, and diagnostics. |
 | Public C consumer | CTest `skalaxc_c_api` | Opaque handles, status codes, column-major caller-owned buffers, validation, gradients, and diagnostics. |
+| C example input | CTest `skalaxc_example.density_shapes` | Scalar/spin density rank and exact extents, checked allocation size, unchanged guards on rejected reads, and closed HDF5 objects. |
 | Public Fortran consumer | CTest `skalaxc_fortran` and `skalaxc_fortran_assignment.*` | `iso_c_binding`, move-only handle ownership, caller-owned arrays, diagnostics, and gradients. |
 | Binary boundary | CTest `skalaxc_abi.exported_symbols` and `skalaxc_abi.c_consumer_dependencies` | Export allowlist and absence of private GauXC/LibTorch dependencies from a C consumer. |
 
@@ -24,6 +25,13 @@ The C and Fortran suites validate the conservative batching mode through their
 public bindings. Positive aggressive-batching equivalence is covered at the
 private host/device and public C++ layers; it is not repeated in each language
 binding.
+
+Fortran assignment rejection covers scalars and rank-one/rank-two arrays for
+all eight owning handle types. Linux lifecycle tests wrap the native destroy
+calls to count exactly-once destruction after element moves, allocatable
+deallocation, and scope exit. Task-tile unit tests cover counts 65,534, 65,535,
+65,536, and 131,071 with both generous and restrictive memory capacities,
+checking that every task is visited exactly once.
 
 Both language suites compare scalar and spin potentials against `/VXC_SCALAR`
 and `/VXC_Z` using the golden-host tolerances below. Output buffers start as NaN
@@ -45,6 +53,12 @@ its NVIDIA driver must support both toolkit families. Runtime tests detect the
 GPU's compute capability rather than assuming a particular device model.
 
 ## Shared C++ setup
+
+The serial-debug CI job leaves the GauXC submodule uninitialized to exercise
+the pinned FetchContent fallback with tests enabled. Other native jobs use
+the submodule. Test parser sources, include paths, and basis fixtures all use
+`SKALAXC_GAUXC_RESOLVED_SOURCE_DIR`, independent of whether the source was
+fetched or supplied through `SKALAXC_GAUXC_SOURCE_DIR`.
 
 `test_utils.hpp` and `test_utils.cxx` build as the private
 `skalaxc_test_utils` static library. They own setup that is data construction

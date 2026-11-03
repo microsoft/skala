@@ -8,7 +8,6 @@ from dataclasses import dataclass
 import numpy as np
 import numpy.typing as npt
 import pytest
-import skalaxc
 import torch
 from skala.functional import FunctionalArtifact, load_functional
 from skala.functional.base import ExcFunctionalBase
@@ -18,7 +17,15 @@ from skala.pyscf.grids import SkalaGrids
 from skala.pyscf.xc_integrator import XCIntegrator
 
 from pyscf import dft, gto, scf
-from tests.skalaxc_test_utils import (
+
+try:
+    import skalaxc
+except ModuleNotFoundError as error:
+    if error.name != "skalaxc":
+        raise
+    pytest.skip("SkalaXC native binding is not installed", allow_module_level=True)
+
+from skalaxc_test_utils import (  # noqa: E402
     SKALA_1_1_REV1_SHA256,
     ParityTolerances,
     make_skalaxc_integrator,

@@ -137,3 +137,21 @@ mypy tests/typing/interface.py tests/typing/cuda_mpi.py
 The other build fixtures are `cpu.py`, `cuda.py`, and `mpi.py` in the same
 directory. Unused-ignore checking ensures each fixture also verifies that
 constructors unavailable in that build remain rejected.
+
+## CI coverage
+
+The native Linux release and MPI release jobs install this binding against
+their tested native installation and run the applicable full suite, including
+generated-stub checks. MPI-specific tests run on two ranks. CUDA runtime jobs
+test the installed CUDA binding; CUDA+MPI jobs additionally run the idle-rank
+and split-communicator tests on three and four ranks. Each job asserts native
+feature flags and dependencies before pytest, and reports executed and skipped
+tests with `-v -ra`. Single-process runs skip CUDA tests on CPU builds and
+multi-rank tests outside their required launch; dedicated launches cover those
+cases rather than treating those skips as coverage.
+
+The root parity tests are optional in a Python-only checkout: a missing
+`skalaxc` installation is reported as a module-level skip. Native parity CI
+asserts the binding and backend features before pytest. Root test helpers use
+the unique `skalaxc_test_utils` module rather than a second `tests` package, so
+root and runtime suites can be collected together.

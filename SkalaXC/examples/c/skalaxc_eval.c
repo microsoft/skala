@@ -23,14 +23,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static int read_doubles(hid_t file, const char* dset, double* buf) {
-  hid_t d = H5Dopen2(file, dset, H5P_DEFAULT);
-  herr_t st;
-  if (d < 0) return -1;
-  st = H5Dread(d, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, buf);
-  H5Dclose(d);
-  return st < 0 ? -1 : 0;
-}
+#include "density_io.h"
 
 int main(int argc, char** argv) {
   const char* path;
@@ -108,11 +101,7 @@ int main(int argc, char** argv) {
     goto fail;
 
   nbf = skalaxc_xc_integrator_nbf(xc);
-  if (nbf <= 0) {
-    fprintf(stderr, "SkalaXC error: invalid nbf\n");
-    goto cleanup;
-  }
-  n2 = (size_t)nbf * (size_t)nbf;
+  if (density_matrix_size(nbf, &n2) != 0) goto cleanup;
   Ps = (double*)calloc(n2, sizeof(double));
   Pz = (double*)calloc(n2, sizeof(double));
   VXCs = (double*)calloc(n2, sizeof(double));
@@ -128,8 +117,8 @@ int main(int argc, char** argv) {
     fprintf(stderr, "H5Fopen failed\n");
     goto cleanup;
   }
-  if (read_doubles(file, "/DENSITY_SCALAR", Ps) ||
-      read_doubles(file, "/DENSITY_Z", Pz)) {
+  if (read_density_matrix(file, "/DENSITY_SCALAR", (size_t)nbf, Ps) ||
+      read_density_matrix(file, "/DENSITY_Z", (size_t)nbf, Pz)) {
     fprintf(stderr, "HDF5 read failed\n");
     H5Fclose(file);
     goto cleanup;

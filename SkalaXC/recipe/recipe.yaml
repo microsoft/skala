@@ -171,6 +171,11 @@ outputs:
         - ninja
       host:
         - ${{ pin_subpackage('libskalaxc', exact=True) }}
+        - if: mpi == "openmpi"
+          then:
+            - mpi4py >=4
+            - mpi * openmpi
+            - openmpi
         - python ${{ python }}.*
         - pip
         - scikit-build-core >=0.11
@@ -180,6 +185,11 @@ outputs:
         - ${{ pin_subpackage('libskalaxc', exact=True) }}
         - python ${{ python }}.*
         - numpy >=1.23
+        - if: mpi == "openmpi"
+          then:
+            - mpi4py >=4
+            - mpi * openmpi
+            - openmpi
     tests:
       - python:
           imports:
@@ -187,6 +197,21 @@ outputs:
           pip_check: true
       - script:
           - OMP_NUM_THREADS=4 python -c "import skalaxc; assert skalaxc.PYTHON_LAYOUT == 'CONDA'; assert skalaxc.MODEL_DIR.is_dir()"
+      - if: mpi == "openmpi" and cuda == "cpu"
+        then:
+          requirements:
+            run:
+              - pytest >=8
+              - h5py >=3.10
+          files:
+            source:
+              - SkalaXC/python/tests/test_mpi.py
+              - SkalaXC/python/tests/test_integration.py
+              - SkalaXC/tests/ref_data/skala_he_def2qzvp_lda_uks.hdf5
+          script:
+            - export OMPI_MCA_pml=ob1 OMPI_MCA_btl=self,tcp OMP_NUM_THREADS=4
+            - mpiexec --oversubscribe -n 2 python -c "import skalaxc; from mpi4py import MPI; assert skalaxc.MPI_ENABLED and not skalaxc.CUDA_ENABLED; assert MPI.COMM_WORLD.size == 2; assert 'Open MPI' in MPI.Get_library_version()"
+            - mpiexec --oversubscribe -n 2 python -m pytest -v -ra SkalaXC/python/tests/test_mpi.py
 
 about:
   homepage: https://github.com/microsoft/skala

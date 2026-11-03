@@ -65,7 +65,7 @@ jobs:
           if-no-files-found: error
 
   cpu-package:
-    name: CPU package (${{ matrix.target-platform }})
+    name: CPU package (${{ matrix.target-platform }}, ${{ matrix.mpi }})
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -73,10 +73,16 @@ jobs:
         include:
           - runner: ubuntu-latest
             target-platform: linux-64
+            mpi: nompi
           - runner: ubuntu-24.04-arm
             target-platform: linux-aarch64
+            mpi: nompi
           - runner: macos-14
             target-platform: osx-arm64
+            mpi: nompi
+          - runner: ubuntu-latest
+            target-platform: linux-64
+            mpi: openmpi
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -93,7 +99,7 @@ jobs:
           rattler-build build
           --recipe SkalaXC/recipe/recipe.yaml
           --target-platform ${{ matrix.target-platform }}
-          --variant mpi=nompi
+          --variant mpi=${{ matrix.mpi }}
           --variant cuda=cpu
           --variant python=3.12
           --output-dir SkalaXC/output-packages
@@ -102,7 +108,7 @@ jobs:
       - name: Store CPU packages
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: skalaxc-${{ matrix.target-platform }}-cpu
+          name: skalaxc-${{ matrix.target-platform }}-cpu-${{ matrix.mpi }}
           path: SkalaXC/output-packages/${{ matrix.target-platform }}/*.conda
           if-no-files-found: error
 

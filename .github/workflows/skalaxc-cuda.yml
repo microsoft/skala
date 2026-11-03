@@ -187,6 +187,11 @@ jobs:
           python -c "import skalaxc, torch; assert skalaxc.CUDA_ENABLED and torch.cuda.is_available()"
           pytest -v -m gpu tests/test_pyscf_skalaxc_gpu_parity.py
 
+      - name: Test installed CUDA binding and generated stubs
+        run: |
+          python -c "import skalaxc, torch, h5py, mypy; assert skalaxc.CUDA_ENABLED and skalaxc.HDF5_ENABLED and not skalaxc.MPI_ENABLED; assert torch.cuda.is_available(); assert skalaxc.PYTHON_LAYOUT == 'WHEEL'"
+          python -m pytest -v -ra SkalaXC/python/tests --ignore=SkalaXC/python/tests/test_mpi.py
+
   cuda-mpi-test:
     name: ${{ matrix.name }} MPI runtime
     runs-on: ${{ matrix.runner }}
@@ -257,3 +262,25 @@ jobs:
           -R '^skalaxc_unit_mpi\.(cuda_idle_rank|cuda_subcommunicator)$'
           --no-tests=error
           --output-on-failure
+
+      - name: Install CUDA MPI Python binding
+        env:
+          SkalaXC_DIR: ${{ github.workspace }}/SkalaXC/install-cuda-mpi-${{ matrix.version }}/lib/cmake/SkalaXC
+          SKALAXC_PYTHON_LAYOUT: WHEEL
+        run: |
+          cmake --install SkalaXC/build-cuda-mpi-${{ matrix.version }} \
+            --prefix SkalaXC/install-cuda-mpi-${{ matrix.version }} --component Core
+          python -m pip install SkalaXC/python --no-build-isolation --no-deps --force-reinstall
+
+      - name: Test installed CUDA MPI binding and generated stubs
+        run: |
+          python -c "import skalaxc, torch, h5py, mypy; from mpi4py import MPI; assert skalaxc.MPI_ENABLED and skalaxc.CUDA_ENABLED and skalaxc.HDF5_ENABLED; assert torch.cuda.is_available(); assert skalaxc.PYTHON_LAYOUT == 'WHEEL'"
+          python -m pytest -v -ra SkalaXC/python/tests --ignore=SkalaXC/python/tests/test_mpi.py
+          mpiexec --oversubscribe -n 2 python -c "from mpi4py import MPI; assert MPI.COMM_WORLD.size == 2"
+          mpiexec --oversubscribe -n 2 python -m pytest -v -ra SkalaXC/python/tests/test_mpi.py
+          mpiexec --oversubscribe -n 3 python -c "from mpi4py import MPI; assert MPI.COMM_WORLD.size == 3"
+          mpiexec --oversubscribe -n 3 python -m pytest -v -ra \
+            SkalaXC/python/tests/test_cuda.py::test_cuda_uses_mpi_world_with_an_idle_domain_rank
+          mpiexec --oversubscribe -n 4 python -c "from mpi4py import MPI; assert MPI.COMM_WORLD.size == 4"
+          mpiexec --oversubscribe -n 4 python -m pytest -v -ra \
+            SkalaXC/python/tests/test_cuda.py::test_cuda_uses_runtime_mpi_subcommunicator

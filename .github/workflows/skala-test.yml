@@ -10,6 +10,7 @@ on:
       - 'pixi.toml'
       - 'pyproject.toml'
       - 'skala/**'
+      - 'tests/**'
       - 'tools/**'
   pull_request:
     branches: [main]
@@ -58,6 +59,9 @@ jobs:
         pytest -v --doctest-modules --cov=skala --cov-report=xml
         --cov-report=term-missing --cov-report=html --durations=50
         --durations-min=1.0 skala/src/skala/ skala/tests/
+
+    - name: Check combined root and runtime collection
+      run: python -m pytest --collect-only -q -ra tests/ skala/tests/test_build_release.py
 
     - name: Print CPU diagnostics on failure
       if: ${{ failure() }}

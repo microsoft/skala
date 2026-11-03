@@ -68,4 +68,6 @@ jobs:
         --no-build-isolation --no-deps --force-reinstall
 
     - name: Run direct-binding parity tests
-      run: pytest -v tests/test_pyscf_skalaxc_parity.py
+      run: |
+        python -c "import skalaxc; assert skalaxc.HDF5_ENABLED and not skalaxc.CUDA_ENABLED and not skalaxc.MPI_ENABLED"
+        pytest -v tests/test_pyscf_skalaxc_parity.py

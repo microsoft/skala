@@ -91,15 +91,16 @@ add_executable(skalaxc_unit_test
   skala_model_unit_test.cxx
   skala_stress_test.cxx
   spin_gradient_unit_test.cxx
+  task_batch_unit_test.cxx
   skala_host_mpi_test.cxx
   skala_reorder_unit_test.cxx
   skala_mpi_subcomm_unit_test.cxx
   skala_traditional_integration_test.cxx
   # GauXC's Gaussian-94 basis parser lives in its test tree and is not part of
-  # the `gauxc` library target. SKALAXC_GAUXC_SOURCE_DIR expands to the vendored
-  # GauXC source tree, so listing this file here compiles the parser directly
+  # the `gauxc` library target. Use the resolved checkout for either acquisition
+  # route, so listing this file here compiles the parser directly
   # into the integration-test executable without modifying the submodule.
-  ${SKALAXC_GAUXC_SOURCE_DIR}/tests/basis/parse_basis.cxx
+  ${SKALAXC_GAUXC_RESOLVED_SOURCE_DIR}/tests/basis/parse_basis.cxx
 )
 if(SKALAXC_HAS_HDF5)
   target_sources(skalaxc_unit_test PRIVATE
@@ -109,11 +110,11 @@ if(SKALAXC_HAS_HDF5)
 endif()
 if(MSVC)
   set_source_files_properties(
-    ${SKALAXC_GAUXC_SOURCE_DIR}/tests/basis/parse_basis.cxx
+    ${SKALAXC_GAUXC_RESOLVED_SOURCE_DIR}/tests/basis/parse_basis.cxx
     PROPERTIES COMPILE_OPTIONS /w)
 else()
   set_source_files_properties(
-    ${SKALAXC_GAUXC_SOURCE_DIR}/tests/basis/parse_basis.cxx
+    ${SKALAXC_GAUXC_RESOLVED_SOURCE_DIR}/tests/basis/parse_basis.cxx
     PROPERTIES COMPILE_OPTIONS -w)
 endif()
 if(SKALAXC_ENABLE_CUDA)
@@ -125,7 +126,7 @@ endif()
 target_include_directories(skalaxc_unit_test PRIVATE
   ${PROJECT_SOURCE_DIR}/src
   ${PROJECT_SOURCE_DIR}/src/host
-  ${SKALAXC_GAUXC_SOURCE_DIR}/tests/basis
+  ${SKALAXC_GAUXC_RESOLVED_SOURCE_DIR}/tests/basis
 )
 target_link_libraries(skalaxc_unit_test PRIVATE
   skalaxc_test_utils
@@ -138,7 +139,7 @@ target_compile_features(skalaxc_unit_test PRIVATE cxx_std_17)
 target_compile_definitions(skalaxc_unit_test PRIVATE
   SKALAXC_TEST_REF_DATA_PATH="${CMAKE_CURRENT_SOURCE_DIR}/ref_data"
   SKALAXC_GAUXC_REF_DATA_PATH="${SKALAXC_GAUXC_REF_DATA_DIR}"
-  SKALAXC_TEST_BASIS_PATH="${SKALAXC_GAUXC_SOURCE_DIR}/tests/basis/old"
+  SKALAXC_TEST_BASIS_PATH="${SKALAXC_GAUXC_RESOLVED_SOURCE_DIR}/tests/basis/old"
   SKALAXC_MODEL_PATH="${SKALAXC_MODEL_PATH}"
 )
 # Register every Catch2 TEST_CASE as its own CTest test (prefixed with
@@ -284,6 +285,16 @@ if(SKALAXC_HAS_HDF5)
   find_package(HDF5 QUIET COMPONENTS C)
 endif()
 if(SKALAXC_HAS_HDF5 AND HDF5_FOUND AND HDF5_C_LIBRARIES)
+  add_executable(skalaxc_density_io_test density_io_test.c)
+  target_include_directories(skalaxc_density_io_test PRIVATE ${HDF5_INCLUDE_DIRS})
+  target_link_libraries(skalaxc_density_io_test PRIVATE ${HDF5_C_LIBRARIES})
+  # The test performs HDF5 calls inside assertions even in release builds.
+  if(MSVC)
+    target_compile_options(skalaxc_density_io_test PRIVATE /UNDEBUG)
+  else()
+    target_compile_options(skalaxc_density_io_test PRIVATE -UNDEBUG)
+  endif()
+  add_test(NAME skalaxc_example.density_shapes COMMAND skalaxc_density_io_test)
   add_executable(skalaxc_c_api_test skalaxc_c_api_test.c)
   target_link_libraries(skalaxc_c_api_test PRIVATE skalaxc ${HDF5_C_LIBRARIES})
   if(UNIX)
@@ -391,6 +402,16 @@ if(SKALAXC_BUILD_FORTRAN AND SKALAXC_HAS_HDF5)
 endif()
 
 if(SKALAXC_BUILD_FORTRAN)
+  foreach(_skalaxc_rank RANGE 1 2)
+    add_executable(skalaxc_fortran_assignment_rank${_skalaxc_rank}_test
+      skalaxc_fortran_assignment_test.F90)
+    target_link_libraries(skalaxc_fortran_assignment_rank${_skalaxc_rank}_test
+      PRIVATE skalaxc_fortran)
+  endforeach()
+  target_compile_definitions(skalaxc_fortran_assignment_rank1_test
+    PRIVATE "HANDLE_SHAPE=(2)")
+  target_compile_definitions(skalaxc_fortran_assignment_rank2_test
+    PRIVATE "HANDLE_SHAPE=(2,2)")
   add_executable(skalaxc_fortran_assignment_test
     skalaxc_fortran_assignment_test.F90)
   target_link_libraries(skalaxc_fortran_assignment_test PRIVATE
@@ -404,6 +425,36 @@ if(SKALAXC_BUILD_FORTRAN)
         -DHANDLE_TYPE=${_skalaxc_handle_type}
         "-DEXPECTED_MESSAGE=SkalaXC handles are non-copyable; use move_from"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/check_expected_failure.cmake)
+    foreach(_skalaxc_rank RANGE 1 2)
+      add_test(NAME skalaxc_fortran_assignment.rank${_skalaxc_rank}.${_skalaxc_handle_type}
+        COMMAND ${CMAKE_COMMAND}
+          -DEXECUTABLE=$<TARGET_FILE:skalaxc_fortran_assignment_rank${_skalaxc_rank}_test>
+          -DHANDLE_TYPE=${_skalaxc_handle_type}
+          "-DEXPECTED_MESSAGE=SkalaXC handles are non-copyable; use move_from"
+          -P ${CMAKE_CURRENT_SOURCE_DIR}/check_expected_failure.cmake)
+    endforeach()
   endforeach()
   unset(_skalaxc_handle_type)
+  if(UNIX AND NOT APPLE)
+    foreach(_skalaxc_rank RANGE 1 2)
+      set(_skalaxc_lifecycle_target skalaxc_fortran_array_lifecycle_rank${_skalaxc_rank})
+      add_executable(${_skalaxc_lifecycle_target}
+        skalaxc_fortran_array_lifecycle.F90 fortran_destroy_counts.c)
+      target_compile_definitions(${_skalaxc_lifecycle_target}
+        PRIVATE HANDLE_RANK=${_skalaxc_rank})
+      target_link_libraries(${_skalaxc_lifecycle_target} PRIVATE skalaxc_fortran)
+      if(SKALAXC_ENABLE_MPI)
+        target_compile_definitions(${_skalaxc_lifecycle_target} PRIVATE SKALAXC_HAS_MPI)
+        target_link_libraries(${_skalaxc_lifecycle_target} PRIVATE MPI::MPI_Fortran)
+      endif()
+      foreach(_skalaxc_handle IN ITEMS runtime_environment molecule basisset molgrid
+          load_balancer molecular_weights functional xc_integrator)
+        target_link_options(${_skalaxc_lifecycle_target}
+          PRIVATE "LINKER:--wrap=skalaxc_${_skalaxc_handle}_destroy")
+      endforeach()
+      add_test(NAME ${_skalaxc_lifecycle_target} COMMAND ${_skalaxc_lifecycle_target})
+      set_tests_properties(${_skalaxc_lifecycle_target} PROPERTIES
+        ENVIRONMENT "OMP_NUM_THREADS=4;SKALAXC_MODEL_PATH=${SKALAXC_MODEL_PATH}")
+    endforeach()
+  endif()
 endif()

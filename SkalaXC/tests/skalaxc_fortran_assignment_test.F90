@@ -3,14 +3,17 @@ program skalaxc_fortran_assignment_test
    implicit none
 
    character(len=32) :: handle_type
-   type(skalaxc_runtime_environment_t) :: rt_source, rt_destination
-   type(skalaxc_molecule_t) :: mol_source, mol_destination
-   type(skalaxc_basisset_t) :: basis_source, basis_destination
-   type(skalaxc_molgrid_t) :: grid_source, grid_destination
-   type(skalaxc_load_balancer_t) :: lb_source, lb_destination
-   type(skalaxc_molecular_weights_t) :: weights_source, weights_destination
-   type(skalaxc_functional_t) :: func_source, func_destination
-   type(skalaxc_xc_integrator_t) :: xc_source, xc_destination
+#ifndef HANDLE_SHAPE
+#define HANDLE_SHAPE
+#endif
+   type(skalaxc_runtime_environment_t) :: rt_source HANDLE_SHAPE, rt_destination HANDLE_SHAPE
+   type(skalaxc_molecule_t) :: mol_source HANDLE_SHAPE, mol_destination HANDLE_SHAPE
+   type(skalaxc_basisset_t) :: basis_source HANDLE_SHAPE, basis_destination HANDLE_SHAPE
+   type(skalaxc_molgrid_t) :: grid_source HANDLE_SHAPE, grid_destination HANDLE_SHAPE
+   type(skalaxc_load_balancer_t) :: lb_source HANDLE_SHAPE, lb_destination HANDLE_SHAPE
+   type(skalaxc_molecular_weights_t) :: weights_source HANDLE_SHAPE, weights_destination HANDLE_SHAPE
+   type(skalaxc_functional_t) :: func_source HANDLE_SHAPE, func_destination HANDLE_SHAPE
+   type(skalaxc_xc_integrator_t) :: xc_source HANDLE_SHAPE, xc_destination HANDLE_SHAPE
 
    if (command_argument_count() /= 1) error stop "expected one handle type"
    call get_command_argument(1, handle_type)

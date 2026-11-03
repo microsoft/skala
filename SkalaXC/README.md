@@ -177,6 +177,12 @@ The Python binding releases the GIL during synchronous `eval_exc_vxc` and
 the same restriction applies to Python threads.
 
 ### 4. CUDA is optional and private
+
+Device task tiles are bounded by the selected device's grid Y/Z launch limits
+before GauXC applies its memory-arena limit. This protects upstream collocation
+and density kernels as well as Skala feature/potential/gradient launches; the
+two independent limits can split a task sequence without dropping tasks.
+
 `SKALAXC_ENABLE_CUDA` (**OFF** by default) builds a private device driver on
 GauXC's Scheme1 CUDA work engine. Collocation, density variables, AO assembly,
 Pulay terms, and partition-weight derivatives remain on the GPU. SkalaXC owns
@@ -379,6 +385,11 @@ builds select `cuda12` or `cuda13` while retaining `linux-64` as the target
 platform. `SkalaXC/pixi.toml` registers the package with the root Pixi workspace,
 so package builds and future Python tests share the root `pixi.lock` and environments.
 
+Select `--variant mpi=openmpi` for MPI packages. The Python output declares
+`mpi4py >=4` for both building and execution and selects the Open MPI variant.
+Linux package CI builds this triplet and tests the installed binding with two
+ranks, including communicator ownership and subcommunicator evaluation.
+
 ### Querying the library version
 
 The public APIs return the semantic version of the loaded SkalaXC library as a
@@ -408,6 +419,11 @@ assignment terminates with an ownership error. Transfer ownership explicitly
 with `call destination%move_from(source)`; the source becomes invalid and may
 be checked with `source%is_valid()`. Calling a creation method on an already
 valid handle replaces its object only after the new construction succeeds.
+Assignment rejection and finalization are impure elemental procedures, so
+these rules also apply to arrays of any rank. Transfer array elements
+individually with `move_from`; whole-array assignment is not an ownership
+transfer. Allocatable-array deallocation and scope exit finalize each live
+element exactly once.
 
 For a CUDA build, select the architecture explicitly. For example, Blackwell
 (`sm_120`) with a CUDA-enabled LibTorch installation can be configured with:

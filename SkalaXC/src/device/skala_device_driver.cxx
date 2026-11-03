@@ -7,6 +7,7 @@
 #include "device/common/skala.hpp"
 #include "device/common/skala_exc_grad.hpp"
 #include "device/model_grid_exchange.hpp"
+#include "device/task_batch.hpp"
 #include "device/xc_device_aos_data.hpp"
 #include "exceptions.hpp"
 #include "host/collective_error.hpp"
@@ -149,6 +150,16 @@ SkalaDeviceDriver::SkalaDeviceDriver(
       lwd_(GauXC::LocalWorkDriverFactory::make_local_work_driver(
           GauXC::ExecutionSpace::Device, "Default")) {
   activate_cuda_device(device_id_);
+  cudaDeviceProp properties{};
+  const auto properties_status =
+      cudaGetDeviceProperties(&properties, device_id_.raw());
+  if (properties_status != cudaSuccess)
+    SKALAXC_EXCEPTION(std::string("Failed to query CUDA launch limits: ") +
+                      cudaGetErrorString(properties_status));
+  const auto task_limit =
+      std::min(properties.maxGridSize[1], properties.maxGridSize[2]);
+  if (task_limit <= 0) SKALAXC_EXCEPTION("Invalid CUDA task launch limit");
+  task_limit_ = static_cast<std::size_t>(task_limit);
   const auto runtime = GauXC::detail::as_device_runtime(lb_.runtime());
   const c10::cuda::CUDAStreamGuard stream_guard(
       torch_stream_for_runtime(runtime, device_id_));
@@ -230,8 +241,9 @@ double SkalaDeviceDriver::eval_exc_vxc_uks(
     auto task_it = tasks.begin();
     while (task_it != tasks.end()) {
       const auto batch_begin = task_it;
-      task_it =
-          device_data->generate_buffers(terms, basis_map, task_it, tasks.end());
+      task_it = device_data->generate_buffers(
+          terms, basis_map, task_it,
+          detail::task_batch_end(task_it, tasks.end(), task_limit_));
       if (needs_gradient)
         device_lwd->eval_collocation_gradient(device_data.get());
       else
@@ -311,8 +323,9 @@ double SkalaDeviceDriver::eval_exc_vxc_uks(
     task_it = tasks.begin();
     while (task_it != tasks.end()) {
       const auto batch_begin = task_it;
-      task_it =
-          device_data->generate_buffers(terms, basis_map, task_it, tasks.end());
+      task_it = device_data->generate_buffers(
+          terms, basis_map, task_it,
+          detail::task_batch_end(task_it, tasks.end(), task_limit_));
       model_grid_exchange_->unpack_potentials(
           *aos_data,
           types::TaskIndex{static_cast<std::size_t>(
@@ -421,8 +434,9 @@ void SkalaDeviceDriver::eval_exc_grad_uks(ConstColMajorMatrixMap scalar_density,
     auto task_it = tasks.begin();
     while (task_it != tasks.end()) {
       const auto batch_begin = task_it;
-      task_it =
-          device_data->generate_buffers(terms, basis_map, task_it, tasks.end());
+      task_it = device_data->generate_buffers(
+          terms, basis_map, task_it,
+          detail::task_batch_end(task_it, tasks.end(), task_limit_));
       if (needs_gradient)
         device_lwd->eval_collocation_hessian(device_data.get());
       else
@@ -503,8 +517,9 @@ void SkalaDeviceDriver::eval_exc_grad_uks(ConstColMajorMatrixMap scalar_density,
     task_it = tasks.begin();
     while (task_it != tasks.end()) {
       const auto batch_begin = task_it;
-      task_it =
-          device_data->generate_buffers(terms, basis_map, task_it, tasks.end());
+      task_it = device_data->generate_buffers(
+          terms, basis_map, task_it,
+          detail::task_batch_end(task_it, tasks.end(), task_limit_));
       const types::TaskIndex first_task{
           static_cast<std::size_t>(std::distance(tasks.begin(), batch_begin))};
       model_grid_exchange_->unpack_potentials(*aos_data, first_task,

@@ -10,13 +10,20 @@ from dataclasses import dataclass
 import numpy as np
 import numpy.typing as npt
 import pytest
-import skalaxc
 import torch
 from skala.functional import load_functional
 from skala.functional.base import ExcFunctionalBase
 
 from pyscf import dft, gto, scf
-from tests.skalaxc_test_utils import (
+
+try:
+    import skalaxc
+except ModuleNotFoundError as error:
+    if error.name != "skalaxc":
+        raise
+    pytest.skip("SkalaXC native binding is not installed", allow_module_level=True)
+
+from skalaxc_test_utils import (  # noqa: E402
     SKALA_1_1_REV1_CUDA_SHA256,
     ParityTolerances,
     make_skalaxc_integrator,

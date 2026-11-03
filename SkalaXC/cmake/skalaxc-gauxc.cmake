@@ -150,6 +150,9 @@ else()
       CACHE PATH "Path to GauXC reference fixture directory" FORCE)
 endif()
 
+# Keep the requested source path distinct from the acquired checkout.
+set(SKALAXC_GAUXC_RESOLVED_SOURCE_DIR "${_skalaxc_gauxc_source_dir}")
+
 # The IntegratorXX revision pinned by GauXC uses std::back_inserter without
 # including <iterator>. libstdc++ currently exposes it transitively, but libc++
 # does not. Patch only the populated build-tree dependency until this is fixed
