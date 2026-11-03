@@ -54,6 +54,8 @@ def make_integrator(
     batch_mode: skalaxc.DomainBatchMode,
     runtime: skalaxc.RuntimeEnvironment | None = None,
     x_displacement: float = 0.0,
+    *,
+    model: str = "PBE",
 ) -> skalaxc.XCIntegrator:
     molecule, basis = make_h2_sto3g(x_displacement)
     grid = skalaxc.MolGridFactory.create_default(
@@ -68,7 +70,7 @@ def make_integrator(
     weights.modify_weights(load_balancer)
     return skalaxc.XCIntegratorFactory(
         execution_space, domain_batch_mode=batch_mode
-    ).get_instance(skalaxc.Functional("TPSS"), load_balancer)
+    ).get_instance(skalaxc.Functional(model), load_balancer)
 
 
 @pytest.mark.parametrize(
@@ -78,14 +80,16 @@ def make_integrator(
         skalaxc.DomainBatchMode.AGGRESSIVE,
     ],
 )
+@pytest.mark.parametrize("model", ["LDA", "PBE"])
 def test_cuda_matches_host_through_python_binding(
     batch_mode: skalaxc.DomainBatchMode,
+    model: str,
 ) -> None:
     scalar_density = np.asfortranarray([[0.5, 0.5], [0.5, 0.5]])
     spin_density = np.zeros((2, 2), dtype=np.float64, order="F")
 
-    host = make_integrator(skalaxc.ExecutionSpace.HOST, batch_mode)
-    device = make_integrator(skalaxc.ExecutionSpace.DEVICE, batch_mode)
+    host = make_integrator(skalaxc.ExecutionSpace.HOST, batch_mode, model=model)
+    device = make_integrator(skalaxc.ExecutionSpace.DEVICE, batch_mode, model=model)
     host_energy, host_scalar, host_spin = host.eval_exc_vxc(
         scalar_density, spin_density
     )
@@ -111,6 +115,32 @@ def test_cuda_matches_host_through_python_binding(
         diagnostics.timing(skalaxc.TimingMetric.TOTAL_EXC_GRADIENT).status
         == skalaxc.TimingStatus.UNAVAILABLE
     )
+
+
+@pytest.mark.parametrize(
+    "batch_mode",
+    [
+        skalaxc.DomainBatchMode.CONSERVATIVE,
+        skalaxc.DomainBatchMode.AGGRESSIVE,
+    ],
+)
+def test_cuda_tpss_energy_and_potential(
+    batch_mode: skalaxc.DomainBatchMode,
+) -> None:
+    """TPSS CUDA backward resource limits exclude gradient validation."""
+    scalar_density = np.asfortranarray([[0.5, 0.5], [0.5, 0.5]])
+    spin_density = np.zeros((2, 2), dtype=np.float64, order="F")
+    host = make_integrator(skalaxc.ExecutionSpace.HOST, batch_mode, model="TPSS")
+    device = make_integrator(skalaxc.ExecutionSpace.DEVICE, batch_mode, model="TPSS")
+    host_energy, host_scalar, host_spin = host.eval_exc_vxc(
+        scalar_density, spin_density
+    )
+    device_energy, device_scalar, device_spin = device.eval_exc_vxc(
+        scalar_density, spin_density
+    )
+    assert device_energy == pytest.approx(host_energy, abs=1e-10)
+    assert np.linalg.norm(device_scalar - host_scalar) / device.nbf <= 1e-7
+    assert np.linalg.norm(device_spin - host_spin) / device.nbf <= 1e-10
 
 
 @pytest.mark.skipif(not skalaxc.MPI_ENABLED, reason="SkalaXC was built without MPI")

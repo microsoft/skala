@@ -90,6 +90,12 @@ SkalaXC package was built with CUDA, and require the runtime Torch CUDA major
 compatibility family recorded by that native build. Minor toolkit releases
 within one CUDA major family are accepted.
 
+CUDA tests cover LDA/PBE energy, both potential channels, and gradients in both
+batching modes. TPSS is tested for energy and potentials; its archived
+TensorExpr backward graph has the native backend's documented CUDA gradient
+resource limitation. MPI gradient tests use PBE rather than that unsupported
+TPSS path.
+
 MPI variants require `mpi4py` and an explicit intracommunicator:
 
 ```python

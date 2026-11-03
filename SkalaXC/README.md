@@ -212,7 +212,8 @@ per-point energy-density model interface.
 
 The bundled TPSS archive remains supported for CUDA `EXC`/`VXC`. TPSS CUDA
 gradients are not validated: its current TensorExpr backward trace can exceed
-kernel launch resources on `sm_120` at LibTorch's default launch configuration.
+kernel launch resources on `sm_86` and `sm_120` at LibTorch's default launch
+configuration.
 TPSS CUDA-gradient validation is deferred until that archive is retraced with
 lower register pressure. LDA/PBE host-device gradient parity and neural Skala's
 kinetic-density and explicit-geometry gradients remain covered. SkalaXC does
