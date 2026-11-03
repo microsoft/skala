@@ -29,44 +29,16 @@ Repository resources include:
    - [Skala in C with GauXC](https://microsoft.github.io/skala/gauxc/c-library)
    - [Skala in Fortran with GauXC](https://microsoft.github.io/skala/gauxc/fortran-library)
 
-## Getting started: PySCF (CPU)
+## Getting started: GPU4PySCF (GPU)
 
 All information below relates to the Python package `skala`.
 Skala supports Linux and macOS with Python 3.11 through 3.13, the latest
 PySCF release (2.14), and the two latest PyTorch release lines (2.12 and 2.13).
 
-`pip install skala` works out of the box and pulls every dependency from PyPI.
-If you don't already have PyTorch installed, install the CPU-only wheel first
-to avoid pulling a large CUDA build:
-
-```bash
-pip install torch --index-url https://download.pytorch.org/whl/cpu
-pip install skala
-```
-
-For a reproducible source environment, use the default environment from the
-committed Pixi lockfile. It uses Python 3.12, PySCF 2.14, and CPU-only PyTorch 2.13:
-
-```bash
-pixi install --locked -e default
-pixi run -e default python your_script.py
-```
-
-Run an SCF calculation with Skala for a hydrogen molecule:
-
-```python
-from pyscf import gto
-from skala.pyscf import SkalaKS
-
-mol = gto.M(
-    atom="""H 0 0 0; H 0 0 1.4""",
-    basis="def2-tzvp",
-)
-ks = SkalaKS(mol, xc="skala-1.1")
-ks.kernel()
-```
-
-## Getting started: GPU4PySCF (GPU)
+Skala is a neural network functional and runs comparatively faster on a GPU. With GPU4PySCF on
+an NVIDIA A100, an SCF iteration with Skala costs about as much as one with the meta-GGA
+r2SCAN, from small molecules to systems with hundreds of atoms. See the
+[timing benchmark](https://aka.ms/skaladft/timing) for details.
 
 The GPU install is more involved because `gpu4pyscf` ships CUDA-version-specific
 wheels that must match your CUDA toolkit. GPU environments and helper packages
@@ -133,6 +105,46 @@ mpirun -np 4 bash -c 'CUDA_VISIBLE_DEVICES=$OMPI_COMM_WORLD_LOCAL_RANK python my
 ```
 
 Tracked upstream at [pyscf/gpu4pyscf#435](https://github.com/pyscf/gpu4pyscf/issues/435).
+
+## Getting started: PySCF (CPU)
+
+Skala also runs on CPUs with PySCF, but small systems and small basis sets carry a large
+overhead: for molecules with only a few atoms, an SCF iteration with Skala costs about ten
+times as much as one with r2SCAN. The overhead disappears at about 15–20 non-hydrogen atoms,
+or about 500 atomic orbitals. Unlike with traditional functionals, even these small workloads
+benefit from as many CPU cores as possible (set with `OMP_NUM_THREADS`). See the
+[timing benchmark](https://aka.ms/skaladft/timing) for details.
+
+`pip install skala` works out of the box and pulls every dependency from PyPI.
+If you don't already have PyTorch installed, install the CPU-only wheel first
+to avoid pulling a large CUDA build:
+
+```bash
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install skala
+```
+
+For a reproducible source environment, use the default environment from the
+committed Pixi lockfile. It uses Python 3.12, PySCF 2.14, and CPU-only PyTorch 2.13:
+
+```bash
+pixi install --locked -e default
+pixi run -e default python your_script.py
+```
+
+Run an SCF calculation with Skala for a hydrogen molecule:
+
+```python
+from pyscf import gto
+from skala.pyscf import SkalaKS
+
+mol = gto.M(
+    atom="""H 0 0 0; H 0 0 1.4""",
+    basis="def2-tzvp",
+)
+ks = SkalaKS(mol, xc="skala-1.1")
+ks.kernel()
+```
 
 ## Getting started: ASE calculator
 
