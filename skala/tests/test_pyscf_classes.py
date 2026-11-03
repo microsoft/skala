@@ -10,6 +10,7 @@ from skala.pyscf.gradients import SkalaRKSGradient, SkalaUKSGradient
 from skala.pyscf.grids import SkalaGrids
 
 from pyscf import dft, gto
+from tests.utils import check_skala_scanner_reset
 
 
 @pytest.fixture(params=["skala-1.0", "skala-1.1"])
@@ -102,6 +103,33 @@ def test_skala_dftd3_results(mol: gto.Mole, skala_xc: ExcFunctionalBase) -> None
     gradient = ks.nuc_grad_method().grad_nuc()
     assert gradient.shape == (mol.natm, 3)
     assert np.isfinite(gradient).all()
+
+
+@pytest.mark.parametrize("spin", [0, 1], ids=["rks", "uks"])
+@pytest.mark.parametrize("gradient", [False, True], ids=["energy", "gradient"])
+def test_skala_scanner_reset(
+    skala_xc: ExcFunctionalBase,
+    with_density_fit: bool,
+    with_dftd3: bool,
+    spin: int,
+    gradient: bool,
+) -> None:
+    """Scanners must discard geometry-dependent state and match fresh calculations."""
+
+    def make_ks(molecule: gto.Mole) -> SkalaRKS | SkalaUKS:
+        ks = SkalaKS(
+            molecule,
+            xc=skala_xc,
+            with_density_fit=with_density_fit,
+            auxbasis="def2-universal-jkfit" if with_density_fit else None,
+            with_dftd3=with_dftd3,
+        )
+        assert isinstance(ks, (SkalaRKS, SkalaUKS))
+        ks.grids.level = 0
+        ks.conv_tol = 1e-10
+        return ks
+
+    check_skala_scanner_reset(make_ks, spin, gradient, with_dftd3)
 
 
 def test_uks_gradient_requires_initialized_grids(skala_xc: ExcFunctionalBase) -> None:

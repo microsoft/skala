@@ -207,6 +207,7 @@ class SkalaRKSGradient(RHFGradient):
         return 0
 
     def reset(self, mol: gto.Mole | None = None) -> SkalaRKSGradient:
+        """Clear geometry-dependent state, including the cached nuclear gradient."""
         # This GPU4PySCF method retains the borrowed CPU receiver type.
         # pyrefly: ignore[bad-argument-type]
         super().reset(mol)
@@ -328,6 +329,7 @@ class SkalaUKSGradient(UHFGradient):
         return 0
 
     def reset(self, mol: gto.Mole | None = None) -> SkalaUKSGradient:
+        """Clear geometry-dependent state, including the cached nuclear gradient."""
         # This GPU4PySCF method retains the borrowed CPU receiver type.
         # pyrefly: ignore[bad-argument-type]
         super().reset(mol)

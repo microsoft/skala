@@ -50,6 +50,8 @@ The provided classes support the same transformations and methods as the origina
 <pyscf.scf.hf.DFSkalaRKS_Scanner object at ...>
 """
 
+from __future__ import annotations
+
 import warnings
 from collections.abc import Callable
 from typing import Any, cast
@@ -113,7 +115,7 @@ class SkalaRKS(dft.rks.RKS):
     @override
     def initialize_grids(
         self, mol: gto.Mole | None = None, dm: np.ndarray | None = None
-    ) -> "SkalaRKS":
+    ) -> SkalaRKS:
         if not isinstance(self.grids, SkalaGrids):
             raise TypeError(
                 "SkalaRKS requires skala.pyscf.grids.SkalaGrids, got "
@@ -160,7 +162,7 @@ class SkalaRKS(dft.rks.RKS):
         auxbasis: str | None = None,
         with_df: Any = None,
         only_dfj: bool = True,
-    ) -> "SkalaRKS":
+    ) -> SkalaRKS:
         if pyscf_version_newer_than_2_10() and auxbasis is None:
             warnings.warn(
                 "Using density_fit without specifying auxbasis will lead to different behavior in PySCF >= 2.10.0 compared to PySCF 2.9.0, which was used for benchmarking skala. To reproduce benchmarks, please specify an auxbasis (def2-universal-jkfit for (ma-)def2 basis sets).",
@@ -175,6 +177,17 @@ class SkalaRKS(dft.rks.RKS):
         ks.Gradients = lambda: SkalaRKSGradient(ks)
         ks.nuc_grad_method = ks.Gradients
         return cast(SkalaRKS, ks)
+
+    @override
+    def reset(
+        self,
+        mol: gto.Mole | None = None,
+    ) -> SkalaRKS:
+        """Clear geometry-dependent state, retaining the current molecule if omitted."""
+        super().reset(mol)
+        if self.with_dftd3:
+            self.with_dftd3.reset(self.mol)
+        return self
 
 
 class SkalaUKS(dft.uks.UKS):
@@ -210,7 +223,7 @@ class SkalaUKS(dft.uks.UKS):
     @override
     def initialize_grids(
         self, mol: gto.Mole | None = None, dm: np.ndarray | None = None
-    ) -> "SkalaUKS":
+    ) -> SkalaUKS:
         if not isinstance(self.grids, SkalaGrids):
             raise TypeError(
                 "SkalaUKS requires skala.pyscf.grids.SkalaGrids, got "
@@ -257,7 +270,7 @@ class SkalaUKS(dft.uks.UKS):
         auxbasis: str | None = None,
         with_df: Any = None,
         only_dfj: bool = True,
-    ) -> "SkalaUKS":
+    ) -> SkalaUKS:
         if pyscf_version_newer_than_2_10() and auxbasis is None:
             warnings.warn(
                 "Using density_fit without specifying auxbasis will lead to different behavior in PySCF >= 2.10.0 compared to PySCF 2.9.0, which was used for benchmarking skala. To reproduce benchmarks, please specify an auxbasis (def2-universal-jkfit for (ma-)def2 basis sets).",
@@ -273,3 +286,14 @@ class SkalaUKS(dft.uks.UKS):
         ks.Gradients = lambda: SkalaUKSGradient(ks)
         ks.nuc_grad_method = ks.Gradients
         return cast(SkalaUKS, ks)
+
+    @override
+    def reset(
+        self,
+        mol: gto.Mole | None = None,
+    ) -> SkalaUKS:
+        """Clear geometry-dependent state, retaining the current molecule if omitted."""
+        super().reset(mol)
+        if self.with_dftd3:
+            self.with_dftd3.reset(self.mol)
+        return self
