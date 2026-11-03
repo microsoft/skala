@@ -389,6 +389,9 @@ Select `--variant mpi=openmpi` for MPI packages. The Python output declares
 `mpi4py >=4` for both building and execution and selects the Open MPI variant.
 Linux package CI builds this triplet and tests the installed binding with two
 ranks, including communicator ownership and subcommunicator evaluation.
+Conda outputs use OpenBLAS in both build and runtime environments. The native
+build links the declared BLAS library explicitly rather than discovering a
+transitive MKL installation that an independently solved runtime may omit.
 
 ### Querying the library version
 

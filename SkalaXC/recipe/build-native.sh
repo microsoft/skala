@@ -18,8 +18,10 @@ esac
 
 if [[ "$(uname -s)" == "Darwin" ]]; then
   install_rpath='@loader_path'
+  blas_library="${PREFIX}/lib/libblas.dylib"
 else
   install_rpath='$ORIGIN'
+  blas_library="${PREFIX}/lib/libblas.so"
 fi
 
 torch_config="$(${PYTHON} "${source_dir}/python/tools/torch_config.py" --format json)"
@@ -40,6 +42,7 @@ cmake -S "${source_dir}" -B "${build_dir}" -G Ninja \
   -DCMAKE_INSTALL_LIBDIR=lib \
   -DCMAKE_INSTALL_PREFIX="${PREFIX}" \
   -DTorch_DIR="${torch_dir}" \
+  -DBLAS_LIBRARIES="${blas_library}" \
   -DSKALAXC_TORCH_CXX11_ABI="${torch_cxx11_abi}" \
   -DSKALAXC_TORCH_CUDA_VERSION="${torch_cuda_version}" \
   -DSKALAXC_BUILD_EXAMPLES=OFF \

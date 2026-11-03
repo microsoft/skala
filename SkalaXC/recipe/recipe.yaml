@@ -84,8 +84,8 @@ outputs:
           then: openmpi
         - eigen >=5,<6
         - hdf5
-        - libblas
-        - liblapack
+        - libblas * *openblas
+        - liblapack * *openblas
         - nlohmann_json >=3.9
     build:
       script:
@@ -122,8 +122,8 @@ outputs:
         - if: mpi == "openmpi"
           then: openmpi
         - hdf5
-        - libblas
-        - liblapack
+        - libblas * *openblas
+        - liblapack * *openblas
     tests:
       - script:
           - test -d "${PREFIX}/include/skalaxc"
