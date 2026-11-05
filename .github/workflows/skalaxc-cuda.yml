@@ -273,6 +273,7 @@ jobs:
           python -m pip install SkalaXC/python --no-build-isolation --no-deps --force-reinstall
 
       - name: Test installed CUDA MPI binding and generated stubs
+        timeout-minutes: 15
         run: |
           python -c "import skalaxc, torch, h5py, mypy; from mpi4py import MPI; assert skalaxc.MPI_ENABLED and skalaxc.CUDA_ENABLED and skalaxc.HDF5_ENABLED; assert torch.cuda.is_available(); assert skalaxc.PYTHON_LAYOUT == 'WHEEL'"
           python -m pytest -v -ra SkalaXC/python/tests --ignore=SkalaXC/python/tests/test_mpi.py

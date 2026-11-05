@@ -161,6 +161,7 @@ jobs:
 
       - name: Test installed MPI binding on two ranks
         if: matrix.name == 'mpi-release'
+        timeout-minutes: 10
         run: |
           mpiexec --oversubscribe -n 2 python -c "import skalaxc; from mpi4py import MPI; assert skalaxc.MPI_ENABLED and MPI.COMM_WORLD.size == 2"
           mpiexec --oversubscribe -n 2 python -m pytest -p no:randomly -v -ra SkalaXC/python/tests/test_mpi.py
