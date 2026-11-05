@@ -7,7 +7,7 @@ The example demonstrates how to load a Skala model, prepare input features, comp
 .. note::
 
    This example evaluates the Skala model on precomputed density features and is meant as a starting point for calling the model from your own code.
-   To add Skala to an existing electronic structure code, where the integration grid, the density features, and the exchange-correlation potential have to be computed from a density matrix, use `GauXC <https://microsoft.github.io/skala/gauxc/>`__ instead, which also provides Fortran bindings.
+   To add Skala to an existing electronic structure code, where the integration grid, the density features, and the exchange-correlation potential have to be computed from a density matrix, see `SkalaXC <https://github.com/microsoft/skala/tree/main/SkalaXC>`__ and its supported backends, which also provide Fortran bindings.
    A :doc:`C++ version <cpp>` of this example is also available.
 
 

@@ -1,0 +1,76 @@
+name: Report compiler toolchain
+description: Report the activated compiler environment and compiler-selected linker
+
+inputs:
+  c-compiler:
+    description: C compiler command; defaults to CC or cc
+    required: false
+    default: ""
+  cxx-compiler:
+    description: C++ compiler command; defaults to CXX or c++
+    required: false
+    default: ""
+  fortran-compiler:
+    description: Fortran compiler command; defaults to FC or gfortran
+    required: false
+    default: ""
+  cuda-compiler:
+    description: CUDA compiler command; defaults to CUDACXX or nvcc when available
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Report compiler toolchain
+      shell: bash
+      env:
+        INPUT_C_COMPILER: ${{ inputs.c-compiler }}
+        INPUT_CXX_COMPILER: ${{ inputs.cxx-compiler }}
+        INPUT_FORTRAN_COMPILER: ${{ inputs.fortran-compiler }}
+        INPUT_CUDA_COMPILER: ${{ inputs.cuda-compiler }}
+      run: |
+        set -euo pipefail
+
+        for variable in \
+          CONDA_PREFIX CC CXX FC CUDACXX \
+          CFLAGS CXXFLAGS FFLAGS CUDAFLAGS LDFLAGS
+        do
+          printf '%s=%s\n' "$variable" "${!variable:-<unset>}"
+        done
+
+        c_compiler=${INPUT_C_COMPILER:-${CC:-$(command -v cc || true)}}
+        cxx_compiler=${INPUT_CXX_COMPILER:-${CXX:-$(command -v c++ || true)}}
+        fortran_compiler=${INPUT_FORTRAN_COMPILER:-${FC:-$(command -v gfortran || true)}}
+        cuda_compiler=${INPUT_CUDA_COMPILER:-${CUDACXX:-$(command -v nvcc || true)}}
+
+        report_compiler() {
+          local language=$1
+          local compiler=$2
+          if [[ -z "$compiler" ]]; then
+            return
+          fi
+          printf '\n%s compiler: %s\n' "$language" "$compiler"
+          "$compiler" --version
+        }
+
+        report_compiler C "$c_compiler"
+        report_compiler C++ "$cxx_compiler"
+        report_compiler Fortran "$fortran_compiler"
+        report_compiler CUDA "$cuda_compiler"
+
+        if [[ -z "$cxx_compiler" ]]; then
+          printf 'A C++ compiler is required to identify the host linker.\n' >&2
+          exit 1
+        fi
+
+        linker=$("$cxx_compiler" -print-prog-name=ld)
+        if [[ "$linker" != /* ]]; then
+          linker=$(command -v "$linker" || true)
+        fi
+        if [[ -z "$linker" || ! -x "$linker" ]]; then
+          printf 'Could not resolve the C++ compiler-selected linker.\n' >&2
+          exit 1
+        fi
+
+        printf '\nC++ linker: %s\n' "$linker"; "$linker" --version || "$linker" -v

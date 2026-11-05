@@ -5,6 +5,7 @@ from importlib.metadata import packages_distributions, version
 import cupy
 import gpu4pyscf
 import torch
+from skala.gpu4pyscf import SkalaKS
 
 EXPECTED_GPU4PYSCF_VERSION = "1.9.0"
 
@@ -45,6 +46,7 @@ def main() -> None:
     print(distribution, gpu4pyscf_version)
 
     assert gpu4pyscf_version == EXPECTED_GPU4PYSCF_VERSION
+    assert callable(SkalaKS)
     assert torch.cuda.is_available()
     cupy.linalg.norm(cupy.arange(3.0)).get()
 

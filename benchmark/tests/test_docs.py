@@ -9,10 +9,12 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
 
-def _load_extension() -> Any:
-    path = Path(__file__).parents[2] / "website" / "_ext" / "benchmark_report.py"
-    spec = importlib.util.spec_from_file_location("benchmark_report_test", path)
+
+def _load_extension(name: str = "benchmark_report") -> Any:
+    path = Path(__file__).parents[2] / "website" / "_ext" / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(f"{name}_test", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -49,6 +51,46 @@ def test_html_build_generates_report_and_copies_sources(
     assert (output / "index.html").read_text() == "report"
     assert {path.name for path in (output / "source").iterdir()} == set(
         module._SOURCE_FILES
+    )
+
+
+@pytest.mark.parametrize("kind", ["tree", "blob"])
+def test_source_links_check_ci_revision(kind: str, monkeypatch: Any) -> None:
+    module = _load_extension("source_links")
+    monkeypatch.setenv("GITHUB_SHA", "7b589dc5c1f5dfbab133fbfd77fd5bb8eff27e07")
+    suffix = "SkalaXC/README.md#building"
+    uri = f"https://github.com/microsoft/skala/{kind}/main/{suffix}"
+
+    assert module._check_source_uri(None, uri) == (
+        f"https://github.com/microsoft/skala/{kind}/"
+        f"7b589dc5c1f5dfbab133fbfd77fd5bb8eff27e07/{suffix}"
+    )
+
+
+@pytest.mark.parametrize(
+    "uri",
+    [
+        "https://github.com/microsoft/skala/tree/other/SkalaXC",
+        "https://github.com/other/skala/tree/main/SkalaXC",
+        "https://microsoft.github.io/skala/",
+    ],
+)
+def test_source_links_leave_other_urls_unchanged(uri: str, monkeypatch: Any) -> None:
+    module = _load_extension("source_links")
+    monkeypatch.setenv("GITHUB_SHA", "7b589dc5c1f5dfbab133fbfd77fd5bb8eff27e07")
+
+    assert module._check_source_uri(None, uri) is None
+
+
+def test_source_links_leave_local_checks_unchanged(monkeypatch: Any) -> None:
+    module = _load_extension("source_links")
+    monkeypatch.delenv("GITHUB_SHA", raising=False)
+
+    assert (
+        module._check_source_uri(
+            None, "https://github.com/microsoft/skala/tree/main/SkalaXC"
+        )
+        is None
     )
 
 

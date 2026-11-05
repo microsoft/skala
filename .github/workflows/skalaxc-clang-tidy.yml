@@ -1,0 +1,40 @@
+name: SkalaXC clang-tidy
+
+on:
+  push:
+    branches: [ main ]
+    paths: &skalaxc-clang-tidy-paths
+      - .gitmodules
+      - SkalaXC/**
+      - .github/actions/report-toolchain/action.yml
+      - .github/workflows/skalaxc-clang-tidy.yml
+      - pixi.lock
+      - pixi.toml
+  pull_request:
+    branches: [ main ]
+    paths: *skalaxc-clang-tidy-paths
+
+permissions:
+  contents: read
+
+jobs:
+  clang-tidy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: Setup Pixi
+        uses: ./.github/actions/setup-pixi
+        with:
+          environment: skalaxc-host-clang
+
+      - name: Verify compiler toolchain
+        uses: ./.github/actions/report-toolchain
+        with:
+          c-compiler: x86_64-conda-linux-gnu-clang
+          cxx-compiler: x86_64-conda-linux-gnu-clang++
+
+      - name: Run clang-tidy on sources and headers
+        run: pixi run -e skalaxc-host-clang skalaxc-clang-tidy

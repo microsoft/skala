@@ -7,7 +7,7 @@ The example demonstrates how to load a Skala model, prepare input features, comp
 .. note::
 
    This example evaluates the Skala model on precomputed density features and is meant as a starting point for calling the model from your own code.
-   To add Skala to an existing electronic structure code, where the integration grid, the density features, and the exchange-correlation potential have to be computed from a density matrix, use `GauXC <https://microsoft.github.io/skala/gauxc/>`__ instead.
+   To add Skala to an existing electronic structure code, where the integration grid, the density features, and the exchange-correlation potential have to be computed from a density matrix, see `SkalaXC <https://github.com/microsoft/skala/tree/main/SkalaXC>`__ and its supported backends.
    A :doc:`Fortran version <ftorch>` of this example is also available.
 
 
@@ -186,4 +186,4 @@ Summary
 In this example, we have demonstrated how to use Skala in C++ with the LibTorch library.
 We have shown how to set up the development environment, build the application using CMake, and run the application to compute exchange-correlation energies and their derivatives using a Skala model.
 This example serves as a starting point for integrating Skala into your C++ applications using LibTorch, and can be extended to include more complex features and functionalities as needed.
-For integrating Skala into an existing electronic structure code, see also the `GauXC integration <https://microsoft.github.io/skala/gauxc/>`__.
+For integrating Skala into an existing electronic structure code, see also `SkalaXC <https://github.com/microsoft/skala/tree/main/SkalaXC>`__.

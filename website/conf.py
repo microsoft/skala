@@ -25,6 +25,7 @@ extensions = [
     "sphinxcontrib.moderncmakedomain",
     "sphinxfortran.fortran_domain",
     "benchmark_report",
+    "source_links",
 ]
 
 nb_execution_timeout = 300  # 5 minutes, set to -1 for no timeout

@@ -134,7 +134,9 @@ def test_skala_scanner_reset(
         )
         assert isinstance(ks, (SkalaRKS, SkalaUKS))
         ks.grids.level = 0
-        ks.conv_tol = 1e-10
+        # Float32 inference can jitter below the energy assertion's 1e-7 tolerance.
+        ks.conv_tol = 1e-8
+        ks.conv_tol_grad = 1e-5
         return ks
 
     check_skala_scanner_reset(make_ks, spin, gradient, with_dftd3)

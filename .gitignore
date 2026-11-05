@@ -336,6 +336,13 @@ __pycache__/
 .benchmarks/
 htmlcov/
 .pixi/
+/SkalaXC/build-pixi-*/
+/SkalaXC/install-pixi-*/
+/SkalaXC/output-packages/
+/SkalaXC/output-pixi-*/
+/SkalaXC/python/build/
+/SkalaXC/python/dist-pixi-*/
+/SkalaXC/python/install-pixi-*/
 jupyter_execute/
 /build/
 **/_build/

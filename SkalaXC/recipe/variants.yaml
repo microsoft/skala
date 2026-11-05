@@ -1,0 +1,15 @@
+mpi:
+  - nompi
+  - openmpi
+
+cuda:
+  - cpu
+  - if: target_platform == "linux-64"
+    then:
+      - cuda12
+      - cuda13
+
+python:
+  - "3.11"
+  - "3.12"
+  - "3.13"

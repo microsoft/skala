@@ -1,0 +1,10 @@
+# Mach-O exported-symbol allowlist. Apple prefixes C and Itanium C++
+# symbols with an additional underscore in the object file symbol table.
+_skalaxc_*
+_SkalaXC_*
+___skalaxc_*
+__ZN7SkalaXC*
+__ZNK7SkalaXC*
+__ZTIN7SkalaXC*
+__ZTSN7SkalaXC*
+__ZTVN7SkalaXC*
