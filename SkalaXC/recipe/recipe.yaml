@@ -212,7 +212,7 @@ outputs:
           script:
             - export OMPI_MCA_pml=ob1 OMPI_MCA_btl=self,tcp OMP_NUM_THREADS=4
             - mpiexec --oversubscribe -n 2 python -c "import skalaxc; from mpi4py import MPI; assert skalaxc.MPI_ENABLED and not skalaxc.CUDA_ENABLED; assert MPI.COMM_WORLD.size == 2; assert 'Open MPI' in MPI.Get_library_version()"
-            - mpiexec --oversubscribe -n 2 python -m pytest -c SkalaXC/python/pyproject.toml -v -ra SkalaXC/python/tests/test_mpi.py
+            - mpiexec --oversubscribe -n 2 python -m pytest -p no:randomly -c SkalaXC/python/pyproject.toml -v -ra SkalaXC/python/tests/test_mpi.py
 
 about:
   homepage: https://github.com/microsoft/skala

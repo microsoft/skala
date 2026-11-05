@@ -114,15 +114,19 @@ are collective over that exact communicator.
 Run the CUDA+MPI communicator checks from this directory with:
 
 ```bash
-OMP_NUM_THREADS=4 mpiexec -n 3 python -m pytest \
+OMP_NUM_THREADS=4 mpiexec -n 3 python -m pytest -p no:randomly \
 	tests/test_cuda.py::test_cuda_uses_mpi_world_with_an_idle_domain_rank -v
-OMP_NUM_THREADS=4 mpiexec -n 4 python -m pytest \
+OMP_NUM_THREADS=4 mpiexec -n 4 python -m pytest -p no:randomly \
 	tests/test_cuda.py::test_cuda_uses_runtime_mpi_subcommunicator -v
 ```
 
 The first command covers an idle domain rank. The second splits four ranks into
 two independent communicators with distinct inputs, detecting accidental
 collectives over `MPI.COMM_WORLD`.
+
+Multi-rank pytest launches disable `pytest-randomly`: independent random test
+orders can send ranks into different collectives and deadlock. Serial runs
+retain randomized coverage.
 
 ## Typing
 

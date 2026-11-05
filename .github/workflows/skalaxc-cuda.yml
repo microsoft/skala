@@ -277,10 +277,10 @@ jobs:
           python -c "import skalaxc, torch, h5py, mypy; from mpi4py import MPI; assert skalaxc.MPI_ENABLED and skalaxc.CUDA_ENABLED and skalaxc.HDF5_ENABLED; assert torch.cuda.is_available(); assert skalaxc.PYTHON_LAYOUT == 'WHEEL'"
           python -m pytest -v -ra SkalaXC/python/tests --ignore=SkalaXC/python/tests/test_mpi.py
           mpiexec --oversubscribe -n 2 python -c "from mpi4py import MPI; assert MPI.COMM_WORLD.size == 2"
-          mpiexec --oversubscribe -n 2 python -m pytest -v -ra SkalaXC/python/tests/test_mpi.py
+          mpiexec --oversubscribe -n 2 python -m pytest -p no:randomly -v -ra SkalaXC/python/tests/test_mpi.py
           mpiexec --oversubscribe -n 3 python -c "from mpi4py import MPI; assert MPI.COMM_WORLD.size == 3"
-          mpiexec --oversubscribe -n 3 python -m pytest -v -ra \
+          mpiexec --oversubscribe -n 3 python -m pytest -p no:randomly -v -ra \
             SkalaXC/python/tests/test_cuda.py::test_cuda_uses_mpi_world_with_an_idle_domain_rank
           mpiexec --oversubscribe -n 4 python -c "from mpi4py import MPI; assert MPI.COMM_WORLD.size == 4"
-          mpiexec --oversubscribe -n 4 python -m pytest -v -ra \
+          mpiexec --oversubscribe -n 4 python -m pytest -p no:randomly -v -ra \
             SkalaXC/python/tests/test_cuda.py::test_cuda_uses_runtime_mpi_subcommunicator
