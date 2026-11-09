@@ -44,6 +44,9 @@ configure `SKALAXC_BUILD_FORTRAN=OFF` and use the `gauxc-openmp` environment.
 - [C tutorial](../website/skalaxc/c.rst)
 - [Fortran API](../website/skalaxc/fortran-api.rst)
 - [Fortran tutorial](../website/skalaxc/fortran.rst)
+- [Python API](../website/skalaxc/python-api.rst)
+- [Python tutorial](../website/skalaxc/python.rst)
+- [Python binding build and package contract](python/README.md)
 - [Test contracts](tests/README.md)
 
 Include `<skalaxc/skalaxc.hpp>` and link only `SkalaXC::skalaxc`.
@@ -52,6 +55,14 @@ COMPONENTS CXX)`. A consumer does not need GauXC or LibTorch include paths.
 The C binding uses `<skalaxc/skalaxc.h>`, opaque handles, status codes, and
 caller-owned output buffers. C-only consumers request the `C` CMake component
 and link the same public target, without a C++ compiler or private headers.
+
+Python binds the public C++ API directly with nanobind. The optional
+`skalaxc-python-host` and `skalaxc-python-mpi` environments add binding build,
+typing, and parity-test dependencies without changing the existing toolchains.
+The multi-output conda recipe in `recipe/` packages the native library,
+Fortran module, and Python binding; it is rendered by the `skalaxc-package`
+environment. Source installs of the Python package require an installed
+native library selected through `SkalaXC_DIR`.
 
 Models are selected with `LDA`, `PBE`, `TPSS`, or an explicit `.fun` path.
 Named models resolve from the installed model directory, with

@@ -1,0 +1,3 @@
+_skalaxc.RuntimeEnvironment.__init__:
+    \from mpi4py.MPI import Intracomm
+    def __init__(self, communicator: Intracomm) -> None: ...
