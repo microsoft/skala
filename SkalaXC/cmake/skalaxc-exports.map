@@ -5,7 +5,7 @@
 #   -Wl,--exclude-libs,ALL
 # together with -fvisibility=hidden.
 #
-# Only the SkalaXC C++ public API is exported. Every GauXC and
+# Only the SkalaXC C / C++ / Fortran public API is exported. Every GauXC and
 # LibTorch symbol statically embedded into the library stays local, so a host
 # application that links its own GauXC cannot suffer an ODR / symbol clash.
 #
@@ -15,6 +15,9 @@
 # -fvisibility=hidden + SKALAXC_EXPORT.
 {
   global:
+    skalaxc_*;
+    SkalaXC_*;
+    __skalaxc_*;
     _ZN7SkalaXC*;   /* namespace SkalaXC: constructors, methods, functions */
     _ZNK7SkalaXC*;  /* namespace SkalaXC: const methods                    */
     _ZTIN7SkalaXC*; /* typeinfo      for SkalaXC::*                         */

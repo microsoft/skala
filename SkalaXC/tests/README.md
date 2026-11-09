@@ -1,5 +1,9 @@
 # SkalaXC tests
 
+The C layer adds a pure-C numerical consumer, dependency isolation checks, and
+malformed HDF5 density-shape regression tests. Installed consumers cover both
+C and C++, while the export allowlist admits only those public surfaces.
+
 The Catch2 units protect array views, atomic-domain ordering, task limits,
 model interfaces, diagnostics, and communicator behavior. Host numerical
 tests cover LDA/PBE/TPSS energy, both potential channels, nuclear gradients,

@@ -35,13 +35,16 @@ checkout uses the same pinned revision through FetchContent.
 - [Installation and limitations](../website/skalaxc/installation.rst)
 - [C++ API](../website/skalaxc/cpp-api.rst)
 - [C++ tutorial](../website/skalaxc/cpp.rst)
+- [C API](../website/skalaxc/c-api.rst)
+- [C tutorial](../website/skalaxc/c.rst)
 - [Test contracts](tests/README.md)
 
 Include `<skalaxc/skalaxc.hpp>` and link only `SkalaXC::skalaxc`.
 The installed CMake package supports `find_package(SkalaXC CONFIG REQUIRED
 COMPONENTS CXX)`. A consumer does not need GauXC or LibTorch include paths.
-The shared C-compatible feature and MPI headers under `include/skalaxc/c`
-are support headers used by the C++ API, not a C binding.
+The C binding uses `<skalaxc/skalaxc.h>`, opaque handles, status codes, and
+caller-owned output buffers. C-only consumers request the `C` CMake component
+and link the same public target, without a C++ compiler or private headers.
 
 Models are selected with `LDA`, `PBE`, `TPSS`, or an explicit `.fun` path.
 Named models resolve from the installed model directory, with

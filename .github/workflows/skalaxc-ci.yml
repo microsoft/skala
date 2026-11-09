@@ -55,6 +55,7 @@ jobs:
           ctest --test-dir SkalaXC/build --output-on-failure --no-tests=error
           cmake --install SkalaXC/build
           SkalaXC/build/examples/skalaxc_eval_cpp SkalaXC/tests/ref_data/skala_he_def2qzvp_pbe_uks.hdf5 PBE
+          SkalaXC/build/examples/skalaxc_eval_c SkalaXC/tests/ref_data/skala_he_def2qzvp_lda_uks.hdf5 LDA
       - name: Installed consumer
         run: |
           cmake -S SkalaXC/tests/installed -B SkalaXC/build-installed -G Ninja \

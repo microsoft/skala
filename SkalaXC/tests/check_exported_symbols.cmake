@@ -1,8 +1,8 @@
-# Verify that the built shared library exposes only SkalaXC's public C++
+# Verify that the built shared library exposes only SkalaXC's public C and C++
 # ABI. The CTest registration supplies the platform's nm executable, the
 # library path, and either MACHO or ELF mode. This script normalizes the two nm
 # output conventions, rejects leaked dependency/private symbols, and confirms
-# that the C++ API has exported symbols and no C bindings are exported.
+# that both the C and C++ API surfaces have at least one exported symbol.
 
 if(NOT NM_EXECUTABLE OR NOT LIBRARY_PATH)
   message(FATAL_ERROR "NM_EXECUTABLE and LIBRARY_PATH are required")
@@ -60,9 +60,9 @@ if(unexpected_symbols)
     "${LIBRARY_PATH} exports symbols outside the SkalaXC ABI:\n  "
     "${unexpected_lines}")
 endif()
-if(NOT c_symbol_count EQUAL 0 OR cxx_symbol_count EQUAL 0)
+if(c_symbol_count EQUAL 0 OR cxx_symbol_count EQUAL 0)
   message(FATAL_ERROR
-    "Expected only C++ SkalaXC exports, found ${c_symbol_count} C and "
+    "Expected both C and C++ SkalaXC exports, found ${c_symbol_count} C and "
     "${cxx_symbol_count} C++ symbols")
 endif()
 
