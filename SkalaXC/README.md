@@ -27,7 +27,9 @@ pixi run -e gauxc-openmp-fortran cmake --install SkalaXC/build
 
 Alternatively provide CMake 3.21+, a C++17 compiler, LibTorch, BLAS, HDF5, and
 nlohmann_json through your own environment. Eigen, GauXC, and test dependencies
-are fetched when unavailable. The GauXC submodule is pinned; an uninitialized
+are fetched when unavailable. ExchCXX and IntegratorXX always use GauXC's pinned
+source builds to avoid leaking installed shared C++ dependencies.
+The GauXC submodule is pinned; an uninitialized
 checkout uses the same pinned revision through FetchContent.
 
 Fortran is enabled by default and needs a Fortran compiler. For C/C++ only,
