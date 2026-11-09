@@ -15,20 +15,23 @@ Use the existing locked native toolchain from the repository root:
 
 ```bash
 git submodule update --init SkalaXC/external/GauXC
-pixi install --locked -e gauxc-openmp
-pixi run -e gauxc-openmp cmake -S SkalaXC -B SkalaXC/build -G Ninja \
+pixi install --locked -e gauxc-openmp-fortran
+pixi run -e gauxc-openmp-fortran cmake -S SkalaXC -B SkalaXC/build -G Ninja \
   -DSKALAXC_BUILD_TESTS=ON -DSKALAXC_BUILD_EXAMPLES=ON \
   -DCMAKE_INSTALL_PREFIX="$PWD/SkalaXC/install"
-pixi run -e gauxc-openmp cmake --build SkalaXC/build --parallel 4
-OMP_NUM_THREADS=4 pixi run -e gauxc-openmp \
+pixi run -e gauxc-openmp-fortran cmake --build SkalaXC/build --parallel 4
+OMP_NUM_THREADS=4 pixi run -e gauxc-openmp-fortran \
   ctest --test-dir SkalaXC/build --output-on-failure
-pixi run -e gauxc-openmp cmake --install SkalaXC/build
+pixi run -e gauxc-openmp-fortran cmake --install SkalaXC/build
 ```
 
 Alternatively provide CMake 3.21+, a C++17 compiler, LibTorch, BLAS, HDF5, and
 nlohmann_json through your own environment. Eigen, GauXC, and test dependencies
 are fetched when unavailable. The GauXC submodule is pinned; an uninitialized
 checkout uses the same pinned revision through FetchContent.
+
+Fortran is enabled by default and needs a Fortran compiler. For C/C++ only,
+configure `SKALAXC_BUILD_FORTRAN=OFF` and use the `gauxc-openmp` environment.
 
 ## API and tutorial
 
@@ -37,6 +40,8 @@ checkout uses the same pinned revision through FetchContent.
 - [C++ tutorial](../website/skalaxc/cpp.rst)
 - [C API](../website/skalaxc/c-api.rst)
 - [C tutorial](../website/skalaxc/c.rst)
+- [Fortran API](../website/skalaxc/fortran-api.rst)
+- [Fortran tutorial](../website/skalaxc/fortran.rst)
 - [Test contracts](tests/README.md)
 
 Include `<skalaxc/skalaxc.hpp>` and link only `SkalaXC::skalaxc`.
@@ -60,7 +65,7 @@ xyz order. Both allocating and caller-owned output overloads are supported.
 Restricted (RKS) evaluation is not implemented.
 
 MPI is optional (`SKALAXC_ENABLE_MPI=ON`), uses the caller's communicator, and
-requires collective evaluation. Use the `gauxc-mpi` environment for host MPI.
+requires collective evaluation. Use `gauxc-mpi-fortran` for host MPI with Fortran.
 CUDA is experimental and off by default (`SKALAXC_ENABLE_CUDA=ON` to enable).
 It requires a compatible CUDA compiler, GPU-enabled LibTorch, and GPU runtime.
 LDA/PBE gradients and TPSS energy/potentials are covered; the bundled TPSS
