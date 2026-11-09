@@ -42,6 +42,13 @@ set(GAUXC_ENABLE_MPI    ${SKALAXC_ENABLE_MPI}    CACHE BOOL "" FORCE)
 set(GAUXC_ENABLE_CUDA   ${SKALAXC_ENABLE_CUDA}   CACHE BOOL "" FORCE)
 set(GAUXC_ENABLE_MAGMA  OFF                      CACHE BOOL "" FORCE)
 
+# Installed packages may be shared libraries. These private C++ dependencies
+# must instead use GauXC's pinned source builds and our static/hidden settings.
+set(CMAKE_DISABLE_FIND_PACKAGE_ExchCXX TRUE)
+set(CMAKE_DISABLE_FIND_PACKAGE_IntegratorXX TRUE)
+set(ExchCXX_FOUND FALSE)
+set(IntegratorXX_FOUND FALSE)
+
 # GauXC currently declares HighFive with an older revision that can be slow or
 # unreliable to fetch on some networks. Bootstrap a shallow clone here and
 # force GauXC's FetchContent to reuse this local source tree, without modifying
