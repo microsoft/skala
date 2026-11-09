@@ -13,6 +13,8 @@ Use the installed module and its CMake target:
 
 The module is compiler-specific: build the library and consumer with
 compatible Fortran compilers. No GauXC or LibTorch include paths are needed.
+The locked Fortran environments set ``FC`` to their own compiler so HDF5
+modules are not accidentally consumed by an incompatible system compiler.
 ``SKALAXC_BUILD_FORTRAN=OFF`` omits the module and its CMake component.
 
 Ownership and error handling
