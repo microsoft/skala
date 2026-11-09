@@ -38,7 +38,7 @@ jobs:
             environment: test-py313-pyscf214-torch213
           - runner: ubuntu-24.04-arm
             environment: test-py312-pyscf214-torch213
-          - runner: macos-14
+          - runner: macos-15
             environment: test-py312-pyscf214-torch213
 
     name: "${{ matrix.environment }} @ ${{ matrix.runner }}"
@@ -63,8 +63,37 @@ jobs:
       if: ${{ failure() }}
       uses: ./.github/actions/cpu-diagnostics
 
+  # GPU runners are self-hosted, so on pull requests only run them for same-repository
+  # changes that can affect the GPU environments or GPU code.
+  gpu-changes:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    outputs:
+      gpu: ${{ steps.filter.outputs.gpu }}
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      with:
+        fetch-depth: 2
+
+    - name: Detect GPU-relevant changes
+      id: filter
+      run: |
+        # The checkout is the PR merge commit; its first parent is the base branch.
+        if git diff --name-only HEAD^1 HEAD | grep -qE '^(pixi\.(toml|lock)|\.github/workflows/skala-test\.yml|\.github/actions/setup-pixi/|skala/src/skala/gpu4pyscf/|skala/tests/test_gpu4pyscf_|tools/verify_gpu\.py$)'; then
+          echo "gpu=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "gpu=false" >> "$GITHUB_OUTPUT"
+        fi
+
   gpu-test:
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: gpu-changes
+    if: >-
+      !cancelled() && (
+        (github.event_name != 'pull_request' && github.ref == 'refs/heads/main') ||
+        (github.event_name == 'pull_request' && needs.gpu-changes.outputs.gpu == 'true')
+      )
     runs-on: ${{ matrix.runner }}
     env:
       OMP_NUM_THREADS: 4
