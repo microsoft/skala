@@ -4,6 +4,12 @@ The C layer adds a pure-C numerical consumer, dependency isolation checks, and
 malformed HDF5 density-shape regression tests. Installed consumers cover both
 C and C++, while the export allowlist admits only those public surfaces.
 
+Fortran coverage adds numerical and installed-module consumers, scalar and
+rank-1/rank-2 assignment rejection for all eight handle types, and exact-once
+array finalization tests. MPI builds additionally run the Fortran numerical
+test on two ranks. Disable the optional module with `SKALAXC_BUILD_FORTRAN=OFF`
+when testing a C/C++-only installation.
+
 The Catch2 units protect array views, atomic-domain ordering, task limits,
 model interfaces, diagnostics, and communicator behavior. Host numerical
 tests cover LDA/PBE/TPSS energy, both potential channels, nuclear gradients,

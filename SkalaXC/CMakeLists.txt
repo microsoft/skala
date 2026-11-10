@@ -24,6 +24,13 @@ function(_skalaxc_enable_warnings target_name)
     "$<$<COMPILE_LANG_AND_ID:CUDA,Clang>:-Wall>"
     "$<$<COMPILE_LANG_AND_ID:CUDA,Clang>:-Wextra>"
   )
+
+
+  target_compile_options(${target_name} PRIVATE
+    "$<$<COMPILE_LANG_AND_ID:Fortran,GNU>:-Wall>"
+    "$<$<COMPILE_LANG_AND_ID:Fortran,GNU>:-Wextra>"
+    "$<$<COMPILE_LANG_AND_ID:Fortran,GNU>:-Wpedantic>"
+  )
 endfunction()
 
 # ----------------------------------------------------------------------------
@@ -33,8 +40,9 @@ option(SKALAXC_ENABLE_CUDA   "Enable the CUDA (GPU) backend"                 OFF
 option(SKALAXC_ENABLE_MPI    "Enable MPI support"                            OFF)
 option(SKALAXC_ENABLE_OPENMP "Enable OpenMP support"                         ON)
 option(SKALAXC_ENABLE_HDF5   "Enable HDF5 molecule and basis-set I/O"         ON)
+option(SKALAXC_BUILD_FORTRAN "Build the SkalaXC Fortran API (iso_c_binding)" ON)
 option(SKALAXC_BUILD_TESTS   "Build SkalaXC tests"                           OFF)
-option(SKALAXC_BUILD_EXAMPLES "Build the SkalaXC C and C++ example programs" OFF)
+option(SKALAXC_BUILD_EXAMPLES "Build the SkalaXC C/C++/Fortran example programs" OFF)
 option(SKALAXC_BUILD_DOCS "Build project-wide SkalaXC Doxygen documentation" OFF)
 option(SKALAXC_DOWNLOAD_MODELS "Download baseline .fun models when required and missing" ON)
 option(SKALAXC_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
@@ -47,8 +55,8 @@ if(SKALAXC_ENABLE_SANITIZERS)
       "SKALAXC_ENABLE_SANITIZERS requires a GNU or Clang toolchain")
   endif()
   add_compile_options(
-    "$<$<COMPILE_LANGUAGE:C,CXX>:-fsanitize=address,undefined>"
-    "$<$<COMPILE_LANGUAGE:C,CXX>:-fno-omit-frame-pointer>")
+    "$<$<COMPILE_LANGUAGE:C,CXX,Fortran>:-fsanitize=address,undefined>"
+    "$<$<COMPILE_LANGUAGE:C,CXX,Fortran>:-fno-omit-frame-pointer>")
   add_link_options(-fsanitize=address,undefined)
 endif()
 
@@ -87,6 +95,20 @@ if(SKALAXC_BUILD_DOCS)
     COMMENT "Generating strict project-wide SkalaXC documentation"
     VERBATIM
   )
+endif()
+
+# The Fortran API binds only to the C API via iso_c_binding; enable the language
+# lazily so C/C++-only consumers never need a Fortran compiler.
+if(SKALAXC_BUILD_FORTRAN)
+  include(CheckLanguage)
+  check_language(Fortran)
+  if(NOT CMAKE_Fortran_COMPILER)
+    message(FATAL_ERROR
+      "SKALAXC_BUILD_FORTRAN=ON but no Fortran compiler was found. "
+      "Install a Fortran compiler (for example gfortran) or rerun with "
+      "-DSKALAXC_BUILD_FORTRAN=OFF.")
+  endif()
+  enable_language(Fortran)
 endif()
 
 # The CUDA (GPU) backend is optional and OFF by default. Enable the CUDA language
@@ -172,12 +194,17 @@ endif()
 # ----------------------------------------------------------------------------
 include(skalaxc-skala)   # LibTorch + nlohmann_json
 add_subdirectory(src)
+if(SKALAXC_BUILD_FORTRAN)
+add_subdirectory(src/fortran)
+endif()
 # ML VXC/gradient CUDA kernels (option-gated; see src/device/CMakeLists.txt).
 # OFF by default -- never compiled on a host-only toolchain.
-# Minimal C and C++ consumer examples (option-gated; see examples/).
+# Minimal C/C++/Fortran consumer examples (option-gated; see examples/).
 if(SKALAXC_BUILD_EXAMPLES)
-  add_subdirectory(examples)
+add_subdirectory(examples)
 endif()
+
+
 
 # ----------------------------------------------------------------------------
 # Tests (white-box reference-integration harness; may use GauXC internals in-build).
@@ -191,11 +218,14 @@ set(_skalaxc_owned_targets
   skalaxc_cuda
   skalaxc_core
   skalaxc
+  skalaxc_fortran
   skalaxc_eval_cpp
   skalaxc_eval_c
+  skalaxc_eval_fortran
   skalaxc_unit_test
   skalaxc_public_api_test
   skalaxc_c_api_test
+  skalaxc_fortran_test
 )
 foreach(_skalaxc_target IN LISTS _skalaxc_owned_targets)
   if(TARGET ${_skalaxc_target})
@@ -220,6 +250,20 @@ install(TARGETS skalaxc
   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT Core
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT Core
   INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+if(SKALAXC_BUILD_FORTRAN)
+  install(TARGETS skalaxc_fortran
+    EXPORT SkalaXCFortranTargets
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT Fortran
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+  get_target_property(_skalaxc_fortran_module_dir skalaxc_fortran
+    Fortran_MODULE_DIRECTORY)
+  install(DIRECTORY "${_skalaxc_fortran_module_dir}/"
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    COMPONENT Fortran
+    OPTIONAL
+    FILES_MATCHING PATTERN "*.mod")
+  unset(_skalaxc_fortran_module_dir)
+endif()
 
 install(DIRECTORY "${PROJECT_SOURCE_DIR}/include/skalaxc"
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
@@ -250,6 +294,13 @@ install(EXPORT SkalaXCCoreTargets
   NAMESPACE SkalaXC::
   DESTINATION "${SKALAXC_INSTALL_CMAKEDIR}"
   COMPONENT Core)
+if(SKALAXC_BUILD_FORTRAN)
+  install(EXPORT SkalaXCFortranTargets
+    FILE SkalaXCFortranTargets.cmake
+    NAMESPACE SkalaXC::
+    DESTINATION "${SKALAXC_INSTALL_CMAKEDIR}"
+    COMPONENT Fortran)
+endif()
 install(FILES
   "${PROJECT_BINARY_DIR}/SkalaXCConfig.cmake"
   "${PROJECT_BINARY_DIR}/SkalaXCConfigVersion.cmake"

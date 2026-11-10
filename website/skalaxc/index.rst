@@ -19,3 +19,5 @@ Those integration paths remain available.
    cpp
    c-api
    c
+   fortran-api
+   fortran

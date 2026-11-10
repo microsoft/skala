@@ -6,14 +6,18 @@ Build from the repository root with the locked native toolchain:
 .. code-block:: bash
 
    git submodule update --init SkalaXC/external/GauXC
-   pixi install --locked -e gauxc-openmp
-   pixi run -e gauxc-openmp cmake -S SkalaXC -B SkalaXC/build -G Ninja \
+   pixi install --locked -e gauxc-openmp-fortran
+   pixi run -e gauxc-openmp-fortran cmake -S SkalaXC -B SkalaXC/build -G Ninja \
      -DSKALAXC_BUILD_TESTS=ON -DSKALAXC_BUILD_EXAMPLES=ON \
      -DCMAKE_INSTALL_PREFIX="$PWD/SkalaXC/install"
-   pixi run -e gauxc-openmp cmake --build SkalaXC/build --parallel 4
-   OMP_NUM_THREADS=4 pixi run -e gauxc-openmp \
+   pixi run -e gauxc-openmp-fortran cmake --build SkalaXC/build --parallel 4
+   OMP_NUM_THREADS=4 pixi run -e gauxc-openmp-fortran \
      ctest --test-dir SkalaXC/build --output-on-failure
-   pixi run -e gauxc-openmp cmake --install SkalaXC/build
+   pixi run -e gauxc-openmp-fortran cmake --install SkalaXC/build
+
+The Fortran API is enabled by default and requires a Fortran compiler.
+C/C++-only builds can use ``gauxc-openmp`` with
+``-DSKALAXC_BUILD_FORTRAN=OFF`` and do not need a Fortran compiler.
 
 The public library requires C++17 and CMake 3.21 or newer. LibTorch, BLAS, and
 HDF5 must be available to the build. GauXC is a private source dependency, not
@@ -22,7 +26,7 @@ The pinned GauXC revision is fetched automatically when its submodule is absent.
 
 ``SKALAXC_ENABLE_HDF5=OFF`` removes HDF5 input support.
 ``SKALAXC_ENABLE_OPENMP`` defaults to ``ON``.
-For MPI, use ``gauxc-mpi`` and configure ``SKALAXC_ENABLE_MPI=ON``; all
+For MPI, use ``gauxc-mpi-fortran`` and configure ``SKALAXC_ENABLE_MPI=ON``; all
 evaluations are collective on the communicator supplied to the runtime.
 
 Models and array layout

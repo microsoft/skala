@@ -191,6 +191,9 @@ platforms = ["linux-64", "linux-64-cuda12"]
 fortran-compiler = "*"
 openssl = ">=3"
 
+[feature.fortran.activation.env]
+FC = "$CONDA_PREFIX/bin/gfortran"
+
 [feature.hdf5-serial]
 platforms = ["linux-64", "linux-64-cuda12"]
 
