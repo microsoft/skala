@@ -21,3 +21,5 @@ Those integration paths remain available.
    c
    fortran-api
    fortran
+   python-api
+   python
