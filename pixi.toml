@@ -94,6 +94,7 @@ cuda-cudart-dev = ">=12,<13"
 cuda-nvrtc = ">=12,<13"
 cuda-version = ">=12,<13"
 cutensor = ">=2"
+libcusolver-dev = "*"
 
 [feature.cuda-12.pypi-dependencies]
 gpu4pyscf-cuda12x = "==1.9.0"
@@ -106,6 +107,7 @@ cuda-cudart-dev = ">=13,<14"
 cuda-nvrtc = ">=13,<14"
 cuda-version = ">=13,<14"
 cutensor = ">=2"
+libcusolver-dev = "*"
 
 [feature.cuda-13.pypi-dependencies]
 gpu4pyscf-cuda13x = "==1.9.0"
