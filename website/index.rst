@@ -77,6 +77,7 @@ Refer to their documentation for installation and input options.
 
    C++ (LibTorch) <cpp>
    Fortran (FTorch) <ftorch>
+   SkalaXC <skalaxc/index>
    GauXC (C++, C, Fortran) <https://microsoft.github.io/skala/gauxc/>
 
 .. toctree::
