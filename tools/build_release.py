@@ -11,6 +11,12 @@ from pathlib import Path
 
 PACKAGES = ("skala", "microsoft-skala", "skala-cuda12x", "skala-cuda13x")
 PLACEHOLDER_PATTERN = re.compile(r"@[A-Z][A-Z0-9_]*@")
+# TODO: drop this pin once gpu4pyscf-libxc-cuda12x fixes the "operation not supported" abort
+# in xc_func_init on vGPU devices (0.9.0 fails on the A10-4Q CI runners; 0.8.1 works).
+# Keep it in sync with the pin in pixi.toml.
+EXTRA_DEPENDENCIES = {
+    "skala-cuda12x": ["gpu4pyscf-libxc-cuda12x==0.8.1"],
+}
 
 
 def project_version(repository: Path) -> str:
@@ -46,9 +52,14 @@ def render_compatibility_pyproject(repository: Path, package: str) -> tuple[str,
     else:
         template = repository / ".github" / "workflows" / "pypi" / "skala-cuda.toml"
         module_name = "skala_cuda"
+        extra_dependencies = "".join(
+            f'\n    "{requirement}",'
+            for requirement in EXTRA_DEPENDENCIES.get(package, [])
+        )
         replacements = {
             "@VERSION@": version,
             "@CUDA@": package.removeprefix("skala-cuda"),
+            "@EXTRA_DEPENDENCIES@": extra_dependencies,
         }
 
     return module_name, render_template(template, replacements)

@@ -2319,8 +2319,8 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/40/2f/10a2e9ad81bd5c2479a255d18c4f02c734a3a21bf4b36a236ba615919592/pyscf_dispersion-1.5.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/4d/57/f53eb30c38aa4eeabddc3bddf283f4c10616de65d95fcd1f43900721f425/geometric-1.1.1.tar.gz
       - pypi: https://files.pythonhosted.org/packages/63/7c/5c2892e6bc0628a2ccf4e938e1e2db22794657ccb374672d66e20d73839e/numpy_typing_compat-20251206.2.4-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/63/b5/ff337f8db80e67c464846a7d10f7f6bc1039c40a2c8b57ecb90d6b0c11d9/gpu4pyscf_libxc_cuda12x-0.8.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/65/6c/eea1d03e475217aea95b1d52aee09c97575d05bbc592c39c085b71dab89f/pyarrow_stubs-20.0.0.20260819-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/66/1c/4008cb4b912ad35f599d29573e5956bc0adbc01009f88e23edda2eee0c31/gpu4pyscf_libxc_cuda12x-0.9.0-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/7c/5b/65124de2dbaf2e85109f611a41947e39acd6dd938751c04b4c4d7bf6fc82/cupy_cuda12x-14.2.0-cp312-cp312-manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/88/30/8e48717aff32f11fd78f981192d0b567971eb285ea048414b7dac2a211cf/pyscf-2.14.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/8e/93/f0904fa7d954ecc4c0db17c8d63d185d442dd59fc6757f1d1f448c59c256/cuda_pathfinder-1.8.4-py3-none-any.whl
@@ -4362,7 +4362,7 @@ environments:
       - pypi: ./skala
       - pypi: https://files.pythonhosted.org/packages/40/2f/10a2e9ad81bd5c2479a255d18c4f02c734a3a21bf4b36a236ba615919592/pyscf_dispersion-1.5.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/4d/57/f53eb30c38aa4eeabddc3bddf283f4c10616de65d95fcd1f43900721f425/geometric-1.1.1.tar.gz
-      - pypi: https://files.pythonhosted.org/packages/66/1c/4008cb4b912ad35f599d29573e5956bc0adbc01009f88e23edda2eee0c31/gpu4pyscf_libxc_cuda12x-0.9.0-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
+      - pypi: https://files.pythonhosted.org/packages/63/b5/ff337f8db80e67c464846a7d10f7f6bc1039c40a2c8b57ecb90d6b0c11d9/gpu4pyscf_libxc_cuda12x-0.8.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/7c/5b/65124de2dbaf2e85109f611a41947e39acd6dd938751c04b4c4d7bf6fc82/cupy_cuda12x-14.2.0-cp312-cp312-manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/88/30/8e48717aff32f11fd78f981192d0b567971eb285ea048414b7dac2a211cf/pyscf-2.14.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/8e/93/f0904fa7d954ecc4c0db17c8d63d185d442dd59fc6757f1d1f448c59c256/cuda_pathfinder-1.8.4-py3-none-any.whl
@@ -4629,7 +4629,7 @@ environments:
       - pypi: ./skala
       - pypi: https://files.pythonhosted.org/packages/40/2f/10a2e9ad81bd5c2479a255d18c4f02c734a3a21bf4b36a236ba615919592/pyscf_dispersion-1.5.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/4d/57/f53eb30c38aa4eeabddc3bddf283f4c10616de65d95fcd1f43900721f425/geometric-1.1.1.tar.gz
-      - pypi: https://files.pythonhosted.org/packages/66/1c/4008cb4b912ad35f599d29573e5956bc0adbc01009f88e23edda2eee0c31/gpu4pyscf_libxc_cuda12x-0.9.0-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
+      - pypi: https://files.pythonhosted.org/packages/63/b5/ff337f8db80e67c464846a7d10f7f6bc1039c40a2c8b57ecb90d6b0c11d9/gpu4pyscf_libxc_cuda12x-0.8.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/7c/5b/65124de2dbaf2e85109f611a41947e39acd6dd938751c04b4c4d7bf6fc82/cupy_cuda12x-14.2.0-cp312-cp312-manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/88/30/8e48717aff32f11fd78f981192d0b567971eb285ea048414b7dac2a211cf/pyscf-2.14.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/8e/93/f0904fa7d954ecc4c0db17c8d63d185d442dd59fc6757f1d1f448c59c256/cuda_pathfinder-1.8.4-py3-none-any.whl
@@ -20640,6 +20640,10 @@ packages:
   requires_dist:
   - numpy>=2.4rc1,<2.5
   requires_python: '>=3.11'
+- pypi: https://files.pythonhosted.org/packages/63/b5/ff337f8db80e67c464846a7d10f7f6bc1039c40a2c8b57ecb90d6b0c11d9/gpu4pyscf_libxc_cuda12x-0.8.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
+  name: gpu4pyscf-libxc-cuda12x
+  version: 0.8.1
+  sha256: c788f2ca50ef036076754e6167169c957834885430bfc2e23e3b8111942c686a
 - pypi: https://files.pythonhosted.org/packages/65/6c/eea1d03e475217aea95b1d52aee09c97575d05bbc592c39c085b71dab89f/pyarrow_stubs-20.0.0.20260819-py3-none-any.whl
   name: pyarrow-stubs
   version: 20.0.0.20260819
@@ -20647,10 +20651,6 @@ packages:
   requires_dist:
   - pyarrow>=20
   requires_python: '>=3.9,<4'
-- pypi: https://files.pythonhosted.org/packages/66/1c/4008cb4b912ad35f599d29573e5956bc0adbc01009f88e23edda2eee0c31/gpu4pyscf_libxc_cuda12x-0.9.0-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
-  name: gpu4pyscf-libxc-cuda12x
-  version: 0.9.0
-  sha256: 23936ac9b9ac1214d3ef015e607f8a14e85119f565a6588e68a27e7e8a560880
 - pypi: https://files.pythonhosted.org/packages/7c/5b/65124de2dbaf2e85109f611a41947e39acd6dd938751c04b4c4d7bf6fc82/cupy_cuda12x-14.2.0-cp312-cp312-manylinux2014_x86_64.whl
   name: cupy-cuda12x
   version: 14.2.0
