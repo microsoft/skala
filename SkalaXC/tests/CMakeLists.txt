@@ -278,6 +278,9 @@ else()
 endif()
 
 # --- black-box C public-API test --------------------------------------------
+# A pure C consumer: includes ONLY <skalaxc/skalaxc.h>, compiled as C, linking
+# ONLY libskalaxc (+ the C HDF5 lib to load its own density input). Proves the C
+# API is usable and ABI-isolated without any C++/GauXC/torch symbols.
 if(SKALAXC_HAS_HDF5)
   find_package(HDF5 QUIET COMPONENTS C)
 endif()
@@ -351,5 +354,107 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR APPLE)
         -DOTOOL_EXECUTABLE=${SKALAXC_OTOOL_EXECUTABLE}
         -DLIBRARY_PATH=$<TARGET_FILE:skalaxc>
         -P ${CMAKE_CURRENT_SOURCE_DIR}/check_library_dependencies.cmake)
+  endif()
+endif()
+
+# --- black-box Fortran public-API test --------------------------------------
+# A pure Fortran consumer: `use`s ONLY the `skalaxc` module and links ONLY
+# libskalaxc (via skalaxc_fortran). HDF5-Fortran is linked solely so the test
+# can load its own density input (unrelated to the SkalaXC ABI).
+if(SKALAXC_BUILD_FORTRAN AND SKALAXC_HAS_HDF5)
+  find_package(HDF5 QUIET COMPONENTS Fortran)
+  if(HDF5_FOUND AND HDF5_Fortran_FOUND)
+    add_executable(skalaxc_fortran_test skalaxc_fortran_test.F90)
+    set_source_files_properties(skalaxc_fortran_test.F90 PROPERTIES
+      Fortran_PREPROCESS ON)
+    if(SKALAXC_ENABLE_MPI)
+      find_package(MPI REQUIRED COMPONENTS Fortran)
+      target_compile_definitions(skalaxc_fortran_test PRIVATE SKALAXC_HAS_MPI)
+      target_link_libraries(skalaxc_fortran_test PRIVATE MPI::MPI_Fortran)
+    endif()
+    if(SKALAXC_ENABLE_CUDA)
+      target_compile_definitions(skalaxc_fortran_test PRIVATE SKALAXC_HAS_CUDA)
+    endif()
+    target_compile_definitions(skalaxc_fortran_test PRIVATE
+      SKALAXC_EXPECTED_VERSION="${PROJECT_VERSION}")
+    target_link_libraries(skalaxc_fortran_test PRIVATE
+      skalaxc_fortran ${HDF5_Fortran_LIBRARIES})
+    target_include_directories(skalaxc_fortran_test PRIVATE ${HDF5_Fortran_INCLUDE_DIRS})
+    add_test(NAME skalaxc_fortran
+      COMMAND skalaxc_fortran_test ${CMAKE_CURRENT_SOURCE_DIR}/ref_data
+        ${SKALAXC_GAUXC_REF_DATA_DIR})
+    set_tests_properties(skalaxc_fortran PROPERTIES
+      ENVIRONMENT "SKALAXC_MODEL_PATH=${SKALAXC_MODEL_PATH}")
+
+    if(SKALAXC_ENABLE_MPI)
+      add_test(NAME skalaxc_fortran_mpi
+        COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2
+          ${MPIEXEC_PREFLAGS} $<TARGET_FILE:skalaxc_fortran_test>
+          ${CMAKE_CURRENT_SOURCE_DIR}/ref_data ${SKALAXC_GAUXC_REF_DATA_DIR}
+          ${MPIEXEC_POSTFLAGS})
+      set_tests_properties(skalaxc_fortran_mpi PROPERTIES
+        ENVIRONMENT
+          "OMP_NUM_THREADS=1;SKALAXC_MODEL_PATH=${SKALAXC_MODEL_PATH}")
+    endif()
+  else()
+    message(STATUS "SkalaXC: HDF5 Fortran component not found; skipping Fortran test")
+  endif()
+endif()
+
+if(SKALAXC_BUILD_FORTRAN)
+  foreach(_skalaxc_rank RANGE 1 2)
+    add_executable(skalaxc_fortran_assignment_rank${_skalaxc_rank}_test
+      skalaxc_fortran_assignment_test.F90)
+    target_link_libraries(skalaxc_fortran_assignment_rank${_skalaxc_rank}_test
+      PRIVATE skalaxc_fortran)
+  endforeach()
+  target_compile_definitions(skalaxc_fortran_assignment_rank1_test
+    PRIVATE "HANDLE_SHAPE=(2)")
+  target_compile_definitions(skalaxc_fortran_assignment_rank2_test
+    PRIVATE "HANDLE_SHAPE=(2,2)")
+  add_executable(skalaxc_fortran_assignment_test
+    skalaxc_fortran_assignment_test.F90)
+  target_link_libraries(skalaxc_fortran_assignment_test PRIVATE
+    skalaxc_fortran)
+  foreach(_skalaxc_handle_type IN ITEMS
+      runtime molecule basis grid load-balancer molecular-weights functional
+      integrator)
+    add_test(NAME skalaxc_fortran_assignment.${_skalaxc_handle_type}
+      COMMAND ${CMAKE_COMMAND}
+        -DEXECUTABLE=$<TARGET_FILE:skalaxc_fortran_assignment_test>
+        -DHANDLE_TYPE=${_skalaxc_handle_type}
+        "-DEXPECTED_MESSAGE=SkalaXC handles are non-copyable; use move_from"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/check_expected_failure.cmake)
+    foreach(_skalaxc_rank RANGE 1 2)
+      add_test(NAME skalaxc_fortran_assignment.rank${_skalaxc_rank}.${_skalaxc_handle_type}
+        COMMAND ${CMAKE_COMMAND}
+          -DEXECUTABLE=$<TARGET_FILE:skalaxc_fortran_assignment_rank${_skalaxc_rank}_test>
+          -DHANDLE_TYPE=${_skalaxc_handle_type}
+          "-DEXPECTED_MESSAGE=SkalaXC handles are non-copyable; use move_from"
+          -P ${CMAKE_CURRENT_SOURCE_DIR}/check_expected_failure.cmake)
+    endforeach()
+  endforeach()
+  unset(_skalaxc_handle_type)
+  if(UNIX AND NOT APPLE)
+    foreach(_skalaxc_rank RANGE 1 2)
+      set(_skalaxc_lifecycle_target skalaxc_fortran_array_lifecycle_rank${_skalaxc_rank})
+      add_executable(${_skalaxc_lifecycle_target}
+        skalaxc_fortran_array_lifecycle.F90 fortran_destroy_counts.c)
+      target_compile_definitions(${_skalaxc_lifecycle_target}
+        PRIVATE HANDLE_RANK=${_skalaxc_rank})
+      target_link_libraries(${_skalaxc_lifecycle_target} PRIVATE skalaxc_fortran)
+      if(SKALAXC_ENABLE_MPI)
+        target_compile_definitions(${_skalaxc_lifecycle_target} PRIVATE SKALAXC_HAS_MPI)
+        target_link_libraries(${_skalaxc_lifecycle_target} PRIVATE MPI::MPI_Fortran)
+      endif()
+      foreach(_skalaxc_handle IN ITEMS runtime_environment molecule basisset molgrid
+          load_balancer molecular_weights functional xc_integrator)
+        target_link_options(${_skalaxc_lifecycle_target}
+          PRIVATE "LINKER:--wrap=skalaxc_${_skalaxc_handle}_destroy")
+      endforeach()
+      add_test(NAME ${_skalaxc_lifecycle_target} COMMAND ${_skalaxc_lifecycle_target})
+      set_tests_properties(${_skalaxc_lifecycle_target} PROPERTIES
+        ENVIRONMENT "OMP_NUM_THREADS=4;SKALAXC_MODEL_PATH=${SKALAXC_MODEL_PATH}")
+    endforeach()
   endif()
 endif()

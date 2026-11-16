@@ -24,10 +24,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - environment: gauxc-openmp
+          - environment: gauxc-openmp-fortran
             mpi: 'OFF'
             submodules: 'false'
-          - environment: gauxc-mpi
+          - environment: gauxc-mpi-fortran
             mpi: 'ON'
             submodules: recursive
     env:
@@ -46,6 +46,7 @@ jobs:
           cmake -S SkalaXC -B SkalaXC/build -G Ninja
           -DCMAKE_BUILD_TYPE=Release
           -DSKALAXC_BUILD_TESTS=ON -DSKALAXC_BUILD_EXAMPLES=ON
+          -DSKALAXC_BUILD_FORTRAN=ON
           -DSKALAXC_ENABLE_MPI=${{ matrix.mpi }}
           -DMPIEXEC_PREFLAGS=--oversubscribe
           -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/SkalaXC/install
@@ -56,6 +57,7 @@ jobs:
           cmake --install SkalaXC/build
           SkalaXC/build/examples/skalaxc_eval_cpp SkalaXC/tests/ref_data/skala_he_def2qzvp_pbe_uks.hdf5 PBE
           SkalaXC/build/examples/skalaxc_eval_c SkalaXC/tests/ref_data/skala_he_def2qzvp_lda_uks.hdf5 LDA
+          SkalaXC/build/examples/skalaxc_eval_fortran SkalaXC/tests/ref_data/skala_he_def2qzvp_tpss_uks.hdf5 TPSS
       - name: Installed consumer
         run: |
           cmake -S SkalaXC/tests/installed -B SkalaXC/build-installed -G Ninja \
