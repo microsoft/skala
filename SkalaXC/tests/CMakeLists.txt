@@ -181,6 +181,7 @@ if(SKALAXC_ENABLE_MPI)
       "Eigen MPI collectives use runtime communicator"
       ${MPIEXEC_POSTFLAGS})
   set_tests_properties(skalaxc_unit_mpi.subcommunicator.mpi_wrapper PROPERTIES
+    TIMEOUT 180
     ENVIRONMENT
       "OMP_NUM_THREADS=1;SKALAXC_MODEL_PATH=${SKALAXC_MODEL_PATH}")
   add_test(NAME skalaxc_unit_mpi.subcommunicator.gradient_wrapper
@@ -190,6 +191,7 @@ if(SKALAXC_ENABLE_MPI)
       ${MPIEXEC_POSTFLAGS})
   set_tests_properties(skalaxc_unit_mpi.subcommunicator.gradient_wrapper
     PROPERTIES
+    TIMEOUT 180
     ENVIRONMENT
       "OMP_NUM_THREADS=1;SKALAXC_MODEL_PATH=${SKALAXC_MODEL_PATH}")
   add_test(NAME skalaxc_unit_mpi.subcommunicator.model_grid
@@ -198,6 +200,7 @@ if(SKALAXC_ENABLE_MPI)
       "Model grid layout caches subcommunicator ordering metadata"
       ${MPIEXEC_POSTFLAGS})
   set_tests_properties(skalaxc_unit_mpi.subcommunicator.model_grid PROPERTIES
+    TIMEOUT 180
     ENVIRONMENT
       "OMP_NUM_THREADS=1;SKALAXC_MODEL_PATH=${SKALAXC_MODEL_PATH}")
   add_test(NAME skalaxc_unit_mpi.host_subcommunicator
@@ -205,6 +208,7 @@ if(SKALAXC_ENABLE_MPI)
       ${MPIEXEC_PREFLAGS} $<TARGET_FILE:skalaxc_unit_test>
       "[host-subcomm]" ${MPIEXEC_POSTFLAGS})
   set_tests_properties(skalaxc_unit_mpi.host_subcommunicator PROPERTIES
+    TIMEOUT 180
     ENVIRONMENT
       "OMP_NUM_THREADS=1;SKALAXC_MODEL_PATH=${SKALAXC_MODEL_PATH}")
   add_test(NAME skalaxc_unit_mpi.atomic_domain_ownership
@@ -212,6 +216,7 @@ if(SKALAXC_ENABLE_MPI)
       ${MPIEXEC_PREFLAGS} $<TARGET_FILE:skalaxc_unit_test>
       "[atomic-domain-ownership]" ${MPIEXEC_POSTFLAGS})
   set_tests_properties(skalaxc_unit_mpi.atomic_domain_ownership PROPERTIES
+    TIMEOUT 180
     ENVIRONMENT
       "OMP_NUM_THREADS=1;SKALAXC_MODEL_PATH=${SKALAXC_MODEL_PATH}")
   add_test(NAME skalaxc_unit_mpi.model_broadcast
@@ -219,6 +224,7 @@ if(SKALAXC_ENABLE_MPI)
       ${MPIEXEC_PREFLAGS} $<TARGET_FILE:skalaxc_unit_test>
       "[model-broadcast]" ${MPIEXEC_POSTFLAGS})
   set_tests_properties(skalaxc_unit_mpi.model_broadcast PROPERTIES
+    TIMEOUT 180
     ENVIRONMENT
       "OMP_NUM_THREADS=1;SKALAXC_MODEL_PATH=${SKALAXC_MODEL_PATH}")
   add_test(NAME skalaxc_unit_mpi.traditional_integration
@@ -226,6 +232,7 @@ if(SKALAXC_ENABLE_MPI)
       ${MPIEXEC_PREFLAGS} $<TARGET_FILE:skalaxc_unit_test>
       "[skala][traditional-integration]" ${MPIEXEC_POSTFLAGS})
   set_tests_properties(skalaxc_unit_mpi.traditional_integration PROPERTIES
+    TIMEOUT 180
     ENVIRONMENT
       "OMP_NUM_THREADS=1;SKALAXC_MODEL_PATH=${SKALAXC_MODEL_PATH}")
   if(SKALAXC_ENABLE_CUDA)
@@ -234,6 +241,7 @@ if(SKALAXC_ENABLE_MPI)
         ${MPIEXEC_PREFLAGS} $<TARGET_FILE:skalaxc_unit_test>
         "[device-idle-rank]" ${MPIEXEC_POSTFLAGS})
     set_tests_properties(skalaxc_unit_mpi.cuda_idle_rank PROPERTIES
+      TIMEOUT 180
       ENVIRONMENT
         "OMP_NUM_THREADS=1;SKALAXC_MODEL_PATH=${SKALAXC_MODEL_PATH}")
     add_test(NAME skalaxc_unit_mpi.cuda_subcommunicator
@@ -241,6 +249,7 @@ if(SKALAXC_ENABLE_MPI)
         ${MPIEXEC_PREFLAGS} $<TARGET_FILE:skalaxc_unit_test>
         "[device-subcomm]" ${MPIEXEC_POSTFLAGS})
     set_tests_properties(skalaxc_unit_mpi.cuda_subcommunicator PROPERTIES
+      TIMEOUT 180
       ENVIRONMENT
         "OMP_NUM_THREADS=1;SKALAXC_MODEL_PATH=${SKALAXC_MODEL_PATH}")
   endif()

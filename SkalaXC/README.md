@@ -47,9 +47,9 @@ are support headers used by the C++ API, not a C binding.
 
 Models are selected with `LDA`, `PBE`, `TPSS`, or an explicit `.fun` path.
 Named models resolve from the installed model directory, with
-`SKALAXC_MODEL_PATH` as an explicit runtime override. Named models never
-resolve from the current working directory. Models are hash-verified when
-downloaded during configuration.
+`SKALAXC_MODEL_PATH` as an explicit runtime override. The `LDA`, `PBE` and
+`TPSS` aliases never resolve from the current working directory. Models are
+hash-verified when downloaded during configuration.
 
 **Trust boundary:** `.fun` files are TorchScript archives, and loading one
 executes the code it contains. Only load `.fun` files from sources you trust,
@@ -65,13 +65,13 @@ xyz order. Both allocating and caller-owned output overloads are supported.
 Restricted (RKS) evaluation is not implemented.
 
 Inputs are validated at the API boundary and rejected with `SkalaXC::Exception`:
-a non-empty molecule with finite coordinates and atomic numbers in `[1, 118]`,
-a positive batch size, and a non-empty basis whose shells have finite positive
-exponents, finite centers on an atom, and angular momentum within the backend
-limit. The pipeline objects (`RuntimeEnvironment`, `MolGrid`, `LoadBalancer`,
-`MolecularWeights`, `XCIntegrator`) throw `SkalaXC::Exception` if used after
-being moved from. `XCIntegrator` requires column-major, unit-inner-stride
-matrix types at compile time.
+non-empty molecule and basis, finite coordinates, atomic numbers in `[1, 118]`,
+a positive batch size, shell exponents in `[1e-8, 1e12]`, bounded nonzero
+contraction coefficients, and angular momentum within the backend limit. Shell
+centers must lie within 1e-6 bohr of an atom and are snapped to it. Pipeline
+objects throw `SkalaXC::Exception` if used after being moved from.
+`XCIntegrator` requires column-major matrix types with unit inner stride and
+rejects an outer stride other than `rows()`.
 
 MPI is optional (`SKALAXC_ENABLE_MPI=ON`), uses the caller's communicator, and
 requires collective evaluation. An invalid matrix extent or gradient size on

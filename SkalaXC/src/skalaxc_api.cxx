@@ -178,8 +178,18 @@ void activate_cuda_device(types::DeviceId device_id) {
 // ---- SkalaXC value type -> GauXC conversions -----------------------------
 constexpr std::int64_t kMaxAtomicNumber = 118;
 // Shell centres must coincide with a nucleus (atomic-domain assignment relies
-// on it); this tolerance only absorbs input round-off.
+// on it); this tolerance only absorbs input round-off. Matching shells are
+// snapped to the atom's exact coordinates because GauXC matches them exactly.
 constexpr double kShellCenterTolerance = 1e-6;
+// GauXC finds each shell's cutoff radius by walking in 0.01-bohr steps until
+// its radial function crosses this tolerance. The bounds below keep that walk
+// finite: it takes ~1/sqrt(alpha) steps, never ends if the radial peak stays
+// below the tolerance, and normalization overflows for extreme coefficients.
+constexpr double kGauXCShellTolerance = 1e-10;
+constexpr double kMinExponent = 1e-8;
+constexpr double kMaxExponent = 1e12;
+constexpr double kMinCoefficient = 1e-30;
+constexpr double kMaxCoefficient = 1e30;
 
 void validate_molecule(const Molecule& mol) {
   if (mol.empty()) throw Exception("SkalaXC molecule must not be empty");
@@ -195,6 +205,15 @@ void validate_molecule(const Molecule& mol) {
   }
 }
 
+const Atom* atom_at(const Molecule& mol, const double* center) {
+  const auto it = std::find_if(mol.begin(), mol.end(), [&](const Atom& a) {
+    return std::abs(a.x - center[0]) <= kShellCenterTolerance &&
+           std::abs(a.y - center[1]) <= kShellCenterTolerance &&
+           std::abs(a.z - center[2]) <= kShellCenterTolerance;
+  });
+  return it == mol.end() ? nullptr : &*it;
+}
+
 void validate_basis(const BasisSet<double>& basis, const Molecule& mol,
                     int max_l) {
   if (basis.empty()) throw Exception("SkalaXC basis set must not be empty");
@@ -207,22 +226,38 @@ void validate_basis(const BasisSet<double>& basis, const Molecule& mol,
       throw Exception(shell + " has angular momentum " + std::to_string(s.l()) +
                       " outside the supported range [0," +
                       std::to_string(max_l) + "]");
+    double max_coefficient = 0.0;
+    double radial_peak = 0.0;
     for (std::int32_t p = 0; p < s.nprim(); ++p) {
-      if (!std::isfinite(s.alpha_data()[p]) || !(s.alpha_data()[p] > 0.0))
-        throw Exception(shell + " has a non-finite or non-positive exponent");
-      if (!std::isfinite(s.coeff_data()[p]))
+      const double alpha = s.alpha_data()[p];
+      const double coefficient = std::abs(s.coeff_data()[p]);
+      if (!(alpha >= kMinExponent && alpha <= kMaxExponent))
+        throw Exception(shell + " has an exponent outside [" +
+                        std::to_string(kMinExponent) + ", " +
+                        std::to_string(kMaxExponent) + "]");
+      if (!std::isfinite(coefficient))
         throw Exception(shell + " has a non-finite contraction coefficient");
+      max_coefficient = std::max(max_coefficient, coefficient);
+      // Peak of |c| r^l exp(-alpha r^2).
+      const double shape =
+          s.l() == 0
+              ? 1.0
+              : std::pow(s.l() / (2.0 * alpha * std::exp(1.0)), 0.5 * s.l());
+      radial_peak = std::max(radial_peak, coefficient * shape);
     }
+    if (!(max_coefficient >= kMinCoefficient &&
+          max_coefficient <= kMaxCoefficient))
+      throw Exception(shell + " has contraction coefficients outside [" +
+                      std::to_string(kMinCoefficient) + ", " +
+                      std::to_string(kMaxCoefficient) + "]");
+    if (!s.normalized() && radial_peak < kGauXCShellTolerance)
+      throw Exception(shell +
+                      " has an unnormalized radial function below the "
+                      "shell tolerance");
     const double* O = s.O_data();
     if (!std::isfinite(O[0]) || !std::isfinite(O[1]) || !std::isfinite(O[2]))
       throw Exception(shell + " has a non-finite center");
-    const bool on_atom =
-        std::any_of(mol.begin(), mol.end(), [&](const Atom& a) {
-          return std::abs(a.x - O[0]) <= kShellCenterTolerance &&
-                 std::abs(a.y - O[1]) <= kShellCenterTolerance &&
-                 std::abs(a.z - O[2]) <= kShellCenterTolerance;
-        });
-    if (!on_atom)
+    if (atom_at(mol, O) == nullptr)
       throw Exception(shell + " is not centered on any atom of the molecule");
   }
 }
@@ -235,7 +270,9 @@ GauXC::Molecule to_gauxc(const Molecule& mol) {
   return out;
 }
 
-GauXC::BasisSet<double> to_gauxc(const BasisSet<double>& basis) {
+// Shell centres must already have passed validate_basis.
+GauXC::BasisSet<double> to_gauxc(const BasisSet<double>& basis,
+                                 const Molecule& mol) {
   GauXC::BasisSet<double> out;
   out.reserve(basis.size());
   for (const auto& s : basis) {
@@ -248,8 +285,8 @@ GauXC::BasisSet<double> to_gauxc(const BasisSet<double>& basis) {
       alpha[i] = s.alpha_data()[i];
       coeff[i] = s.coeff_data()[i];
     }
-    GauXC::Shell<double>::cart_array O{s.O_data()[0], s.O_data()[1],
-                                       s.O_data()[2]};
+    const Atom& atom = *atom_at(mol, s.O_data());
+    GauXC::Shell<double>::cart_array O{atom.x, atom.y, atom.z};
     out.push_back(GauXC::Shell<double>(
         GauXC::PrimSize(nprim), GauXC::AngularMomentum(s.l()),
         GauXC::SphericalType(s.pure()), alpha, coeff, O, s.normalized()));
@@ -458,7 +495,7 @@ LoadBalancer LoadBalancerFactory::get_instance(const RuntimeEnvironment& rt,
                                            : GauXC::ExecutionSpace::Host,
                                        GauXC::SupportedAlg::XC));
     GauXC::Molecule gmol = to_gauxc(mol);
-    GauXC::BasisSet<double> gbasis = to_gauxc(basis);
+    GauXC::BasisSet<double> gbasis = to_gauxc(basis, mol);
     GauXC::LoadBalancer glb = detail::make_atomic_domain_load_balancer(
         rtimpl->rt, gmol, mgimpl->mg, gbasis, kernel_name_);
     return detail::Access::make_load_balancer(
@@ -562,11 +599,12 @@ std::int64_t IntegratorCore::natoms() const { return pimpl_->natoms; }
 
 namespace {
 
-// A null buffer is reported as an empty extent so the backend's collective
-// shape validation rejects it before the buffer is ever dereferenced.
+// A null or non-dense buffer is reported as an empty extent so the backend's
+// collective shape validation rejects it before the buffer is dereferenced.
 template <typename Matrix, typename Pointer>
 Eigen::Map<Matrix> map_matrix(Pointer data, MatrixExtent extent) {
-  if (data == nullptr || extent.rows < 0 || extent.cols < 0)
+  if (data == nullptr || extent.rows < 0 || extent.cols < 0 ||
+      extent.outer_stride != extent.rows)
     return Eigen::Map<Matrix>(nullptr, 0, 0);
   return Eigen::Map<Matrix>(data, extent.rows, extent.cols);
 }

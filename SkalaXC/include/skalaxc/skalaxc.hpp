@@ -660,6 +660,8 @@ class SKALAXC_EXPORT LoadBalancerFactory {
    * @param mg Molecular integration grid.
    * @param basis Gaussian basis set.
    * @return Constructed quadrature load balancer.
+   * @warning Do not share one MolGrid between concurrent calls; building a load
+   * balancer updates the grid's shared state.
    */
   LoadBalancer get_instance(const RuntimeEnvironment& rt, const Molecule& mol,
                             const MolGrid& mg, const BasisSet<double>& basis);
@@ -762,11 +764,14 @@ struct has_strided_inner_matrix<
  *
  * @pre MatrixType stores contiguous @c double values in column-major order and
  * exposes @c rows(), @c cols(), and @c data(). Row-major and strided matrix
- * types are unsupported.
+ * types are unsupported; a matrix whose outer stride differs from @c rows()
+ * (for example an @c Eigen::Map with @c OuterStride) is rejected.
  *
  * @warning An integrator instance is not safe for concurrent calls, moves, or
  * destruction. Serialize access to a shared instance or use one integrator per
- * calling thread. Distinct instances may execute concurrently.
+ * calling thread. Distinct instances may execute concurrently in a single
+ * process, but under MPI every rank must issue collective evaluations on a
+ * communicator in the same order, so do not overlap them on one communicator.
  */
 template <typename MatrixType>
 class XCIntegrator {
@@ -905,10 +910,21 @@ class XCIntegrator {
     return m.data();
   }
 
+  // Types without outerStride() (plain std-like matrices) are dense.
+  template <typename M>
+  static auto outer_stride_of(const M& m, int)
+      -> decltype(static_cast<std::int64_t>(m.outerStride())) {
+    return static_cast<std::int64_t>(m.outerStride());
+  }
+  template <typename M>
+  static std::int64_t outer_stride_of(const M& m, long) {
+    return static_cast<std::int64_t>(m.rows());
+  }
+
   template <typename M>
   static detail::MatrixExtent extent_of(const M& m) {
     return {static_cast<std::int64_t>(m.rows()),
-            static_cast<std::int64_t>(m.cols())};
+            static_cast<std::int64_t>(m.cols()), outer_stride_of(m, 0)};
   }
 
   std::unique_ptr<detail::IntegratorCore> core_;

@@ -290,15 +290,14 @@ TEST_CASE(
     std::string host_model;
     std::string device_model;
     double tolerance;
-    bool gradient;
   };
-  // The neural model evaluates in single precision.
+  // Host/device parity for LDA, PBE and TPSS with non-zero Pz is already
+  // covered above. This adds a structurally different Pz and the neural model,
+  // which evaluates in single precision.
   const std::vector<ModelCase> models = {
-      {"LDA", "LDA", 1e-8, true},
-      {"PBE", "PBE", 1e-8, true},
-      {"TPSS", "TPSS", 1e-8, false},
+      {"PBE", "PBE", 1e-8},
       {std::string(SKALAXC_MODEL_PATH) + "/skala-1.1.fun", cuda_skala_model(),
-       1e-5, true},
+       1e-5},
   };
   const auto relative_difference = [](const Matrix& a, const Matrix& b) {
     return (a - b).norm() / std::max(1.0, b.norm());
@@ -334,7 +333,6 @@ TEST_CASE(
     CHECK(relative_difference(std::get<2>(flipped), -std::get<2>(device)) <=
           model.tolerance);
 
-    if (!model.gradient) continue;
     const auto host_gradient = evaluate_gradient(
         host_runtime, SkalaXC::ExecutionSpace::Host, system.molecule,
         system.basis, model.host_model, scalar_density, spin_density, false);

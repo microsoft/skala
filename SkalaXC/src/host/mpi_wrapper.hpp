@@ -203,6 +203,10 @@ inline void check_collective_metadata(const CollectiveLayout& layout,
 
 }  // namespace detail
 
+// gather, gatherv and scatterv validate their buffers on the root before the
+// collective and throw std::invalid_argument. Callers must validate
+// collectively first (or run inside mpi::collective_try); otherwise a root-only
+// throw leaves the other ranks waiting in the collective.
 template <typename Source, typename Destination>
 void gather(const Source& source, Destination& root_destination,
             const GauXC::RuntimeEnvironment& rt, int root = 0) {

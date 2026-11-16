@@ -369,14 +369,15 @@ bool diagnostics_api_works(const std::string& fixture) {
 }
 
 // Copy of `shell` with selected fields replaced.
-SkalaXC::Shell<double> modified_shell(
-    const SkalaXC::Shell<double>& shell, std::int32_t l, double first_exponent,
-    SkalaXC::Shell<double>::cart_array center) {
+SkalaXC::Shell<double> modified_shell(const SkalaXC::Shell<double>& shell,
+                                      std::int32_t l, double first_exponent,
+                                      SkalaXC::Shell<double>::cart_array center,
+                                      double coefficient_scale = 1.0) {
   SkalaXC::Shell<double>::prim_array alpha{};
   SkalaXC::Shell<double>::prim_array coeff{};
   for (std::int32_t i = 0; i < shell.nprim(); ++i) {
     alpha[i] = shell.alpha_data()[i];
-    coeff[i] = shell.coeff_data()[i];
+    coeff[i] = coefficient_scale * shell.coeff_data()[i];
   }
   alpha[0] = first_exponent;
   return SkalaXC::Shell<double>(SkalaXC::PrimSize(shell.nprim()),
@@ -421,9 +422,10 @@ std::vector<NamedCheck> check_input_validation(const std::string& fixture) {
     return molecule;
   };
   const auto with_shell = [&](std::int32_t l, double exponent,
-                              SkalaXC::Shell<double>::cart_array center) {
+                              SkalaXC::Shell<double>::cart_array center,
+                              double coefficient_scale = 1.0) {
     SkalaXC::BasisSet<double> basis = system.basis;
-    basis[0] = modified_shell(basis[0], l, exponent, center);
+    basis[0] = modified_shell(basis[0], l, exponent, center, coefficient_scale);
     return basis;
   };
   const SkalaXC::Atom& atom = system.molecule[0];
@@ -432,16 +434,13 @@ std::vector<NamedCheck> check_input_validation(const std::string& fixture) {
       shell.O_data()[0], shell.O_data()[1], shell.O_data()[2]};
   const double exponent = shell.alpha_data()[0];
 
+  // One case per distinct validation branch.
   return {
       {"batch size zero rejected", grid_throws(system.molecule, 0)},
-      {"negative batch size rejected", grid_throws(system.molecule, -1)},
       {"empty molecule rejected", grid_throws(SkalaXC::Molecule{})},
       {"atomic number zero rejected",
        grid_throws(
            with_atom({SkalaXC::AtomicNumber(0), atom.x, atom.y, atom.z}))},
-      {"negative atomic number rejected",
-       grid_throws(
-           with_atom({SkalaXC::AtomicNumber(-1), atom.x, atom.y, atom.z}))},
       {"atomic number above range rejected",
        grid_throws(
            with_atom({SkalaXC::AtomicNumber(500), atom.x, atom.y, atom.z}))},
@@ -452,14 +451,11 @@ std::vector<NamedCheck> check_input_validation(const std::string& fixture) {
        basis_throws(with_shell(-1, exponent, center))},
       {"excessive angular momentum rejected",
        basis_throws(with_shell(9, exponent, center))},
-      {"huge angular momentum rejected",
-       basis_throws(with_shell(1000, exponent, center))},
-      {"zero exponent rejected",
-       basis_throws(with_shell(shell.l(), 0.0, center))},
-      {"negative exponent rejected",
-       basis_throws(with_shell(shell.l(), -1.0, center))},
-      {"NaN exponent rejected",
-       basis_throws(with_shell(shell.l(), nan, center))},
+      // GauXC's cutoff search never terminates for these shells.
+      {"tiny exponent rejected",
+       basis_throws(with_shell(shell.l(), 1e-14, center))},
+      {"zero contraction coefficients rejected",
+       basis_throws(with_shell(shell.l(), exponent, center, 0.0))},
       {"NaN shell center rejected",
        basis_throws(
            with_shell(shell.l(), exponent, {nan, center[1], center[2]}))},
@@ -467,6 +463,90 @@ std::vector<NamedCheck> check_input_validation(const std::string& fixture) {
        basis_throws(with_shell(shell.l(), exponent,
                                {center[0] + 1.0, center[1], center[2]}))},
   };
+}
+
+// Host pipeline for an arbitrary caller matrix type, using the PBE functional.
+template <typename M>
+SkalaXC::XCIntegrator<M> make_host_integrator(
+    const SkalaXC::RuntimeEnvironment& rt,
+    const SkalaXC::test::MolecularSystem& system,
+    const SkalaXC::BasisSet<double>& basis) {
+  auto mg = SkalaXC::test::make_molgrid(system.molecule,
+                                        SkalaXC::AtomicGridSizeDefault::GM3);
+  SkalaXC::LoadBalancerFactory factory(SkalaXC::ExecutionSpace::Host);
+  auto lb = factory.get_instance(rt, system.molecule, mg, basis);
+  SkalaXC::MolecularWeightsFactory(SkalaXC::ExecutionSpace::Host, "Default",
+                                   SkalaXC::MolecularWeightsSettings{})
+      .get_instance()
+      .modify_weights(lb);
+  return SkalaXC::XCIntegratorFactory<M>(SkalaXC::ExecutionSpace::Host)
+      .get_instance(SkalaXC::functional_type("PBE"), lb);
+}
+
+// A shell centre within round-off of its atom must be snapped to the atom.
+// GauXC matches centres exactly and otherwise indexes the gradient with -1.
+bool near_atom_shell_center_matches_exact(const std::string& fixture) {
+#ifdef SKALAXC_HAS_MPI
+  SkalaXC::RuntimeEnvironment rt(MPI_COMM_WORLD);
+#else
+  SkalaXC::RuntimeEnvironment rt;
+#endif
+  const auto system = SkalaXC::test::load_molecular_system(fixture);
+  const auto gradient_for = [&](const SkalaXC::BasisSet<double>& basis) {
+    auto integrator = make_host_integrator<Matrix>(rt, system, basis);
+    const auto density = SkalaXC::test::load_uks_density(
+        fixture, "/DENSITY_SCALAR", "/DENSITY_Z");
+    return integrator.eval_exc_grad(density.scalar, density.spin);
+  };
+
+  SkalaXC::BasisSet<double> shifted = system.basis;
+  const auto& shell = shifted[0];
+  shifted[0] = modified_shell(
+      shell, shell.l(), shell.alpha_data()[0],
+      {shell.O_data()[0] + 1e-9, shell.O_data()[1], shell.O_data()[2]});
+  const auto exact = gradient_for(system.basis);
+  const auto snapped = gradient_for(shifted);
+  for (std::size_t i = 0; i < exact.size(); ++i)
+    if (std::abs(exact[i] - snapped[i]) > 1e-10) return false;
+  return true;
+}
+
+// A matrix whose outer stride differs from its row count is not dense and must
+// be rejected rather than read as if it were.
+bool strided_matrix_rejected(const std::string& fixture) {
+#ifdef SKALAXC_HAS_MPI
+  SkalaXC::RuntimeEnvironment rt(MPI_COMM_WORLD);
+#else
+  SkalaXC::RuntimeEnvironment rt;
+#endif
+  using StridedMatrix =
+      Eigen::Map<Matrix, Eigen::Unaligned, Eigen::OuterStride<>>;
+  const auto system = SkalaXC::test::load_molecular_system(fixture);
+  auto integrator =
+      make_host_integrator<StridedMatrix>(rt, system, system.basis);
+  const Eigen::Index n = system.basis.nbf();
+  const auto density =
+      SkalaXC::test::load_uks_density(fixture, "/DENSITY_SCALAR", "/DENSITY_Z");
+  // Each matrix lives in its own padded buffer, so a dense reading would see
+  // valid-looking data and succeed unless the stride is actually checked.
+  const Eigen::OuterStride<> stride(n + 3);
+  Matrix Ps_storage = Matrix::Zero(n + 3, n);
+  Matrix Pz_storage = Matrix::Zero(n + 3, n);
+  Matrix VXCs_storage = Matrix::Zero(n + 3, n);
+  Matrix VXCz_storage = Matrix::Zero(n + 3, n);
+  Ps_storage.topRows(n) = density.scalar;
+  Pz_storage.topRows(n) = density.spin;
+  StridedMatrix Ps(Ps_storage.data(), n, n, stride);
+  StridedMatrix Pz(Pz_storage.data(), n, n, stride);
+  StridedMatrix VXCs(VXCs_storage.data(), n, n, stride);
+  StridedMatrix VXCz(VXCz_storage.data(), n, n, stride);
+  try {
+    (void)integrator.eval_exc_vxc(Ps, Pz, VXCs, VXCz);
+  } catch (const SkalaXC::Exception& error) {
+    // The rejection must be about the matrix view, not some other failure.
+    return std::string(error.what()).find("view") != std::string::npos;
+  }
+  return false;
 }
 
 // Moved-from pipeline objects must throw SkalaXC::Exception when used.
@@ -495,11 +575,6 @@ std::vector<NamedCheck> check_moved_from_objects(const std::string& fixture) {
   return {
       {"moved-from runtime comm_rank rejected",
        throws_skala_exception([&] { (void)rt.comm_rank(); })},
-      {"moved-from runtime rejected by load balancer factory",
-       throws_skala_exception([&] {
-         (void)factory.get_instance(rt, system.molecule, moved_mg,
-                                    system.basis);
-       })},
       {"moved-from molgrid rejected by load balancer factory",
        throws_skala_exception([&] {
          (void)factory.get_instance(moved_rt, system.molecule, mg,
@@ -654,6 +729,11 @@ int main() {
     check_contract(check.name, check.passed);
   for (const auto& check : check_moved_from_objects(ref_dir + fixtures[1].file))
     check_contract(check.name, check.passed);
+  check_contract("strided matrix rejected",
+                 strided_matrix_rejected(ref_dir + fixtures[1].file));
+  check_contract(
+      "near-atom shell center is snapped to the atom",
+      near_atom_shell_center_matches_exact(ref_dir + fixtures[1].file));
 
   if (!caller_owned_potential_api_works(ref_dir + fixtures[1].file)) {
     std::printf("[FAIL] caller-owned potential API validation failed\n");

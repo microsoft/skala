@@ -196,7 +196,6 @@ double SkalaDeviceDriver::eval_exc_vxc_uks(
     auto runtime = GauXC::detail::as_device_runtime(lb_.runtime());
     const c10::cuda::CUDAStreamGuard stream_guard(
         torch_stream_for_runtime(runtime, device_id_));
-    diagnostics_.increment_exc_vxc_calls();
     const auto& basis = lb_.basis();
     const Eigen::Index basis_size = basis.nbf();
     if (!valid_ao_matrix(scalar_density, basis_size) ||
@@ -206,6 +205,7 @@ double SkalaDeviceDriver::eval_exc_vxc_uks(
       SKALAXC_EXCEPTION(
           "UKS density and potential matrices must be dense nbf x nbf "
           "column-major views");
+    diagnostics_.increment_exc_vxc_calls();
     log_evaluation_start("exc_vxc", scalar_density, spin_density);
 
     auto* device_lwd = dynamic_cast<GauXC::LocalDeviceWorkDriver*>(lwd_.get());
@@ -388,7 +388,6 @@ void SkalaDeviceDriver::eval_exc_grad_uks(ConstColMajorMatrixMap scalar_density,
     auto runtime = GauXC::detail::as_device_runtime(lb_.runtime());
     const c10::cuda::CUDAStreamGuard stream_guard(
         torch_stream_for_runtime(runtime, device_id_));
-    diagnostics_.increment_exc_gradient_calls();
     const auto& basis = lb_.basis();
     const Eigen::Index basis_size = basis.nbf();
     if (!valid_ao_matrix(scalar_density, basis_size) ||
@@ -397,6 +396,7 @@ void SkalaDeviceDriver::eval_exc_grad_uks(ConstColMajorMatrixMap scalar_density,
         gradient.cols() != direction_dimension || gradient.innerStride() != 1 ||
         gradient.outerStride() != direction_dimension)
       SKALAXC_EXCEPTION("Invalid density matrix or atom-major gradient view");
+    diagnostics_.increment_exc_gradient_calls();
     log_evaluation_start("exc_gradient", scalar_density, spin_density);
 
     auto* device_lwd = dynamic_cast<GauXC::LocalDeviceWorkDriver*>(lwd_.get());

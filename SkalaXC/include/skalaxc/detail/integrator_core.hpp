@@ -30,8 +30,9 @@ namespace detail {
 
 /** @brief Caller-reported extent of a column-major matrix buffer. */
 struct MatrixExtent {
-  std::int64_t rows;  ///< Number of rows.
-  std::int64_t cols;  ///< Number of columns.
+  std::int64_t rows;          ///< Number of rows.
+  std::int64_t cols;          ///< Number of columns.
+  std::int64_t outer_stride;  ///< Column stride; must equal rows (dense).
 };
 
 /** @brief Opaque, non-template SkalaXC host evaluation core. */

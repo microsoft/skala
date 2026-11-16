@@ -1,7 +1,7 @@
 # SkalaXC CUDA device kernels.
 #
-# Built ONLY when SKALAXC_ENABLE_CUDA is ON and a CUDA compiler was found (the
-# top-level CMakeLists enables the CUDA language behind that guard). These are
+# Built ONLY when SKALAXC_ENABLE_CUDA is ON (the top-level CMakeLists then
+# requires a CUDA compiler and enables the CUDA language). These are
 # faithful onedft->skala renames of the GauXC skala-branch ML device kernels.
 # They compile against GauXC-master's private device headers, which the in-tree
 # `gauxc` target exposes (and which must themselves be a CUDA-enabled GauXC
