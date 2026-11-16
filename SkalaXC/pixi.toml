@@ -1,0 +1,11 @@
+[package]
+name = "skalaxc"
+version = "0.1.0"
+description = "Standalone neural-network exchange-correlation functional library"
+readme = "README.md"
+repository = "https://github.com/microsoft/skala"
+documentation = "https://microsoft.github.io/skala"
+publish = false
+
+[package.build]
+backend = { name = "pixi-build-rattler-build", version = "0.4.*", channels = ["https://prefix.dev/conda-forge"] }

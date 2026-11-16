@@ -10,6 +10,12 @@ array finalization tests. MPI builds additionally run the Fortran numerical
 test on two ranks. Disable the optional module with `SKALAXC_BUILD_FORTRAN=OFF`
 when testing a C/C++-only installation.
 
+Python tests live in `../python/tests` and validate installed binaries,
+generated typing stubs, value ownership and backend-specific behavior.
+Root `tests/test_pyscf_skalaxc_parity.py` compares fixed-density PySCF results.
+MPI pytest launches must disable `pytest-randomly` (`-p no:randomly`) so ranks
+enter collectives in the same order.
+
 The Catch2 units protect array views, atomic-domain ordering, task limits,
 model interfaces, diagnostics, and communicator behavior. Host numerical
 tests cover LDA/PBE/TPSS energy, both potential channels, nuclear gradients,

@@ -6,12 +6,18 @@ on:
       - 'SkalaXC/**'
       - 'website/skalaxc/**'
       - '.github/workflows/skalaxc-ci.yml'
+      - 'pixi.toml'
+      - 'pixi.lock'
+      - 'tests/*skalaxc*'
   push:
     branches: [main]
     paths:
       - 'SkalaXC/**'
       - 'website/skalaxc/**'
       - '.github/workflows/skalaxc-ci.yml'
+      - 'pixi.toml'
+      - 'pixi.lock'
+      - 'tests/*skalaxc*'
   workflow_dispatch:
 
 permissions:
@@ -24,10 +30,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - environment: gauxc-openmp-fortran
+          - environment: skalaxc-python-host
             mpi: 'OFF'
             submodules: 'false'
-          - environment: gauxc-mpi-fortran
+          - environment: skalaxc-python-mpi
             mpi: 'ON'
             submodules: recursive
     env:
@@ -64,6 +70,39 @@ jobs:
             -DCMAKE_PREFIX_PATH="$PWD/SkalaXC/install"
           cmake --build SkalaXC/build-installed
           ctest --test-dir SkalaXC/build-installed --output-on-failure --no-tests=error
+      - name: Install Python binding against the tested native package
+        env:
+          SkalaXC_DIR: ${{ github.workspace }}/SkalaXC/install/lib/cmake/SkalaXC
+          SKALAXC_PYTHON_LAYOUT: WHEEL
+        run: python -m pip install SkalaXC/python --no-build-isolation --no-deps
+      - name: Initialize upstream Python test fixtures
+        run: git submodule update --init SkalaXC/external/GauXC
+      - name: Test installed Python API and generated stubs
+        env:
+          EXPECT_MPI: ${{ matrix.mpi }}
+        run: |
+          python -c "import os, skalaxc; assert skalaxc.HDF5_ENABLED and not skalaxc.CUDA_ENABLED; assert skalaxc.MPI_ENABLED == (os.environ['EXPECT_MPI'] == 'ON')"
+          python -m pytest -v -ra SkalaXC/python/tests --ignore=SkalaXC/python/tests/test_mpi.py
+          python SkalaXC/python/examples/evaluate.py SkalaXC/tests/ref_data/skala_he_def2qzvp_pbe_uks.hdf5 PBE
+      - name: Test MPI binding on two ranks
+        if: matrix.mpi == 'ON'
+        timeout-minutes: 10
+        run: |
+          mpiexec --oversubscribe -n 2 python -m pytest -p no:randomly -v -ra SkalaXC/python/tests/test_mpi.py
+          mpiexec --oversubscribe -n 2 python SkalaXC/python/examples/evaluate.py SkalaXC/tests/ref_data/skala_he_def2qzvp_pbe_uks.hdf5 PBE
+      - name: Test fixed-density PySCF parity
+        if: matrix.mpi == 'OFF'
+        run: python -m pytest -v tests/test_pyscf_skalaxc_parity.py
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: ./.github/actions/setup-pixi
+        with:
+          environment: skalaxc-package
+      - name: Render multi-output package recipe
+        run: rattler-build build --recipe SkalaXC/recipe/recipe.yaml --target-platform linux-64 --render-only
 
   docs:
     runs-on: ubuntu-latest
