@@ -18,6 +18,15 @@ OMP_NUM_THREADS=4 SkalaXC/build/tests/skalaxc_unit_test "[task-batching]"
 OMP_NUM_THREADS=4 ctest --test-dir SkalaXC/build --output-on-failure
 ```
 
+Multi-rank MPI tests can hang on a machine with several network interfaces
+(for example Docker bridges) when Open MPI's TCP transport picks an unreachable
+one. If they time out, use shared memory or restrict TCP to loopback:
+
+```bash
+OMPI_MCA_pml=ob1 OMPI_MCA_btl=self,sm ctest --test-dir SkalaXC/build-mpi --timeout 90
+OMPI_MCA_pml=ob1 OMPI_MCA_btl=self,tcp OMPI_MCA_btl_tcp_if_include=lo ctest ...
+```
+
 Native CI covers serial and MPI host builds. The serial job exercises the
 GauXC FetchContent fallback; MPI uses the pinned submodule. Parser sources
 and fixtures use the resolved source directory for both routes. Existing

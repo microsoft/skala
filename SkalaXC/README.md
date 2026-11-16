@@ -74,7 +74,9 @@ being moved from. `XCIntegrator` requires column-major, unit-inner-stride
 matrix types at compile time.
 
 MPI is optional (`SKALAXC_ENABLE_MPI=ON`), uses the caller's communicator, and
-requires collective evaluation. Use the `gauxc-mpi` environment for host MPI.
+requires collective evaluation. An invalid matrix extent or gradient size on
+any rank throws `SkalaXC::Exception` on every rank of the communicator. Use the
+`gauxc-mpi` environment for host MPI.
 CUDA is experimental and off by default (`SKALAXC_ENABLE_CUDA=ON` to enable;
 configuration fails if no CUDA compiler is found).
 It requires a compatible CUDA compiler, GPU-enabled LibTorch, and GPU runtime.

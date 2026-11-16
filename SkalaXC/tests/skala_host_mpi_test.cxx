@@ -104,7 +104,40 @@ TEST_CASE("Host evaluation errors reach idle ranks",
       CHECK(failures == runtime.comm_size());
 #endif
     }
+    // An invalid shape on a single rank must fail every rank together. If only
+    // that rank threw, the others would wait forever in a collective.
     const Matrix valid = Matrix::Constant(1, 1, 0.5);
+    const bool shape_error_rank = runtime.comm_rank() == 0;
+    const Matrix wrong_shape = Matrix::Zero(2, 2);
+    const std::string cases[] = {"density", "potential output",
+                                 "gradient output"};
+    for (const std::string& what : cases) {
+      std::string error;
+      try {
+        if (what == "density") {
+          (void)integrator.eval_exc_vxc(shape_error_rank ? wrong_shape : valid,
+                                        spin);
+        } else if (what == "potential output") {
+          Matrix scalar_potential = shape_error_rank ? wrong_shape : valid;
+          Matrix spin_potential = Matrix::Zero(1, 1);
+          (void)integrator.eval_exc_vxc(valid, spin, scalar_potential,
+                                        spin_potential);
+        } else {
+          std::vector<double> gradient_output(shape_error_rank ? 2 : 3);
+          integrator.eval_exc_grad(valid, spin, gradient_output);
+        }
+      } catch (const SkalaXC::Exception& exception) {
+        error = exception.what();
+      }
+      INFO("invalid " << what << " on rank 0 only");
+      CHECK_FALSE(error.empty());
+#ifdef SKALAXC_HAS_MPI
+      int failures = error.empty() ? 0 : 1;
+      MPI_Allreduce(MPI_IN_PLACE, &failures, 1, MPI_INT, MPI_SUM, communicator);
+      CHECK(failures == runtime.comm_size());
+#endif
+    }
+
     CHECK(std::isfinite(std::get<0>(integrator.eval_exc_vxc(valid, spin))));
     const auto gradient = integrator.eval_exc_grad(valid, spin);
     const bool finite_gradient =

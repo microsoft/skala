@@ -833,17 +833,17 @@ class XCIntegrator {
    * @param VXCz Pre-sized `nbf` by `nbf` spin potential output.
    * @return XC energy.
    * @throws Exception If the integrator is uninitialized or a matrix extent is
-   * invalid. Extents are validated before either output is modified.
+   * invalid. Extents are validated before either output is modified. Under MPI
+   * an invalid extent on any rank throws on every rank of the communicator.
    */
   value_type eval_exc_vxc(const MatrixType& Ps, const MatrixType& Pz,
                           MatrixType& VXCs, MatrixType& VXCz) {
     require_core();
-    const std::int64_t n = core_->nbf();
-    check_square(Ps, n, "density");
-    check_square(Pz, n, "density");
-    check_square(VXCs, n, "potential output");
-    check_square(VXCz, n, "potential output");
-    return core_->eval_exc_vxc(Ps.data(), Pz.data(), VXCs.data(), VXCz.data());
+    // Extents are forwarded rather than checked here: the backend validates
+    // them collectively so an invalid shape on one MPI rank fails every rank.
+    return core_->eval_exc_vxc(data_of(Ps), extent_of(Ps), data_of(Pz),
+                               extent_of(Pz), data_of(VXCs), extent_of(VXCs),
+                               data_of(VXCz), extent_of(VXCz));
   }
 
   /**
@@ -867,17 +867,14 @@ class XCIntegrator {
    * @param gradient Pre-sized `3 * natoms` atom-major xyz output.
    * @throws Exception If the integrator is uninitialized, an input matrix
    * extent is invalid, or the gradient extent is invalid. Inputs and output
-   * extent are validated before the output is modified.
+   * extent are validated before the output is modified. Under MPI an invalid
+   * extent on any rank throws on every rank of the communicator.
    */
   void eval_exc_grad(const MatrixType& Ps, const MatrixType& Pz,
                      exc_grad_type& gradient) {
     require_core();
-    const std::int64_t n = core_->nbf();
-    check_square(Ps, n, "density");
-    check_square(Pz, n, "density");
-    if (gradient.size() != static_cast<std::size_t>(3 * core_->natoms()))
-      throw Exception("SkalaXC gradient output must contain 3 * natoms values");
-    core_->eval_exc_grad(Ps.data(), Pz.data(), gradient.data());
+    core_->eval_exc_grad(data_of(Ps), extent_of(Ps), data_of(Pz), extent_of(Pz),
+                         gradient.data(), gradient.size());
   }
 
   /**
@@ -901,14 +898,17 @@ class XCIntegrator {
   }
 
   template <typename M>
-  static void check_square(const M& m, std::int64_t n, const char* kind) {
+  static auto data_of(M& m) {
     static_assert(
-        std::is_convertible<decltype(std::declval<const M&>().data()),
-                            const value_type*>::value,
+        std::is_convertible<decltype(m.data()), const value_type*>::value,
         "SkalaXC matrices must expose contiguous double data via .data()");
-    if (m.rows() != n || m.cols() != n)
-      throw Exception(std::string("SkalaXC ") + kind +
-                      " matrices must be nbf x nbf");
+    return m.data();
+  }
+
+  template <typename M>
+  static detail::MatrixExtent extent_of(const M& m) {
+    return {static_cast<std::int64_t>(m.rows()),
+            static_cast<std::int64_t>(m.cols())};
   }
 
   std::unique_ptr<detail::IntegratorCore> core_;

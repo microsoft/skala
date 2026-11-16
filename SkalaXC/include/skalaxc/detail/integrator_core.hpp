@@ -10,6 +10,7 @@
  */
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 
@@ -27,6 +28,12 @@ struct TimingSettings;
 
 namespace detail {
 
+/** @brief Caller-reported extent of a column-major matrix buffer. */
+struct MatrixExtent {
+  std::int64_t rows;  ///< Number of rows.
+  std::int64_t cols;  ///< Number of columns.
+};
+
 /** @brief Opaque, non-template SkalaXC host evaluation core. */
 class SKALAXC_EXPORT IntegratorCore {
  public:
@@ -42,12 +49,26 @@ class SKALAXC_EXPORT IntegratorCore {
   std::int64_t nbf() const;
   std::int64_t natoms() const;
 
-  /// Evaluate UKS EXC/VXC from column-major nbf x nbf buffers.
-  double eval_exc_vxc(const double* Ps, const double* Pz, double* VXCs,
-                      double* VXCz);
+  /**
+   * Evaluate UKS EXC/VXC from column-major buffers with the given extents.
+   *
+   * Extents are validated by the backend inside its collective error handling,
+   * so an invalid shape on one MPI rank fails every rank together instead of
+   * leaving the others waiting in a collective.
+   */
+  double eval_exc_vxc(const double* Ps, MatrixExtent Ps_extent,
+                      const double* Pz, MatrixExtent Pz_extent, double* VXCs,
+                      MatrixExtent VXCs_extent, double* VXCz,
+                      MatrixExtent VXCz_extent);
 
-  /// Evaluate the UKS XC nuclear gradient (3 * natoms, atom-major xyz).
-  void eval_exc_grad(const double* Ps, const double* Pz, double* gradient);
+  /**
+   * Evaluate the UKS XC nuclear gradient (atom-major xyz). @p gradient_size is
+   * the caller's element count and is validated collectively like the
+   * matrix extents.
+   */
+  void eval_exc_grad(const double* Ps, MatrixExtent Ps_extent, const double* Pz,
+                     MatrixExtent Pz_extent, double* gradient,
+                     std::size_t gradient_size);
 
   /// Return rank-local diagnostics without performing MPI collectives.
   DiagnosticsSnapshot diagnostics() const;

@@ -560,16 +560,28 @@ IntegratorCore& IntegratorCore::operator=(IntegratorCore&&) noexcept = default;
 std::int64_t IntegratorCore::nbf() const { return pimpl_->nbf; }
 std::int64_t IntegratorCore::natoms() const { return pimpl_->natoms; }
 
-double IntegratorCore::eval_exc_vxc(const double* Ps, const double* Pz,
-                                    double* VXCs, double* VXCz) {
-  if (!Ps || !Pz || !VXCs || !VXCz)
-    throw Exception("SkalaXC matrix data must not be null");
-  const std::int64_t n = pimpl_->nbf;
+namespace {
+
+// A null buffer is reported as an empty extent so the backend's collective
+// shape validation rejects it before the buffer is ever dereferenced.
+template <typename Matrix, typename Pointer>
+Eigen::Map<Matrix> map_matrix(Pointer data, MatrixExtent extent) {
+  if (data == nullptr || extent.rows < 0 || extent.cols < 0)
+    return Eigen::Map<Matrix>(nullptr, 0, 0);
+  return Eigen::Map<Matrix>(data, extent.rows, extent.cols);
+}
+
+}  // namespace
+
+double IntegratorCore::eval_exc_vxc(const double* Ps, MatrixExtent Ps_extent,
+                                    const double* Pz, MatrixExtent Pz_extent,
+                                    double* VXCs, MatrixExtent VXCs_extent,
+                                    double* VXCz, MatrixExtent VXCz_extent) {
   try {
-    const Eigen::Map<const ColMajorMatrix> scalar_density(Ps, n, n);
-    const Eigen::Map<const ColMajorMatrix> spin_density(Pz, n, n);
-    Eigen::Map<ColMajorMatrix> scalar_potential(VXCs, n, n);
-    Eigen::Map<ColMajorMatrix> spin_potential(VXCz, n, n);
+    const auto scalar_density = map_matrix<const ColMajorMatrix>(Ps, Ps_extent);
+    const auto spin_density = map_matrix<const ColMajorMatrix>(Pz, Pz_extent);
+    auto scalar_potential = map_matrix<ColMajorMatrix>(VXCs, VXCs_extent);
+    auto spin_potential = map_matrix<ColMajorMatrix>(VXCz, VXCz_extent);
     return pimpl_->driver->eval_exc_vxc_uks(scalar_density, spin_density,
                                             scalar_potential, spin_potential);
   } catch (const Exception&) {
@@ -579,16 +591,20 @@ double IntegratorCore::eval_exc_vxc(const double* Ps, const double* Pz,
   }
 }
 
-void IntegratorCore::eval_exc_grad(const double* Ps, const double* Pz,
-                                   double* gradient) {
-  if (!Ps || !Pz || !gradient)
-    throw Exception("SkalaXC gradient data must not be null");
-  const std::int64_t n = pimpl_->nbf;
-  const std::int64_t na = pimpl_->natoms;
+void IntegratorCore::eval_exc_grad(const double* Ps, MatrixExtent Ps_extent,
+                                   const double* Pz, MatrixExtent Pz_extent,
+                                   double* gradient,
+                                   std::size_t gradient_size) {
   try {
-    const Eigen::Map<const ColMajorMatrix> scalar_density(Ps, n, n);
-    const Eigen::Map<const ColMajorMatrix> spin_density(Pz, n, n);
-    Eigen::Map<RowMajorMatrix> gradient_matrix(gradient, na, 3);
+    const auto scalar_density = map_matrix<const ColMajorMatrix>(Ps, Ps_extent);
+    const auto spin_density = map_matrix<const ColMajorMatrix>(Pz, Pz_extent);
+    // A size that is not a whole number of atoms is reported as an empty
+    // gradient so the backend rejects it collectively.
+    const bool whole_atoms = gradient != nullptr && gradient_size % 3 == 0;
+    Eigen::Map<RowMajorMatrix> gradient_matrix(
+        whole_atoms ? gradient : nullptr,
+        whole_atoms ? static_cast<Eigen::Index>(gradient_size / 3) : 0,
+        whole_atoms ? 3 : 0);
     pimpl_->driver->eval_exc_grad_uks(scalar_density, spin_density,
                                       gradient_matrix);
   } catch (const Exception&) {
