@@ -91,8 +91,9 @@ endif()
 
 # The CUDA (GPU) backend is optional and OFF by default. Enable the CUDA language
 # lazily and only if a CUDA compiler is actually present, so the host build is
-# never affected on machines without a CUDA toolchain. If the option is ON but no
-# compiler is found we downgrade to a warning rather than failing the configure.
+# never affected on machines without a CUDA toolchain. The option defaults to
+# OFF, so explicitly requesting CUDA without a compiler is a configure error
+# rather than a silently CPU-only build.
 if(SKALAXC_ENABLE_CUDA)
   find_package(CUDAToolkit QUIET)
   if(CUDAToolkit_FOUND)
@@ -105,10 +106,9 @@ if(SKALAXC_ENABLE_CUDA)
   if(CMAKE_CUDA_COMPILER)
     enable_language(CUDA)
   else()
-    message(WARNING
-      "SKALAXC_ENABLE_CUDA=ON but no CUDA compiler was found; "
-      "the SkalaXC CUDA backend will be skipped.")
-    set(SKALAXC_ENABLE_CUDA OFF)
+    message(FATAL_ERROR
+      "SKALAXC_ENABLE_CUDA=ON but no CUDA compiler was found. "
+      "Install a CUDA toolchain or configure with -DSKALAXC_ENABLE_CUDA=OFF.")
   endif()
 endif()
 

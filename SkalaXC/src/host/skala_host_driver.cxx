@@ -339,6 +339,48 @@ SkalaHostDriver::SkalaHostDriver(
 
 SkalaHostDriver::~SkalaHostDriver() noexcept = default;
 
+void restore_task_weights(std::vector<GauXC::XCTask>& tasks,
+                          const std::vector<std::vector<double>>& raw_weights) {
+  for (std::size_t i = 0; i < tasks.size(); ++i)
+    tasks[i].weights = raw_weights[i];
+}
+
+std::vector<std::vector<double>> sort_tasks_and_snapshot_weights(
+    GauXC::LoadBalancer& lb) {
+  auto& tasks = lb.get_tasks();
+  std::stable_sort(tasks.begin(), tasks.end(),
+                   [](const GauXC::XCTask& a, const GauXC::XCTask& b) {
+                     return (a.points.size() * a.bfn_screening.nbe) >
+                            (b.points.size() * b.bfn_screening.nbe);
+                   });
+
+  std::vector<std::vector<double>> raw_weights(tasks.size());
+  for (std::size_t i = 0; i < tasks.size(); ++i)
+    raw_weights[i] = tasks[i].weights;
+  return raw_weights;
+}
+
+std::vector<std::vector<double>> partition_host_weights(
+    GauXC::LoadBalancer& lb, GauXC::XCWeightAlg weight_alg) {
+  auto lwd = GauXC::LocalWorkDriverFactory::make_local_work_driver(
+      GauXC::ExecutionSpace::Host, "Default");
+  auto* host_lwd = dynamic_cast<GauXC::LocalHostWorkDriver*>(lwd.get());
+  if (!host_lwd) SKALAXC_EXCEPTION("Expected a LocalHostWorkDriver");
+
+  auto raw_weights = sort_tasks_and_snapshot_weights(lb);
+  auto& tasks = lb.get_tasks();
+  try {
+    host_lwd->partition_weights(weight_alg, lb.molecule(), lb.molmeta(),
+                                tasks.begin(), tasks.end());
+  } catch (...) {
+    restore_task_weights(tasks, raw_weights);
+    throw;
+  }
+  lb.state().modified_weights_are_stored = true;
+  lb.state().weight_alg = weight_alg;
+  return raw_weights;
+}
+
 SkalaHostDriver SkalaHostDriver::from_system(
     const GauXC::RuntimeEnvironment& rt, const GauXC::Molecule& mol,
     const GauXC::MolGrid& mg, const GauXC::BasisSet<double>& basis,
@@ -351,27 +393,7 @@ SkalaHostDriver SkalaHostDriver::from_system(
   GauXC::LoadBalancerFactory lb_factory(GauXC::ExecutionSpace::Host, "Default");
   GauXC::LoadBalancer lb = lb_factory.get_instance(rt, mol, mg, basis);
 
-  auto lwd = GauXC::LocalWorkDriverFactory::make_local_work_driver(
-      GauXC::ExecutionSpace::Host, "Default");
-  auto* host_lwd = dynamic_cast<GauXC::LocalHostWorkDriver*>(lwd.get());
-  if (!host_lwd) SKALAXC_EXCEPTION("Expected a LocalHostWorkDriver");
-
-  auto& tasks = lb.get_tasks();
-  std::stable_sort(tasks.begin(), tasks.end(),
-                   [](const GauXC::XCTask& a, const GauXC::XCTask& b) {
-                     return (a.points.size() * a.bfn_screening.nbe) >
-                            (b.points.size() * b.bfn_screening.nbe);
-                   });
-
-  std::vector<std::vector<double>> raw_weights(tasks.size());
-  for (std::size_t i = 0; i < tasks.size(); ++i)
-    raw_weights[i] = tasks[i].weights;
-
-  const GauXC::XCWeightAlg weight_alg = GauXC::XCWeightAlg::SSF;
-  host_lwd->partition_weights(weight_alg, lb.molecule(), lb.molmeta(),
-                              tasks.begin(), tasks.end());
-  lb.state().modified_weights_are_stored = true;
-  lb.state().weight_alg = weight_alg;
+  auto raw_weights = partition_host_weights(lb, GauXC::XCWeightAlg::SSF);
 
   return SkalaHostDriver(lb, raw_weights, model, timing_settings,
                          domain_batch_mode);
@@ -387,11 +409,16 @@ double SkalaHostDriver::eval_exc_vxc_uks(ConstColMajorMatrixMap scalar_density,
     return matrix.rows() == basis_size && matrix.cols() == basis_size &&
            matrix.innerStride() == 1 && matrix.outerStride() == basis_size;
   };
-  if (!valid_ao_matrix(scalar_density) || !valid_ao_matrix(spin_density) ||
-      !valid_ao_matrix(scalar_potential) || !valid_ao_matrix(spin_potential))
-    SKALAXC_EXCEPTION(
-        "UKS density and potential matrices must be dense nbf x nbf "
-        "column-major views");
+  auto rt = lb_.runtime();
+  // Validate inside collective_try so a bad view on one rank fails every rank
+  // together instead of leaving the others waiting in a collective.
+  mpi::collective_try(rt, [&] {
+    if (!valid_ao_matrix(scalar_density) || !valid_ao_matrix(spin_density) ||
+        !valid_ao_matrix(scalar_potential) || !valid_ao_matrix(spin_potential))
+      SKALAXC_EXCEPTION(
+          "UKS density and potential matrices must be dense nbf x nbf "
+          "column-major views");
+  });
 
   const auto diagnostics_before =
       log_evaluation_start("exc_vxc", scalar_density, spin_density);
@@ -399,8 +426,6 @@ double SkalaHostDriver::eval_exc_vxc_uks(ConstColMajorMatrixMap scalar_density,
   diagnostics_.increment_exc_vxc_calls();
 
   auto& tasks = lb_.get_tasks();
-  auto rt = lb_.runtime();
-  double N_EL = 0.0;
   double EXC = 0.0;
 
   mpi::collective_try(rt, [&] {
@@ -412,7 +437,7 @@ double SkalaHostDriver::eval_exc_vxc_uks(ConstColMajorMatrixMap scalar_density,
     {
       detail::HostTimingScope timer(diagnostics_,
                                     TimingMetric::FeatureConstruction);
-      pre_skala_local_work_(basis, scalar_density, spin_density, N_EL, is_gga,
+      pre_skala_local_work_(basis, scalar_density, spin_density, is_gga,
                             is_mgga, false);
     }
 
@@ -460,10 +485,8 @@ double SkalaHostDriver::eval_exc_vxc_uks(ConstColMajorMatrixMap scalar_density,
     SkalaXC::mpi::allreduce_sum(scalar_potential, rt);
     SkalaXC::mpi::allreduce_sum(spin_potential, rt);
     MPI_Allreduce(MPI_IN_PLACE, &EXC, 1, MPI_DOUBLE, MPI_SUM, rt.comm());
-    MPI_Allreduce(MPI_IN_PLACE, &N_EL, 1, MPI_DOUBLE, MPI_SUM, rt.comm());
   }
 #endif
-  (void)N_EL;
   total_timer.finish();
   log_exc_vxc_result("exc_vxc", EXC, scalar_potential, spin_potential);
   log_host_timing_delta("exc_vxc", diagnostics_before);
@@ -483,10 +506,12 @@ void SkalaHostDriver::eval_exc_grad_uks(ConstColMajorMatrixMap scalar_density,
     return density.rows() == basis_size && density.cols() == basis_size &&
            density.innerStride() == 1 && density.outerStride() == basis_size;
   };
-  if (!valid_density(scalar_density) || !valid_density(spin_density) ||
-      gradient.rows() != atom_count || gradient.cols() != 3 ||
-      gradient.innerStride() != 1 || gradient.outerStride() != 3)
-    SKALAXC_EXCEPTION("Invalid density matrix or atom-major gradient view");
+  mpi::collective_try(rt, [&] {
+    if (!valid_density(scalar_density) || !valid_density(spin_density) ||
+        gradient.rows() != atom_count || gradient.cols() != 3 ||
+        gradient.innerStride() != 1 || gradient.outerStride() != 3)
+      SKALAXC_EXCEPTION("Invalid density matrix or atom-major gradient view");
+  });
 
   const auto diagnostics_before =
       log_evaluation_start("exc_gradient", scalar_density, spin_density);
@@ -494,7 +519,6 @@ void SkalaHostDriver::eval_exc_grad_uks(ConstColMajorMatrixMap scalar_density,
                                       TimingMetric::TotalEXCGradient);
   diagnostics_.increment_exc_gradient_calls();
 
-  double N_EL = 0.0;
   mpi::collective_try(rt, [&] {
     const auto& feature_keys = model_->feature_keys();
     const bool is_gga = model_->is_gga();
@@ -503,7 +527,7 @@ void SkalaHostDriver::eval_exc_grad_uks(ConstColMajorMatrixMap scalar_density,
     {
       detail::HostTimingScope timer(diagnostics_,
                                     TimingMetric::FeatureConstruction);
-      pre_skala_local_work_(basis, scalar_density, spin_density, N_EL, is_gga,
+      pre_skala_local_work_(basis, scalar_density, spin_density, is_gga,
                             is_mgga, false);
     }
 
@@ -587,7 +611,6 @@ void SkalaHostDriver::eval_exc_grad_uks(ConstColMajorMatrixMap scalar_density,
     SkalaXC::mpi::allreduce_sum(gradient, rt);
   }
 #endif
-  (void)N_EL;
   total_timer.finish();
   log_gradient_result("exc_gradient", gradient);
   log_host_timing_delta("exc_gradient", diagnostics_before);
@@ -773,8 +796,8 @@ void SkalaHostDriver::exc_grad_local_work_(
 
 void SkalaHostDriver::pre_skala_local_work_(
     const GauXC::BasisSet<double>& basis, ConstColMajorMatrixMap scalar_density,
-    ConstColMajorMatrixMap spin_density, double& electron_count, bool is_gga,
-    bool is_mgga, bool /*needs_laplacian*/) {
+    ConstColMajorMatrixMap spin_density, bool is_gga, bool is_mgga,
+    bool /*needs_laplacian*/) {
 
   const bool needs_gradient = is_gga || is_mgga;
   auto* lwd = dynamic_cast<GauXC::LocalHostWorkDriver*>(lwd_.get());
@@ -790,10 +813,8 @@ void SkalaHostDriver::pre_skala_local_work_(
   if (not lb_state.modified_weights_are_stored)
     SKALAXC_EXCEPTION("Weights Have Not Been Modified");
 
-  double NEL_WORK = 0.0;
-
 #ifdef _OPENMP
-#pragma omp parallel reduction(+ : NEL_WORK)
+#pragma omp parallel
 #endif
   {
     GauXC::XCHostData<double> host_data;
@@ -847,12 +868,8 @@ void SkalaHostDriver::pre_skala_local_work_(
         task_work.eval_lda_model_features_uks(basis_components, zmat_components,
                                               features.density);
       }
-
-      NEL_WORK += ConstVectorMap(task.weights.data(), npts)
-                      .dot(features.density.rowwise().sum());
     }
   }  // omp parallel
-  electron_count = NEL_WORK;
 }
 
 void SkalaHostDriver::post_skala_local_work_(

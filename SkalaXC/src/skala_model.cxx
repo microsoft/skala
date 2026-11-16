@@ -23,16 +23,20 @@ namespace detail {
 
 std::string resolve_model_path(const std::string& model,
                                const std::filesystem::path& model_directory) {
-  if (std::filesystem::exists(model)) return model;
-
   if (model == "SKALA")
     SKALAXC_EXCEPTION(
         "To use the Skala functional, specify a local checkpoint path.");
 
+  // Named models resolve only from the model directory. Checking the working
+  // directory first would let a stray file named e.g. "PBE" replace the
+  // trusted checkpoint (and .fun files are executable TorchScript).
   std::filesystem::path filename = model;
+  const bool is_alias = model == "PBE" || model == "TPSS" || model == "LDA";
   if (model == "PBE") filename = "pbe.fun";
   if (model == "TPSS") filename = "tpss.fun";
   if (model == "LDA") filename = "ldax.fun";
+
+  if (!is_alias && std::filesystem::exists(model)) return model;
 
   const auto candidate = model_directory / filename;
   if (std::filesystem::exists(candidate)) return candidate.string();
@@ -98,7 +102,7 @@ struct SkalaModel::Impl {
       module = torch::jit::load(adapter, device, extra_files);
     } catch (const c10::Error& error) {
       SKALAXC_EXCEPTION("error loading skala model: " +
-                        std::string(error.what()));
+                        std::string(error.what_without_backtrace()));
     }
 
     const auto version =

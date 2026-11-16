@@ -731,6 +731,28 @@ class SKALAXC_EXPORT MolecularWeightsFactory {
 // XCIntegrator (mirrors GauXC::XCIntegrator<MatrixType>, host UKS subset).
 // ===========================================================================
 
+namespace detail {
+
+/** @brief True if MatrixType advertises row-major storage (e.g. Eigen). */
+template <typename MatrixType, typename = void>
+struct is_row_major_matrix : std::false_type {};
+template <typename MatrixType>
+struct is_row_major_matrix<MatrixType,
+                           std::void_t<decltype(MatrixType::IsRowMajor)>>
+    : std::integral_constant<bool, static_cast<bool>(MatrixType::IsRowMajor)> {
+};
+
+/** @brief True if MatrixType advertises a non-unit inner stride. */
+template <typename MatrixType, typename = void>
+struct has_strided_inner_matrix : std::false_type {};
+template <typename MatrixType>
+struct has_strided_inner_matrix<
+    MatrixType, std::void_t<decltype(MatrixType::InnerStrideAtCompileTime)>>
+    : std::integral_constant<
+          bool, static_cast<int>(MatrixType::InnerStrideAtCompileTime) != 1> {};
+
+}  // namespace detail
+
 /**
  * @brief SkalaXC ML exchange-correlation integrator (mirrors GauXC).
  *
@@ -757,6 +779,11 @@ class XCIntegrator {
 
   static_assert(std::is_same<value_type, double>::value,
                 "SkalaXC XCIntegrator requires a double matrix type");
+  static_assert(!detail::is_row_major_matrix<MatrixType>::value,
+                "SkalaXC XCIntegrator requires a column-major matrix type");
+  static_assert(!detail::has_strided_inner_matrix<MatrixType>::value,
+                "SkalaXC XCIntegrator requires a matrix type with unit inner "
+                "stride");
 
   XCIntegrator() = default;
 

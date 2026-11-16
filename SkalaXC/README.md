@@ -47,8 +47,14 @@ are support headers used by the C++ API, not a C binding.
 
 Models are selected with `LDA`, `PBE`, `TPSS`, or an explicit `.fun` path.
 Named models resolve from the installed model directory, with
-`SKALAXC_MODEL_PATH` as an explicit runtime override. Models are hash-verified
-when downloaded during configuration.
+`SKALAXC_MODEL_PATH` as an explicit runtime override. Named models never
+resolve from the current working directory. Models are hash-verified when
+downloaded during configuration.
+
+**Trust boundary:** `.fun` files are TorchScript archives, and loading one
+executes the code it contains. Only load `.fun` files from sources you trust,
+and keep the installed model directory and `SKALAXC_MODEL_PATH` writable only
+by trusted users.
 
 ## Supported behavior
 
@@ -58,9 +64,19 @@ gradients are validated. Density and potential matrices are double precision,
 xyz order. Both allocating and caller-owned output overloads are supported.
 Restricted (RKS) evaluation is not implemented.
 
+Inputs are validated at the API boundary and rejected with `SkalaXC::Exception`:
+a non-empty molecule with finite coordinates and atomic numbers in `[1, 118]`,
+a positive batch size, and a non-empty basis whose shells have finite positive
+exponents, finite centers on an atom, and angular momentum within the backend
+limit. The pipeline objects (`RuntimeEnvironment`, `MolGrid`, `LoadBalancer`,
+`MolecularWeights`, `XCIntegrator`) throw `SkalaXC::Exception` if used after
+being moved from. `XCIntegrator` requires column-major, unit-inner-stride
+matrix types at compile time.
+
 MPI is optional (`SKALAXC_ENABLE_MPI=ON`), uses the caller's communicator, and
 requires collective evaluation. Use the `gauxc-mpi` environment for host MPI.
-CUDA is experimental and off by default (`SKALAXC_ENABLE_CUDA=ON` to enable).
+CUDA is experimental and off by default (`SKALAXC_ENABLE_CUDA=ON` to enable;
+configuration fails if no CUDA compiler is found).
 It requires a compatible CUDA compiler, GPU-enabled LibTorch, and GPU runtime.
 LDA/PBE gradients and TPSS energy/potentials are covered; the bundled TPSS
 backward trace can exceed launch resources for CUDA gradients on sm_86/sm_120.

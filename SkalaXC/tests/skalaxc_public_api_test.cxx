@@ -26,6 +26,7 @@
 #include <cstdio>
 #include <string>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -367,6 +368,150 @@ bool diagnostics_api_works(const std::string& fixture) {
           (snapshot.tasks == 0 && snapshot.points == 0));
 }
 
+// Copy of `shell` with selected fields replaced.
+SkalaXC::Shell<double> modified_shell(
+    const SkalaXC::Shell<double>& shell, std::int32_t l, double first_exponent,
+    SkalaXC::Shell<double>::cart_array center) {
+  SkalaXC::Shell<double>::prim_array alpha{};
+  SkalaXC::Shell<double>::prim_array coeff{};
+  for (std::int32_t i = 0; i < shell.nprim(); ++i) {
+    alpha[i] = shell.alpha_data()[i];
+    coeff[i] = shell.coeff_data()[i];
+  }
+  alpha[0] = first_exponent;
+  return SkalaXC::Shell<double>(SkalaXC::PrimSize(shell.nprim()),
+                                SkalaXC::AngularMomentum(l),
+                                SkalaXC::SphericalType(shell.pure()), alpha,
+                                coeff, center, shell.normalized());
+}
+
+struct NamedCheck {
+  const char* name;
+  bool passed;
+};
+
+// Invalid grid, molecule and basis inputs must throw SkalaXC::Exception at the
+// API boundary instead of hanging, crashing, or being silently accepted.
+std::vector<NamedCheck> check_input_validation(const std::string& fixture) {
+#ifdef SKALAXC_HAS_MPI
+  SkalaXC::RuntimeEnvironment rt(MPI_COMM_WORLD);
+#else
+  SkalaXC::RuntimeEnvironment rt;
+#endif
+  const auto system = SkalaXC::test::load_molecular_system(fixture);
+  const auto grid_size = SkalaXC::AtomicGridSizeDefault::GM3;
+  auto good_grid = SkalaXC::test::make_molgrid(system.molecule, grid_size);
+  const double nan = std::nan("");
+
+  const auto grid_throws = [&](const SkalaXC::Molecule& molecule,
+                               std::int64_t batch_size = 512) {
+    return throws_skala_exception([&] {
+      (void)SkalaXC::test::make_molgrid(molecule, grid_size, batch_size);
+    });
+  };
+  const auto basis_throws = [&](const SkalaXC::BasisSet<double>& basis) {
+    return throws_skala_exception([&] {
+      SkalaXC::LoadBalancerFactory factory(SkalaXC::ExecutionSpace::Host);
+      (void)factory.get_instance(rt, system.molecule, good_grid, basis);
+    });
+  };
+  const auto with_atom = [&](SkalaXC::Atom atom) {
+    SkalaXC::Molecule molecule = system.molecule;
+    molecule[0] = atom;
+    return molecule;
+  };
+  const auto with_shell = [&](std::int32_t l, double exponent,
+                              SkalaXC::Shell<double>::cart_array center) {
+    SkalaXC::BasisSet<double> basis = system.basis;
+    basis[0] = modified_shell(basis[0], l, exponent, center);
+    return basis;
+  };
+  const SkalaXC::Atom& atom = system.molecule[0];
+  const SkalaXC::Shell<double>& shell = system.basis[0];
+  const SkalaXC::Shell<double>::cart_array center{
+      shell.O_data()[0], shell.O_data()[1], shell.O_data()[2]};
+  const double exponent = shell.alpha_data()[0];
+
+  return {
+      {"batch size zero rejected", grid_throws(system.molecule, 0)},
+      {"negative batch size rejected", grid_throws(system.molecule, -1)},
+      {"empty molecule rejected", grid_throws(SkalaXC::Molecule{})},
+      {"atomic number zero rejected",
+       grid_throws(
+           with_atom({SkalaXC::AtomicNumber(0), atom.x, atom.y, atom.z}))},
+      {"negative atomic number rejected",
+       grid_throws(
+           with_atom({SkalaXC::AtomicNumber(-1), atom.x, atom.y, atom.z}))},
+      {"atomic number above range rejected",
+       grid_throws(
+           with_atom({SkalaXC::AtomicNumber(500), atom.x, atom.y, atom.z}))},
+      {"NaN atom coordinate rejected",
+       grid_throws(with_atom({atom.Z, nan, atom.y, atom.z}))},
+      {"empty basis rejected", basis_throws(SkalaXC::BasisSet<double>{})},
+      {"negative angular momentum rejected",
+       basis_throws(with_shell(-1, exponent, center))},
+      {"excessive angular momentum rejected",
+       basis_throws(with_shell(9, exponent, center))},
+      {"huge angular momentum rejected",
+       basis_throws(with_shell(1000, exponent, center))},
+      {"zero exponent rejected",
+       basis_throws(with_shell(shell.l(), 0.0, center))},
+      {"negative exponent rejected",
+       basis_throws(with_shell(shell.l(), -1.0, center))},
+      {"NaN exponent rejected",
+       basis_throws(with_shell(shell.l(), nan, center))},
+      {"NaN shell center rejected",
+       basis_throws(
+           with_shell(shell.l(), exponent, {nan, center[1], center[2]}))},
+      {"shell away from any atom rejected",
+       basis_throws(with_shell(shell.l(), exponent,
+                               {center[0] + 1.0, center[1], center[2]}))},
+  };
+}
+
+// Moved-from pipeline objects must throw SkalaXC::Exception when used.
+std::vector<NamedCheck> check_moved_from_objects(const std::string& fixture) {
+#ifdef SKALAXC_HAS_MPI
+  SkalaXC::RuntimeEnvironment rt(MPI_COMM_WORLD);
+#else
+  SkalaXC::RuntimeEnvironment rt;
+#endif
+  const auto system = SkalaXC::test::load_molecular_system(fixture);
+  auto mg = SkalaXC::test::make_molgrid(system.molecule,
+                                        SkalaXC::AtomicGridSizeDefault::GM3);
+  SkalaXC::LoadBalancerFactory factory(SkalaXC::ExecutionSpace::Host);
+  auto lb = factory.get_instance(rt, system.molecule, mg, system.basis);
+  SkalaXC::MolecularWeightsFactory mw_factory(
+      SkalaXC::ExecutionSpace::Host, "Default",
+      SkalaXC::MolecularWeightsSettings{});
+  auto mw = mw_factory.get_instance();
+
+  auto moved_rt = std::move(rt);
+  auto moved_mg = std::move(mg);
+  auto moved_lb = std::move(lb);
+  auto moved_mw = std::move(mw);
+
+  // The live objects are the moved-to ones; rt/mg/lb/mw are now moved-from.
+  return {
+      {"moved-from runtime comm_rank rejected",
+       throws_skala_exception([&] { (void)rt.comm_rank(); })},
+      {"moved-from runtime rejected by load balancer factory",
+       throws_skala_exception([&] {
+         (void)factory.get_instance(rt, system.molecule, moved_mg,
+                                    system.basis);
+       })},
+      {"moved-from molgrid rejected by load balancer factory",
+       throws_skala_exception([&] {
+         (void)factory.get_instance(moved_rt, system.molecule, mg,
+                                    system.basis);
+       })},
+      {"moved-from load balancer rejected by modify_weights",
+       throws_skala_exception([&] { moved_mw.modify_weights(lb); })},
+      {"moved-from molecular weights rejected by modify_weights",
+       throws_skala_exception([&] { mw.modify_weights(moved_lb); })},
+  };
+}
+
 }  // namespace
 
 int main() {
@@ -504,6 +649,11 @@ int main() {
                  state_contracts.duplicate_weight_modification);
   check_contract("load balancer reused with independent diagnostics",
                  state_contracts.reusable_load_balancer);
+
+  for (const auto& check : check_input_validation(ref_dir + fixtures[1].file))
+    check_contract(check.name, check.passed);
+  for (const auto& check : check_moved_from_objects(ref_dir + fixtures[1].file))
+    check_contract(check.name, check.passed);
 
   if (!caller_owned_potential_api_works(ref_dir + fixtures[1].file)) {
     std::printf("[FAIL] caller-owned potential API validation failed\n");

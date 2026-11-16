@@ -8,7 +8,6 @@
 #include <gauxc/runtime_environment.hpp>
 
 #include <algorithm>
-#include <cassert>
 #include <cstdint>
 #include <cstdlib>
 #include <limits>
@@ -154,25 +153,26 @@ inline MPI_Datatype datatype<std::int64_t>() {
 }
 
 template <typename Derived>
-void assert_contiguous(const Eigen::DenseBase<Derived>& values) {
+void check_contiguous(const Eigen::DenseBase<Derived>& values) {
   static_assert((Derived::Flags & Eigen::DirectAccessBit) != 0,
                 "MPI buffers require direct Eigen storage access");
   if (values.size() == 0) return;
-  assert(values.innerStride() == 1);
-  assert(values.outerStride() ==
-         (Derived::IsRowMajor ? values.cols() : values.rows()));
+  if (values.innerStride() != 1 ||
+      values.outerStride() !=
+          (Derived::IsRowMajor ? values.cols() : values.rows()))
+    throw std::invalid_argument("MPI buffer must be contiguous");
 }
 
 template <typename Derived>
 auto contiguous_buffer(const Eigen::DenseBase<Derived>& values) {
-  assert_contiguous(values);
+  check_contiguous(values);
   return ContiguousBuffer<const typename Derived::Scalar>{
       values.derived().data(), static_cast<std::size_t>(values.size())};
 }
 
 template <typename Derived>
 auto contiguous_buffer(Eigen::DenseBase<Derived>& values) {
-  assert_contiguous(values);
+  check_contiguous(values);
   return ContiguousBuffer<typename Derived::Scalar>{
       values.derived().data(), static_cast<std::size_t>(values.size())};
 }
@@ -193,11 +193,12 @@ inline int mpi_count(std::size_t size) {
   return static_cast<int>(size);
 }
 
-inline void assert_collective_metadata(
-    [[maybe_unused]] const CollectiveLayout& layout,
-    const GauXC::RuntimeEnvironment& rt, int root) {
+inline void check_collective_metadata(const CollectiveLayout& layout,
+                                      const GauXC::RuntimeEnvironment& rt,
+                                      int root) {
   if (rt.comm_rank() != root) return;
-  assert(layout.counts().size() == static_cast<std::size_t>(rt.comm_size()));
+  if (layout.counts().size() != static_cast<std::size_t>(rt.comm_size()))
+    throw std::invalid_argument("Collective layout size must match comm size");
 }
 
 }  // namespace detail
@@ -214,8 +215,10 @@ void gather(const Source& source, Destination& root_destination,
   static_assert(!std::is_const_v<
                     std::remove_pointer_t<decltype(destination_buffer.data)>>,
                 "MPI destination must be mutable");
-  if (rt.comm_rank() == root)
-    assert(destination_buffer.size == source_buffer.size * rt.comm_size());
+  if (rt.comm_rank() == root &&
+      destination_buffer.size !=
+          source_buffer.size * static_cast<std::size_t>(rt.comm_size()))
+    throw std::invalid_argument("MPI gather destination has the wrong size");
 
   const int count = detail::mpi_count(source_buffer.size);
   MPI_Gather(source_buffer.data, count, detail::datatype<value_type>(),
@@ -236,12 +239,12 @@ void gatherv(const Source& source, Destination& root_destination,
   static_assert(!std::is_const_v<
                     std::remove_pointer_t<decltype(destination_buffer.data)>>,
                 "MPI destination must be mutable");
-  detail::assert_collective_metadata(layout, rt, root);
+  detail::check_collective_metadata(layout, rt, root);
   if (rt.comm_rank() == root) {
-    assert(source_buffer.size ==
-           static_cast<std::size_t>(layout.counts()[root]));
-    assert(destination_buffer.size >=
-           static_cast<std::size_t>(layout.extent()));
+    if (source_buffer.size != static_cast<std::size_t>(layout.counts()[root]))
+      throw std::invalid_argument("MPI gatherv root source size mismatch");
+    if (destination_buffer.size < static_cast<std::size_t>(layout.extent()))
+      throw std::invalid_argument("MPI gatherv destination is too small");
   }
 
   MPI_Gatherv(source_buffer.data, detail::mpi_count(source_buffer.size),
@@ -263,11 +266,14 @@ void scatterv(const Source& root_source, const CollectiveLayout& layout,
   static_assert(!std::is_const_v<
                     std::remove_pointer_t<decltype(destination_buffer.data)>>,
                 "MPI destination must be mutable");
-  detail::assert_collective_metadata(layout, rt, root);
+  detail::check_collective_metadata(layout, rt, root);
   if (rt.comm_rank() == root) {
-    assert(destination_buffer.size ==
-           static_cast<std::size_t>(layout.counts()[root]));
-    assert(source_buffer.size >= static_cast<std::size_t>(layout.extent()));
+    if (destination_buffer.size !=
+        static_cast<std::size_t>(layout.counts()[root]))
+      throw std::invalid_argument(
+          "MPI scatterv root destination size mismatch");
+    if (source_buffer.size < static_cast<std::size_t>(layout.extent()))
+      throw std::invalid_argument("MPI scatterv source is too small");
   }
 
   MPI_Scatterv(source_buffer.data, layout.counts().data(),

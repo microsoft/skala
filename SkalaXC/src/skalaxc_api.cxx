@@ -24,14 +24,10 @@
 #include <gauxc/molgrid/defaults.hpp>
 #include <gauxc/runtime_environment.hpp>
 #include <gauxc/shell.hpp>
+#include <gauxc/util/environment.hpp>
 #include <gauxc/util/mpi.hpp>
 #include <gauxc/xc_integrator/local_work_driver.hpp>
 #include <gauxc/xc_task.hpp>
-
-// GauXC reusable internal (host local work driver: partition_weights).
-// Reachable via the in-tree `gauxc` target's PUBLIC BUILD_INTERFACE include of
-// ${GauXC}/src.
-#include "xc_integrator/local_work_driver/host/local_host_work_driver.hpp"
 
 #include "host/atomic_domain_load_balancer.hpp"
 #include "host/eigen_types.hpp"
@@ -43,6 +39,7 @@
 #endif
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <memory>
 #include <utility>
@@ -110,24 +107,39 @@ struct IntegratorCore::Impl {
 };
 
 /// Grants this implementation TU access to the opaque pipeline-stage internals.
+/// impl() rejects moved-from objects (null pimpl_) instead of dereferencing.
 struct Access {
+  template <typename Impl>
+  static Impl* checked(Impl* p, const char* what) {
+    if (p == nullptr)
+      throw Exception(std::string("SkalaXC ") + what +
+                      " is in a moved-from state");
+    return p;
+  }
+
   static RuntimeEnvironment::Impl* impl(RuntimeEnvironment& r) {
-    return r.pimpl_.get();
+    return checked(r.pimpl_.get(), "RuntimeEnvironment");
   }
   static const RuntimeEnvironment::Impl* impl(const RuntimeEnvironment& r) {
-    return r.pimpl_.get();
+    return checked(r.pimpl_.get(), "RuntimeEnvironment");
   }
-  static MolGrid::Impl* impl(MolGrid& m) { return m.pimpl_.get(); }
-  static const MolGrid::Impl* impl(const MolGrid& m) { return m.pimpl_.get(); }
-  static LoadBalancer::Impl* impl(LoadBalancer& l) { return l.pimpl_.get(); }
+  static MolGrid::Impl* impl(MolGrid& m) {
+    return checked(m.pimpl_.get(), "MolGrid");
+  }
+  static const MolGrid::Impl* impl(const MolGrid& m) {
+    return checked(m.pimpl_.get(), "MolGrid");
+  }
+  static LoadBalancer::Impl* impl(LoadBalancer& l) {
+    return checked(l.pimpl_.get(), "LoadBalancer");
+  }
   static const LoadBalancer::Impl* impl(const LoadBalancer& l) {
-    return l.pimpl_.get();
+    return checked(l.pimpl_.get(), "LoadBalancer");
   }
   static MolecularWeights::Impl* impl(MolecularWeights& w) {
-    return w.pimpl_.get();
+    return checked(w.pimpl_.get(), "MolecularWeights");
   }
   static const MolecularWeights::Impl* impl(const MolecularWeights& w) {
-    return w.pimpl_.get();
+    return checked(w.pimpl_.get(), "MolecularWeights");
   }
 
   static MolGrid make_molgrid(std::unique_ptr<MolGrid::Impl> p) {
@@ -164,6 +176,57 @@ void activate_cuda_device(types::DeviceId device_id) {
 #endif
 
 // ---- SkalaXC value type -> GauXC conversions -----------------------------
+constexpr std::int64_t kMaxAtomicNumber = 118;
+// Shell centres must coincide with a nucleus (atomic-domain assignment relies
+// on it); this tolerance only absorbs input round-off.
+constexpr double kShellCenterTolerance = 1e-6;
+
+void validate_molecule(const Molecule& mol) {
+  if (mol.empty()) throw Exception("SkalaXC molecule must not be empty");
+  for (std::size_t i = 0; i < mol.size(); ++i) {
+    const auto& a = mol[i];
+    if (a.Z.raw() < 1 || a.Z.raw() > kMaxAtomicNumber)
+      throw Exception("Atom " + std::to_string(i) +
+                      " has an atomic number outside [1," +
+                      std::to_string(kMaxAtomicNumber) + "]");
+    if (!std::isfinite(a.x) || !std::isfinite(a.y) || !std::isfinite(a.z))
+      throw Exception("Atom " + std::to_string(i) +
+                      " has a non-finite coordinate");
+  }
+}
+
+void validate_basis(const BasisSet<double>& basis, const Molecule& mol,
+                    int max_l) {
+  if (basis.empty()) throw Exception("SkalaXC basis set must not be empty");
+  for (std::size_t i = 0; i < basis.size(); ++i) {
+    const auto& s = basis[i];
+    const std::string shell = "Shell " + std::to_string(i);
+    if (s.nprim() < 1 || s.nprim() > 32)
+      throw Exception("Shell primitive count must be in [1,32]");
+    if (s.l() < 0 || s.l() > max_l)
+      throw Exception(shell + " has angular momentum " + std::to_string(s.l()) +
+                      " outside the supported range [0," +
+                      std::to_string(max_l) + "]");
+    for (std::int32_t p = 0; p < s.nprim(); ++p) {
+      if (!std::isfinite(s.alpha_data()[p]) || !(s.alpha_data()[p] > 0.0))
+        throw Exception(shell + " has a non-finite or non-positive exponent");
+      if (!std::isfinite(s.coeff_data()[p]))
+        throw Exception(shell + " has a non-finite contraction coefficient");
+    }
+    const double* O = s.O_data();
+    if (!std::isfinite(O[0]) || !std::isfinite(O[1]) || !std::isfinite(O[2]))
+      throw Exception(shell + " has a non-finite center");
+    const bool on_atom =
+        std::any_of(mol.begin(), mol.end(), [&](const Atom& a) {
+          return std::abs(a.x - O[0]) <= kShellCenterTolerance &&
+                 std::abs(a.y - O[1]) <= kShellCenterTolerance &&
+                 std::abs(a.z - O[2]) <= kShellCenterTolerance;
+        });
+    if (!on_atom)
+      throw Exception(shell + " is not centered on any atom of the molecule");
+  }
+}
+
 GauXC::Molecule to_gauxc(const Molecule& mol) {
   GauXC::Molecule out;
   out.reserve(mol.size());
@@ -177,8 +240,6 @@ GauXC::BasisSet<double> to_gauxc(const BasisSet<double>& basis) {
   out.reserve(basis.size());
   for (const auto& s : basis) {
     const std::int32_t nprim = s.nprim();
-    if (nprim < 1 || nprim > 32)
-      throw Exception("Shell primitive count must be in [1,32]");
     GauXC::Shell<double>::prim_array alpha;
     alpha.fill(0.0);
     GauXC::Shell<double>::prim_array coeff;
@@ -326,8 +387,12 @@ RuntimeEnvironment::RuntimeEnvironment(RuntimeEnvironment&&) noexcept = default;
 RuntimeEnvironment& RuntimeEnvironment::operator=(
     RuntimeEnvironment&&) noexcept = default;
 
-int RuntimeEnvironment::comm_rank() const { return pimpl_->rt.comm_rank(); }
-int RuntimeEnvironment::comm_size() const { return pimpl_->rt.comm_size(); }
+int RuntimeEnvironment::comm_rank() const {
+  return detail::Access::impl(*this)->rt.comm_rank();
+}
+int RuntimeEnvironment::comm_size() const {
+  return detail::Access::impl(*this)->rt.comm_size();
+}
 
 // ===========================================================================
 // MolGrid / MolGridFactory
@@ -341,6 +406,9 @@ MolGrid MolGridFactory::create_default_molgrid(
     const Molecule& mol, PruningScheme pruning_scheme, BatchSize batch_size,
     RadialQuad radial_quad, AtomicGridSizeDefault grid_size) {
   try {
+    if (batch_size.raw() <= 0)
+      throw Exception("SkalaXC batch size must be positive");
+    validate_molecule(mol);
     GauXC::Molecule gmol = to_gauxc(mol);
     GauXC::MolGrid gmg = GauXC::MolGridFactory::create_default_molgrid(
         gmol, to_gauxc(pruning_scheme), GauXC::BatchSize(batch_size.raw()),
@@ -383,6 +451,12 @@ LoadBalancer LoadBalancerFactory::get_instance(const RuntimeEnvironment& rt,
       throw Exception("SkalaXC was built without CUDA support");
 #endif
     }
+    validate_molecule(mol);
+    validate_basis(basis, mol,
+                   GauXC::gauxc_max_am(ex_ == ExecutionSpace::Device
+                                           ? GauXC::ExecutionSpace::Device
+                                           : GauXC::ExecutionSpace::Host,
+                                       GauXC::SupportedAlg::XC));
     GauXC::Molecule gmol = to_gauxc(mol);
     GauXC::BasisSet<double> gbasis = to_gauxc(basis);
     GauXC::LoadBalancer glb = detail::make_atomic_domain_load_balancer(
@@ -410,9 +484,10 @@ MolecularWeights& MolecularWeights::operator=(MolecularWeights&&) noexcept =
 
 void MolecularWeights::modify_weights(LoadBalancer& lb) const {
   try {
+    const auto* wimpl = detail::Access::impl(*this);
     auto* lbimpl = detail::Access::impl(lb);
     auto& glb = lbimpl->lb;
-    if (pimpl_->ex != lbimpl->ex)
+    if (wimpl->ex != lbimpl->ex)
       throw Exception(
           "Molecular weights and load balancer execution spaces must match");
     if (glb.state().modified_weights_are_stored)
@@ -422,36 +497,26 @@ void MolecularWeights::modify_weights(LoadBalancer& lb) const {
     // partition) but snapshot the pre-partition ("raw") quadrature weights in
     // between. SkalaXC owns those raw weights so GauXC master stays untouched;
     // ML models that request the atomic_grid_weights feature consume them.
-    auto lwd = GauXC::LocalWorkDriverFactory::make_local_work_driver(
-        GauXC::ExecutionSpace::Host, "Default");
-    auto* host_lwd = dynamic_cast<GauXC::LocalHostWorkDriver*>(lwd.get());
-    if (!host_lwd) throw Exception("Expected a LocalHostWorkDriver");
-
-    auto& tasks = glb.get_tasks();
-    std::stable_sort(tasks.begin(), tasks.end(),
-                     [](const GauXC::XCTask& a, const GauXC::XCTask& b) {
-                       return (a.points.size() * a.bfn_screening.nbe) >
-                              (b.points.size() * b.bfn_screening.nbe);
-                     });
-
-    lbimpl->raw_weights.resize(tasks.size());
-    for (std::size_t i = 0; i < tasks.size(); ++i)
-      lbimpl->raw_weights[i] = tasks[i].weights;
-
-    const GauXC::XCWeightAlg weight_alg = to_gauxc(pimpl_->settings.weight_alg);
-    if (pimpl_->ex == ExecutionSpace::Host) {
-      host_lwd->partition_weights(weight_alg, glb.molecule(), glb.molmeta(),
-                                  tasks.begin(), tasks.end());
-      glb.state().modified_weights_are_stored = true;
-      glb.state().weight_alg = weight_alg;
+    // The snapshot is committed only after partitioning succeeds so a failed
+    // call can be retried.
+    const GauXC::XCWeightAlg weight_alg = to_gauxc(wimpl->settings.weight_alg);
+    if (wimpl->ex == ExecutionSpace::Host) {
+      lbimpl->raw_weights = partition_host_weights(glb, weight_alg);
     } else {
 #ifdef SKALAXC_HAS_CUDA
       activate_cuda_device(lbimpl->device_id);
-      GauXC::MolecularWeightsSettings settings;
-      settings.weight_alg = weight_alg;
-      GauXC::MolecularWeightsFactory factory(GauXC::ExecutionSpace::Device,
-                                             pimpl_->kernel, settings);
-      factory.get_shared_instance()->modify_weights(glb);
+      auto raw_weights = sort_tasks_and_snapshot_weights(glb);
+      try {
+        GauXC::MolecularWeightsSettings settings;
+        settings.weight_alg = weight_alg;
+        GauXC::MolecularWeightsFactory factory(GauXC::ExecutionSpace::Device,
+                                               wimpl->kernel, settings);
+        factory.get_shared_instance()->modify_weights(glb);
+      } catch (...) {
+        restore_task_weights(glb.get_tasks(), raw_weights);
+        throw;
+      }
+      lbimpl->raw_weights = std::move(raw_weights);
 #else
       throw Exception("SkalaXC was built without CUDA support");
 #endif

@@ -39,6 +39,37 @@ class ModelGridExchange;
 class SkalaModel;
 
 /**
+ * @brief Stable-sort load-balancer tasks by cost and snapshot their weights.
+ * @param lb Load balancer whose tasks are sorted in place.
+ * @return Per-task quadrature weights, aligned to the sorted tasks.
+ */
+std::vector<std::vector<double>> sort_tasks_and_snapshot_weights(
+    GauXC::LoadBalancer& lb);
+
+/**
+ * @brief Restore task weights from a snapshot (failure rollback).
+ * @param tasks Tasks whose weights are overwritten.
+ * @param raw_weights Snapshot aligned to @p tasks.
+ */
+void restore_task_weights(std::vector<GauXC::XCTask>& tasks,
+                          const std::vector<std::vector<double>>& raw_weights);
+
+/**
+ * @brief Sort a host load balancer's tasks and partition their weights.
+ * @param lb Load balancer whose tasks are modified in place.
+ * @param weight_alg Weight partitioning algorithm.
+ * @return Per-task pre-partition ("raw") quadrature weights, aligned to the
+ *         sorted tasks.
+ *
+ * Single implementation of the sort / snapshot / partition sequence shared by
+ * MolecularWeights::modify_weights and SkalaHostDriver::from_system. If
+ * partitioning throws, the task weights are restored so the call can be
+ * retried.
+ */
+std::vector<std::vector<double>> partition_host_weights(
+    GauXC::LoadBalancer& lb, GauXC::XCWeightAlg weight_alg);
+
+/**
  * @brief Standalone host driver for SkalaXC ML exchange-correlation
  * functionals.
  */
@@ -129,9 +160,8 @@ class SkalaHostDriver final : public SkalaDriver {
   /** @brief Prepare per-task local data before ML evaluation. */
   void pre_skala_local_work_(const GauXC::BasisSet<double>& basis,
                              ConstColMajorMatrixMap scalar_density,
-                             ConstColMajorMatrixMap spin_density,
-                             double& electron_count, bool is_gga, bool is_mgga,
-                             bool needs_laplacian);
+                             ConstColMajorMatrixMap spin_density, bool is_gga,
+                             bool is_mgga, bool needs_laplacian);
 
   /** @brief Accumulate ML potentials into AO matrices after ML evaluation. */
   void post_skala_local_work_(const GauXC::BasisSet<double>& basis,

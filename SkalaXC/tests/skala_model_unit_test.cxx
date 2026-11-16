@@ -260,6 +260,26 @@ TEST_CASE("Model resolution uses explicit and configured paths",
       Catch::Matchers::ContainsSubstring("specify a local checkpoint path"));
 }
 
+TEST_CASE("Named models ignore same-named files in the working directory",
+          "[skala][model-path]") {
+  TempModelDirectory temporary;
+  const auto installed = temporary.path() / "installed";
+  std::filesystem::create_directory(installed);
+  create_file(installed / "pbe.fun");
+  const auto workdir = temporary.path() / "workdir";
+  std::filesystem::create_directory(workdir);
+  create_file(workdir / "PBE");
+
+  struct CurrentPathGuard {
+    std::filesystem::path previous = std::filesystem::current_path();
+    ~CurrentPathGuard() { std::filesystem::current_path(previous); }
+  } guard;
+  std::filesystem::current_path(workdir);
+
+  REQUIRE(SkalaXC::detail::resolve_model_path("PBE", installed) ==
+          (installed / "pbe.fun").string());
+}
+
 TEST_CASE("Skala model loading validates paths and metadata",
           "[skala][model-loading]") {
   const std::filesystem::path valid_path =
