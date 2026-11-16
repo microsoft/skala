@@ -19,6 +19,7 @@
 #include "skala_host_driver.hpp"
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <skalaxc/skalaxc.hpp>
 
 #include <cmath>
@@ -27,6 +28,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 using namespace SkalaXC;
@@ -425,8 +427,17 @@ TEST_CASE("Skala host gradient matches a Ridders derivative",
   // Ridders differentiates with fixed AO density coefficients, matching the
   // contract of eval_exc_grad_uks. TPSS exercises rho, grad-rho, and tau terms.
   const int64_t nbf = basis.nbf();
-  std::vector<double> Ps = {0.5, 0.5, 0.5, 0.5};
-  std::vector<double> Pz(Ps.size(), 0.0);
+  const bool spin_polarized = GENERATE(false, true);
+  INFO("spin polarized=" << spin_polarized);
+  // The spin-polarized density is triplet-like (alpha in the bonding and beta
+  // in the antibonding orbital), so Pz differs from Ps and is not a multiple
+  // of it. Both are symmetric, so column-major storage is unambiguous.
+  std::vector<double> Ps = spin_polarized
+                               ? std::vector<double>{1.0, 0.0, 0.0, 1.0}
+                               : std::vector<double>{0.5, 0.5, 0.5, 0.5};
+  std::vector<double> Pz = spin_polarized
+                               ? std::vector<double>{0.0, 1.0, 1.0, 0.0}
+                               : std::vector<double>(Ps.size(), 0.0);
 
   const std::string model = "TPSS";
   const auto grid_size = GauXC::AtomicGridSizeDefault::FineGrid;
@@ -474,7 +485,133 @@ TEST_CASE("Skala host gradient matches a Ridders derivative",
   INFO("Ridders directional derivative=" << numerical.derivative);
   INFO("Ridders error estimate=" << numerical.error);
   CHECK(std::abs(analytic_derivative) > 1e-3);
-  CHECK(numerical.error < 1e-7);
+  // The extrapolation error is a quality gate; keep it no looser than the
+  // 1e-6 agreement required below, and tighter for the closed-shell density.
+  CHECK(numerical.error < (spin_polarized ? 1e-6 : 1e-7));
   CHECK(numerical.derivative ==
         Catch::Approx(analytic_derivative).margin(1e-6));
+}
+
+TEST_CASE("Skala host EXC and VXC obey spin-flip symmetry",
+          "[skala][host-spin]") {
+  GauXC::RuntimeEnvironment rt{GAUXC_MPI_CODE(MPI_COMM_WORLD)};
+
+  GauXC::Molecule molecule;
+  molecule.push_back(GauXC::Atom{GauXC::AtomicNumber(1), -0.252, 0.336, -0.56});
+  molecule.push_back(GauXC::Atom{GauXC::AtomicNumber(1), 0.252, -0.336, 0.56});
+  GauXC::Shell<double>::prim_array exponents{};
+  GauXC::Shell<double>::prim_array coefficients{};
+  exponents[0] = 3.42525091;
+  exponents[1] = 0.62391373;
+  exponents[2] = 0.16885540;
+  coefficients[0] = 0.15432897;
+  coefficients[1] = 0.53532814;
+  coefficients[2] = 0.44463454;
+  GauXC::BasisSet<double> basis;
+  for (const auto& atom : molecule)
+    basis.emplace_back(
+        GauXC::PrimSize(3), GauXC::AngularMomentum(0),
+        GauXC::SphericalType(false), exponents, coefficients,
+        GauXC::Shell<double>::cart_array{atom.x, atom.y, atom.z});
+  auto grid = GauXC::MolGridFactory::create_default_molgrid(
+      molecule, GauXC::PruningScheme::Unpruned, GauXC::BatchSize(512),
+      GauXC::RadialQuad::MuraKnowles, GauXC::AtomicGridSizeDefault::FineGrid);
+
+  // Partially polarized density: Pz differs from Ps and is not proportional to
+  // it. Both spin densities are positive definite, so the finite-difference
+  // displacements below stay physical. Swapping alpha and beta negates Pz.
+  const Eigen::Index nbf = basis.nbf();
+  ColMajorMatrix Ps = ColMajorMatrix::Identity(nbf, nbf);
+  ColMajorMatrix Pz(nbf, nbf);
+  Pz << 0.0, 0.5, 0.5, 0.0;
+  const ColMajorMatrix flipped_Pz = -Pz;
+  const ColMajorMatrix closed_shell_Pz = ColMajorMatrix::Zero(nbf, nbf);
+
+  struct Evaluation {
+    double exc;
+    ColMajorMatrix scalar_potential;
+    ColMajorMatrix spin_potential;
+    RowMajorMatrix gradient;
+  };
+  const auto evaluate = [&](SkalaHostDriver& driver,
+                            const ColMajorMatrix& spin) {
+    Evaluation result{0.0, ColMajorMatrix(nbf, nbf), ColMajorMatrix(nbf, nbf),
+                      RowMajorMatrix(molecule.size(), 3)};
+    result.exc = driver.eval_exc_vxc_uks(
+        Eigen::Map<const ColMajorMatrix>(Ps.data(), nbf, nbf),
+        Eigen::Map<const ColMajorMatrix>(spin.data(), nbf, nbf),
+        ColMajorMatrixMap(result.scalar_potential.data(), nbf, nbf),
+        ColMajorMatrixMap(result.spin_potential.data(), nbf, nbf));
+    driver.eval_exc_grad_uks(
+        Eigen::Map<const ColMajorMatrix>(Ps.data(), nbf, nbf),
+        Eigen::Map<const ColMajorMatrix>(spin.data(), nbf, nbf),
+        RowMajorMatrixMap(result.gradient.data(), molecule.size(), 3));
+    return result;
+  };
+
+  const std::string neural_model =
+      std::string(SKALAXC_MODEL_PATH) + "/skala-1.1.fun";
+  // The neural model evaluates in single precision, so its symmetry holds only
+  // to float rounding.
+  for (const auto& [model, tolerance] :
+       std::vector<std::pair<std::string, double>>{{"LDA", 1e-9},
+                                                   {"PBE", 1e-9},
+                                                   {"TPSS", 1e-9},
+                                                   {neural_model, 1e-6}}) {
+    INFO("model=" << model);
+    auto driver =
+        SkalaHostDriver::from_system(rt, molecule, grid, basis, model);
+    const auto polarized = evaluate(driver, Pz);
+    const auto flipped = evaluate(driver, flipped_Pz);
+    const auto closed_shell = evaluate(driver, closed_shell_Pz);
+
+    // The spin dependence must actually be exercised, otherwise the symmetry
+    // checks below are vacuous.
+    CHECK(polarized.spin_potential.norm() > 1e-6);
+    CHECK(std::abs(polarized.exc - closed_shell.exc) > 1e-6);
+
+    CHECK(flipped.exc == Catch::Approx(polarized.exc).epsilon(tolerance));
+    CHECK(flipped.scalar_potential.isApprox(polarized.scalar_potential,
+                                            tolerance));
+    CHECK(
+        flipped.spin_potential.isApprox(-polarized.spin_potential, tolerance));
+    CHECK(flipped.gradient.isApprox(polarized.gradient, tolerance));
+
+    // VXCs and VXCz must be the derivatives of EXC with respect to Ps and Pz.
+    // Spin-flip antisymmetry alone would not notice a wrong scale.
+    if (model == neural_model) continue;
+    ColMajorMatrix scalar_direction(nbf, nbf);
+    scalar_direction << 0.2, 0.1, 0.1, 0.3;
+    ColMajorMatrix spin_direction(nbf, nbf);
+    spin_direction << 0.1, 0.4, 0.4, -0.2;
+    const auto exc_at = [&](double displacement, bool along_spin) {
+      const ColMajorMatrix scalar =
+          Ps + (along_spin ? 0.0 : displacement) * scalar_direction;
+      const ColMajorMatrix spin =
+          Pz + (along_spin ? displacement : 0.0) * spin_direction;
+      ColMajorMatrix unused_scalar(nbf, nbf), unused_spin(nbf, nbf);
+      return driver.eval_exc_vxc_uks(
+          Eigen::Map<const ColMajorMatrix>(scalar.data(), nbf, nbf),
+          Eigen::Map<const ColMajorMatrix>(spin.data(), nbf, nbf),
+          ColMajorMatrixMap(unused_scalar.data(), nbf, nbf),
+          ColMajorMatrixMap(unused_spin.data(), nbf, nbf));
+    };
+    const double analytic_scalar =
+        (polarized.scalar_potential.array() * scalar_direction.array()).sum();
+    const double analytic_spin =
+        (polarized.spin_potential.array() * spin_direction.array()).sum();
+    const auto numerical_scalar =
+        ridders_derivative([&](double h) { return exc_at(h, false); }, 1e-2);
+    const auto numerical_spin =
+        ridders_derivative([&](double h) { return exc_at(h, true); }, 1e-2);
+    INFO("analytic dE/dPs=" << analytic_scalar
+                            << " numerical=" << numerical_scalar.derivative);
+    INFO("analytic dE/dPz=" << analytic_spin
+                            << " numerical=" << numerical_spin.derivative);
+    REQUIRE(std::abs(analytic_spin) > 1e-3);
+    CHECK(numerical_scalar.derivative ==
+          Catch::Approx(analytic_scalar).epsilon(1e-6));
+    CHECK(numerical_spin.derivative ==
+          Catch::Approx(analytic_spin).epsilon(1e-6));
+  }
 }

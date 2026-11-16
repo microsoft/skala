@@ -271,6 +271,91 @@ TEST_CASE("Skala CUDA reproduces host semilocal nuclear gradients",
   }
 }
 
+TEST_CASE(
+    "Skala CUDA matches host and obeys spin-flip for a triplet-like density",
+    "[skala][cuda][device-spin]") {
+  const auto system = SkalaXC::test::make_rotated_h2_sto3g_system();
+  // Alpha in the bonding and beta in the antibonding orbital: Pz differs from
+  // Ps and is not proportional to it. Swapping spins negates Pz.
+  const Matrix scalar_density = Matrix::Identity(2, 2);
+  Matrix spin_density(2, 2);
+  spin_density << 0.0, 1.0, 1.0, 0.0;
+  const Matrix flipped_spin_density = -spin_density;
+
+  SkalaXC::RuntimeEnvironment host_runtime{SKALAXC_MPI_CODE(MPI_COMM_WORLD)};
+  SkalaXC::RuntimeEnvironment device_runtime{
+      SKALAXC_MPI_CODE(MPI_COMM_WORLD, ) SkalaXC::DeviceRuntimeSettings{}};
+
+  struct ModelCase {
+    std::string host_model;
+    std::string device_model;
+    double tolerance;
+    bool gradient;
+  };
+  // The neural model evaluates in single precision.
+  const std::vector<ModelCase> models = {
+      {"LDA", "LDA", 1e-8, true},
+      {"PBE", "PBE", 1e-8, true},
+      {"TPSS", "TPSS", 1e-8, false},
+      {std::string(SKALAXC_MODEL_PATH) + "/skala-1.1.fun", cuda_skala_model(),
+       1e-5, true},
+  };
+  const auto relative_difference = [](const Matrix& a, const Matrix& b) {
+    return (a - b).norm() / std::max(1.0, b.norm());
+  };
+
+  for (const auto& model : models) {
+    INFO("device model=" << model.device_model);
+    const Result host = evaluate(
+        host_runtime, SkalaXC::ExecutionSpace::Host, system.molecule,
+        system.basis, model.host_model, scalar_density, spin_density, false);
+    const Result device = evaluate(
+        device_runtime, SkalaXC::ExecutionSpace::Device, system.molecule,
+        system.basis, model.device_model, scalar_density, spin_density, false);
+    const Result flipped =
+        evaluate(device_runtime, SkalaXC::ExecutionSpace::Device,
+                 system.molecule, system.basis, model.device_model,
+                 scalar_density, flipped_spin_density, false);
+
+    // Guard against a vacuous test: the spin potential must be non-trivial.
+    REQUIRE(std::get<2>(device).norm() > 1e-6);
+
+    CHECK(std::abs(std::get<0>(device) - std::get<0>(host)) <=
+          model.tolerance * std::max(1.0, std::abs(std::get<0>(host))));
+    CHECK(relative_difference(std::get<1>(device), std::get<1>(host)) <=
+          model.tolerance);
+    CHECK(relative_difference(std::get<2>(device), std::get<2>(host)) <=
+          model.tolerance);
+
+    CHECK(std::abs(std::get<0>(flipped) - std::get<0>(device)) <=
+          model.tolerance * std::max(1.0, std::abs(std::get<0>(device))));
+    CHECK(relative_difference(std::get<1>(flipped), std::get<1>(device)) <=
+          model.tolerance);
+    CHECK(relative_difference(std::get<2>(flipped), -std::get<2>(device)) <=
+          model.tolerance);
+
+    if (!model.gradient) continue;
+    const auto host_gradient = evaluate_gradient(
+        host_runtime, SkalaXC::ExecutionSpace::Host, system.molecule,
+        system.basis, model.host_model, scalar_density, spin_density, false);
+    const auto device_gradient = evaluate_gradient(
+        device_runtime, SkalaXC::ExecutionSpace::Device, system.molecule,
+        system.basis, model.device_model, scalar_density, spin_density, false);
+    const auto flipped_gradient =
+        evaluate_gradient(device_runtime, SkalaXC::ExecutionSpace::Device,
+                          system.molecule, system.basis, model.device_model,
+                          scalar_density, flipped_spin_density, false);
+    REQUIRE(device_gradient.size() == host_gradient.size());
+    for (std::size_t index = 0; index < host_gradient.size(); ++index) {
+      INFO("gradient component=" << index);
+      CHECK(std::abs(device_gradient[index] - host_gradient[index]) <=
+            model.tolerance);
+      CHECK(std::abs(flipped_gradient[index] - device_gradient[index]) <=
+            model.tolerance);
+    }
+  }
+}
+
 TEST_CASE("Skala CUDA evaluates neural nuclear gradients",
           "[skala][cuda][device-neural-gradient]") {
   const auto system = SkalaXC::test::make_rotated_h2_sto3g_system();
