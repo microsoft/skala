@@ -277,6 +277,58 @@ else()
   message(STATUS "SkalaXC: HDF5 support disabled; skipping fixture-driven C++ API test")
 endif()
 
+# --- black-box C public-API test --------------------------------------------
+if(SKALAXC_HAS_HDF5)
+  find_package(HDF5 QUIET COMPONENTS C)
+endif()
+if(SKALAXC_HAS_HDF5 AND HDF5_FOUND AND HDF5_C_LIBRARIES)
+  add_executable(skalaxc_density_io_test density_io_test.c)
+  target_include_directories(skalaxc_density_io_test PRIVATE ${HDF5_INCLUDE_DIRS})
+  target_link_libraries(skalaxc_density_io_test PRIVATE ${HDF5_C_LIBRARIES})
+  # The test performs HDF5 calls inside assertions even in release builds.
+  if(MSVC)
+    target_compile_options(skalaxc_density_io_test PRIVATE /UNDEBUG)
+  else()
+    target_compile_options(skalaxc_density_io_test PRIVATE -UNDEBUG)
+  endif()
+  add_test(NAME skalaxc_example.density_shapes COMMAND skalaxc_density_io_test)
+  add_executable(skalaxc_c_api_test skalaxc_c_api_test.c)
+  target_link_libraries(skalaxc_c_api_test PRIVATE skalaxc ${HDF5_C_LIBRARIES})
+  if(UNIX)
+    target_link_libraries(skalaxc_c_api_test PRIVATE m)
+  endif()
+  target_include_directories(skalaxc_c_api_test PRIVATE ${HDF5_INCLUDE_DIRS})
+  if(SKALAXC_ENABLE_MPI)
+    find_package(MPI REQUIRED COMPONENTS C)
+    target_link_libraries(skalaxc_c_api_test PRIVATE MPI::MPI_C)
+  endif()
+  target_compile_definitions(skalaxc_c_api_test PRIVATE
+    SKALAXC_EXPECTED_VERSION="${PROJECT_VERSION}"
+    SKALAXC_TEST_REF_DATA_PATH="${CMAKE_CURRENT_SOURCE_DIR}/ref_data"
+    SKALAXC_GAUXC_REF_DATA_PATH="${SKALAXC_GAUXC_REF_DATA_DIR}")
+  add_test(NAME skalaxc_c_api COMMAND skalaxc_c_api_test)
+  set_tests_properties(skalaxc_c_api PROPERTIES
+    ENVIRONMENT "SKALAXC_MODEL_PATH=${SKALAXC_MODEL_PATH}")
+
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    find_program(SKALAXC_READELF_EXECUTABLE NAMES readelf llvm-readelf REQUIRED)
+    add_test(NAME skalaxc_abi.c_consumer_dependencies
+      COMMAND ${CMAKE_COMMAND}
+        -DREADELF_EXECUTABLE=${SKALAXC_READELF_EXECUTABLE}
+        -DCONSUMER_PATH=$<TARGET_FILE:skalaxc_c_api_test>
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/check_c_consumer_dependencies.cmake)
+  elseif(APPLE)
+    find_program(SKALAXC_OTOOL_EXECUTABLE NAMES otool REQUIRED)
+    add_test(NAME skalaxc_abi.c_consumer_dependencies
+      COMMAND ${CMAKE_COMMAND}
+        -DOTOOL_EXECUTABLE=${SKALAXC_OTOOL_EXECUTABLE}
+        -DCONSUMER_PATH=$<TARGET_FILE:skalaxc_c_api_test>
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/check_c_consumer_dependencies.cmake)
+  endif()
+else()
+  message(STATUS "SkalaXC: HDF5 support or its C component unavailable; skipping C API test")
+endif()
+
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR APPLE)
   add_test(NAME skalaxc_abi.exported_symbols
     COMMAND ${CMAKE_COMMAND}

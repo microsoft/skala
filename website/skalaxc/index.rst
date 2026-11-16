@@ -17,3 +17,5 @@ Those integration paths remain available.
    installation
    cpp-api
    cpp
+   c-api
+   c

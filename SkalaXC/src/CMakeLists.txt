@@ -187,3 +187,6 @@ if(_skalaxc_export_control)
     LINK_DEPENDS ${_skalaxc_export_control})
 endif()
 unset(_skalaxc_export_control)
+
+# Public C API sources (added to the `skalaxc` target above).
+add_subdirectory(c-api)
