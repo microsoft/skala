@@ -43,6 +43,11 @@ Limitations
 The validated production backend is host UKS evaluation of energy, potentials,
 and gradients. RKS is not implemented. CUDA is experimental and disabled by
 default; enabling it requires a compatible CUDA compiler, GPU-enabled
-LibTorch, and validation on the target GPU. TPSS CUDA energy and potentials are
-tested, but its archived backward trace can exceed kernel resources for
-gradients. LDA/PBE CUDA gradients are tested separately.
+LibTorch, and validation on the target GPU. The archived PBE and TPSS models
+can fail after their first evaluations with "too many resources requested for
+launch" because PyTorch installs a fused backward kernel (observed for PBE and
+TPSS on sm_80 and for TPSS on sm_120, see microsoft/skala#132; LDA was not
+observed to fail). SkalaXC runs LDA, PBE and TPSS with TorchScript graph
+optimization disabled; the neural model is unaffected. This made PBE about 3x
+slower per model evaluation in a standalone measurement. Repeated LDA, PBE and
+TPSS CUDA evaluation is tested on an A100 (sm_80) but not yet on sm_120.

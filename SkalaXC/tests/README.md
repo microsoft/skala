@@ -10,6 +10,10 @@ and its own Eigen/HDF5 fixture readers. `tests/installed` independently checks
 the exported CMake package. ABI tests reject leaked private dependency symbols.
 CUDA tests, when enabled, cover device parity, batching, streams, idle ranks,
 and subcommunicators. MPI tests require actual multi-rank execution.
+The CUDA repeated-evaluation test guards against the TorchScript fused-kernel
+launch failure for the traditional models (microsoft/skala#132). TPSS fails on
+its second call; PBE fails only when input sizes vary between calls, which the
+4-atom UltraFineGrid system produces through differently sized model batches.
 
 Run the narrowest Catch2 tag first, then CTest:
 
