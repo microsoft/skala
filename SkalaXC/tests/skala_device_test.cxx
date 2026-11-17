@@ -246,9 +246,8 @@ TEST_CASE("Skala CUDA reproduces host semilocal nuclear gradients",
   SkalaXC::RuntimeEnvironment host_runtime{SKALAXC_MPI_CODE(MPI_COMM_WORLD)};
   SkalaXC::RuntimeEnvironment device_runtime{
       SKALAXC_MPI_CODE(MPI_COMM_WORLD, ) SkalaXC::DeviceRuntimeSettings{}};
-  // The current TPSS trace can exceed sm_120 launch resources in its
-  // TensorExpr backward kernel. Keep TPSS EXC/VXC coverage above and exercise
-  // the primary neural model in the isolated test below until TPSS is retraced.
+  // TPSS gradients and repeated evaluation are covered in the repeated-call
+  // test below, and the primary neural model in the isolated test after it.
   for (const std::string model : {"LDA", "PBE"}) {
     INFO("model=" << model);
     const auto host = evaluate_gradient(
@@ -350,6 +349,61 @@ TEST_CASE(
             model.tolerance);
       CHECK(std::abs(flipped_gradient[index] - device_gradient[index]) <=
             model.tolerance);
+    }
+  }
+}
+
+TEST_CASE("Skala CUDA traditional models survive repeated evaluation",
+          "[skala][cuda][device-repeated]") {
+  // TorchScript installs a fused backward kernel after its profiling runs; for
+  // the traditional archives it can exceed the device's launch resources
+  // (microsoft/skala#132). Without the optimizer guard, PBE and TPSS fail on a
+  // multi-atom system within the first one or two evaluations.
+  SkalaXC::Molecule molecule;
+  for (int atom = 0; atom < 4; ++atom)
+    molecule.emplace_back(SkalaXC::AtomicNumber(1), 0.0, 0.0, 1.4 * atom);
+  const auto basis = SkalaXC::test::make_sto3g_hydrogen_basis(molecule);
+  const Matrix scalar_density = 0.5 * Matrix::Identity(4, 4);
+  const Matrix spin_density = Matrix::Zero(4, 4);
+
+  SkalaXC::RuntimeEnvironment host_runtime{SKALAXC_MPI_CODE(MPI_COMM_WORLD)};
+  SkalaXC::RuntimeEnvironment device_runtime{
+      SKALAXC_MPI_CODE(MPI_COMM_WORLD, ) SkalaXC::DeviceRuntimeSettings{}};
+  auto grid = SkalaXC::test::make_molgrid(
+      molecule, SkalaXC::AtomicGridSizeDefault::UltraFineGrid);
+  const auto make_integrator = [&](const SkalaXC::RuntimeEnvironment& runtime,
+                                   SkalaXC::ExecutionSpace space,
+                                   const std::string& model) {
+    auto load_balancer = SkalaXC::LoadBalancerFactory(space).get_instance(
+        runtime, molecule, grid, basis);
+    SkalaXC::MolecularWeightsFactory(space, "Default", {})
+        .get_instance()
+        .modify_weights(load_balancer);
+    return SkalaXC::XCIntegratorFactory<Matrix>(space).get_instance(
+        SkalaXC::functional_type(model), load_balancer);
+  };
+
+  for (const std::string model : {"LDA", "PBE", "TPSS"}) {
+    INFO("model=" << model);
+    auto host =
+        make_integrator(host_runtime, SkalaXC::ExecutionSpace::Host, model);
+    auto device =
+        make_integrator(device_runtime, SkalaXC::ExecutionSpace::Device, model);
+    const auto [host_exc, host_scalar, host_spin] =
+        host.eval_exc_vxc(scalar_density, spin_density);
+    const auto host_gradient = host.eval_exc_grad(scalar_density, spin_density);
+
+    for (int call = 0; call < 5; ++call) {
+      INFO("call=" << call);
+      const auto [exc, scalar, spin] =
+          device.eval_exc_vxc(scalar_density, spin_density);
+      const auto gradient = device.eval_exc_grad(scalar_density, spin_density);
+      CHECK(std::abs(exc - host_exc) <=
+            1e-8 * std::max(1.0, std::abs(host_exc)));
+      CHECK(SkalaXC::test::matrix_error_per_basis(scalar, host_scalar) <= 1e-7);
+      REQUIRE(gradient.size() == host_gradient.size());
+      for (std::size_t index = 0; index < gradient.size(); ++index)
+        CHECK(std::abs(gradient[index] - host_gradient[index]) <= 1e-6);
     }
   }
 }

@@ -25,11 +25,13 @@
 #include <c10/cuda/CUDAGuard.h>
 #include <c10/cuda/CUDAStream.h>
 #include <cuda_runtime_api.h>
+#include <torch/csrc/jit/runtime/graph_executor.h>
 #include <torch/torch.h>
 
 #include <algorithm>
 #include <cstdint>
 #include <iterator>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -109,6 +111,43 @@ void validate_finite_checks(const std::vector<DeviceFiniteCheck>& checks,
       SKALAXC_EXCEPTION("Non-finite CUDA " + check.label);
   SKALAXC_EXCEPTION("Non-finite CUDA model value");
 }
+
+/**
+ * @brief Whether a model is purely local, i.e. needs no grid or atomic
+ * coordinates.
+ *
+ * The traditional LDA/PBE/TPSS TorchScript archives are local; the neural
+ * model consumes coordinates.
+ */
+bool is_local_model(const SkalaModel& model) {
+  const auto& keys = model.feature_keys();
+  const auto has = [&keys](SKALA_FEATURE feature) {
+    return std::find(keys.begin(), keys.end(), feat_map().at(feature)) !=
+           keys.end();
+  };
+  return !has(SKALA_FEATURE::POINTS) && !has(SKALA_FEATURE::COORDS);
+}
+
+/**
+ * @brief Disable TorchScript graph optimization for the calling thread's model
+ * evaluation of a local model.
+ *
+ * After its profiling runs, TorchScript installs a fused TensorExpr kernel for
+ * the traditional archives' backward pass that can request more launch
+ * resources than the device allows, failing with "too many resources requested
+ * for launch" (microsoft/skala#132). Unoptimized execution avoids it. The flag
+ * is thread-local and restored on scope exit, and the neural model, which does
+ * not exhibit the failure, keeps its optimized execution.
+ */
+class LocalModelOptimizerGuard {
+ public:
+  explicit LocalModelOptimizerGuard(const SkalaModel& model) {
+    if (is_local_model(model)) guard_.emplace(false);
+  }
+
+ private:
+  std::optional<torch::jit::GraphOptimizerEnabledGuard> guard_;
+};
 
 /** @brief Evaluate and validate one CUDA model batch's integrated energy. */
 at::Tensor evaluate_cuda_model_energy(const SkalaModel& model,
@@ -193,6 +232,7 @@ double SkalaDeviceDriver::eval_exc_vxc_uks(
   double exc_value = 0.0;
   mpi::collective_try(lb_.runtime(), [&] {
     activate_cuda_device(device_id_);
+    const LocalModelOptimizerGuard optimizer_guard(*model_);
     auto runtime = GauXC::detail::as_device_runtime(lb_.runtime());
     const c10::cuda::CUDAStreamGuard stream_guard(
         torch_stream_for_runtime(runtime, device_id_));
@@ -385,6 +425,7 @@ void SkalaDeviceDriver::eval_exc_grad_uks(ConstColMajorMatrixMap scalar_density,
                                           RowMajorMatrixMap gradient) {
   mpi::collective_try(lb_.runtime(), [&] {
     activate_cuda_device(device_id_);
+    const LocalModelOptimizerGuard optimizer_guard(*model_);
     auto runtime = GauXC::detail::as_device_runtime(lb_.runtime());
     const c10::cuda::CUDAStreamGuard stream_guard(
         torch_stream_for_runtime(runtime, device_id_));

@@ -80,8 +80,14 @@ any rank throws `SkalaXC::Exception` on every rank of the communicator. Use the
 CUDA is experimental and off by default (`SKALAXC_ENABLE_CUDA=ON` to enable;
 configuration fails if no CUDA compiler is found).
 It requires a compatible CUDA compiler, GPU-enabled LibTorch, and GPU runtime.
-LDA/PBE gradients and TPSS energy/potentials are covered; the bundled TPSS
-backward trace can exceed launch resources for CUDA gradients on sm_86/sm_120.
+LDA/PBE/TPSS energies, potentials, and gradients are covered, including
+repeated evaluation, on an A100 (sm_80). The traditional TorchScript archives
+can fail after their first evaluations with "too many resources requested for
+launch" when PyTorch installs a fused backward kernel (observed for PBE and TPSS
+on sm_80 and for TPSS on sm_120; see microsoft/skala#132). SkalaXC therefore
+runs these purely local models with TorchScript graph optimization disabled on
+the calling thread; the neural model is unaffected. This has not been verified
+on sm_120.
 Task tiles respect both the selected device's grid Y/Z limits and GauXC's
 independent memory limit.
 
