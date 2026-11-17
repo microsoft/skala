@@ -84,10 +84,11 @@ LDA/PBE/TPSS energies, potentials, and gradients are covered, including
 repeated evaluation, on an A100 (sm_80). The traditional TorchScript archives
 can fail after their first evaluations with "too many resources requested for
 launch" when PyTorch installs a fused backward kernel (observed for PBE and TPSS
-on sm_80 and for TPSS on sm_120; see microsoft/skala#132). SkalaXC therefore
-runs these purely local models with TorchScript graph optimization disabled on
-the calling thread; the neural model is unaffected. This has not been verified
-on sm_120.
+on sm_80 and for TPSS on sm_120; LDA was not observed to fail; see
+microsoft/skala#132). SkalaXC therefore runs these purely local models with
+TorchScript graph optimization disabled on the calling thread; the neural model
+is unaffected. This made PBE about 3x slower per model evaluation in a
+standalone measurement. It has not been verified on sm_120.
 Task tiles respect both the selected device's grid Y/Z limits and GauXC's
 independent memory limit.
 

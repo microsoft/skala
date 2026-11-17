@@ -138,6 +138,11 @@ bool is_local_model(const SkalaModel& model) {
  * for launch" (microsoft/skala#132). Unoptimized execution avoids it. The flag
  * is thread-local and restored on scope exit, and the neural model, which does
  * not exhibit the failure, keeps its optimized execution.
+ *
+ * The execution plan is chosen on the first forward call and then cached, so
+ * the guard has no effect once any unguarded call has run on the same module.
+ * All model evaluation must therefore stay inside the guarded evaluation
+ * lambdas; do not add a warm-up or diagnostic call outside them.
  */
 class LocalModelOptimizerGuard {
  public:

@@ -357,8 +357,10 @@ TEST_CASE("Skala CUDA traditional models survive repeated evaluation",
           "[skala][cuda][device-repeated]") {
   // TorchScript installs a fused backward kernel after its profiling runs; for
   // the traditional archives it can exceed the device's launch resources
-  // (microsoft/skala#132). Without the optimizer guard, PBE and TPSS fail on a
-  // multi-atom system within the first one or two evaluations.
+  // (microsoft/skala#132). Without the optimizer guard, TPSS fails on its
+  // second call and PBE fails when input sizes vary between calls. Here the
+  // 4-atom UltraFineGrid system yields differently sized model batches, so
+  // PBE depends on that grid; keep it multi-batch if the grid changes.
   SkalaXC::Molecule molecule;
   for (int atom = 0; atom < 4; ++atom)
     molecule.emplace_back(SkalaXC::AtomicNumber(1), 0.0, 0.0, 1.4 * atom);
