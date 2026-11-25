@@ -256,7 +256,7 @@ class SkalaNumInt(NumInt, Generic[ArrayF64]):
             v1: ArrayF64 = self._to_backend(xc_response(self._from_backend(dm1)))
             vj: ArrayF64 = cast(ArrayF64, ks.get_j(ks.mol, dm1, hermi=1))
 
-            if ks.mol.spin == 0:
+            if dm0.ndim == 2:
                 v1[...] += vj
             else:
                 v1[...] += vj[0] + vj[1]
