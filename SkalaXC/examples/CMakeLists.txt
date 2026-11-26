@@ -1,0 +1,12 @@
+if(NOT SKALAXC_HAS_HDF5)
+  message(STATUS "SkalaXC examples require HDF5 input support")
+  return()
+endif()
+
+add_executable(skalaxc_eval_cpp cpp/skalaxc_eval.cpp)
+target_link_libraries(skalaxc_eval_cpp PRIVATE skalaxc HighFive Eigen3::Eigen)
+target_compile_features(skalaxc_eval_cpp PRIVATE cxx_std_17)
+if(SKALAXC_ENABLE_MPI)
+  find_package(MPI REQUIRED COMPONENTS CXX)
+  target_link_libraries(skalaxc_eval_cpp PRIVATE MPI::MPI_CXX)
+endif()

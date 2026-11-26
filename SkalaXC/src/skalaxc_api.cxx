@@ -1,0 +1,708 @@
+/**
+ * SkalaXC public C++ API implementation.
+ *
+ * This translation unit is the ONLY place (together with the C wrapper) where
+ * the public SkalaXC API meets GauXC / LibTorch. The public pipeline mirrors
+ * GauXC (RuntimeEnvironment -> MolGrid -> LoadBalancer -> MolecularWeights ->
+ * XCIntegratorFactory -> XCIntegrator) but every stage owns its GauXC state
+ * behind a PIMPL, and GauXC exceptions are translated to SkalaXC::Exception so
+ * no GauXC type escapes the boundary.
+ */
+#include <skalaxc/skalaxc.hpp>
+#include <skalaxc/skalaxc_config.hpp>
+
+#include <gauxc/atom.hpp>
+#include <gauxc/basisset.hpp>
+#include <gauxc/enums.hpp>
+#ifdef SKALAXC_HAS_HDF5
+#include <gauxc/external/hdf5.hpp>
+#endif
+#include <gauxc/load_balancer.hpp>
+#include <gauxc/molecular_weights.hpp>
+#include <gauxc/molecule.hpp>
+#include <gauxc/molgrid.hpp>
+#include <gauxc/molgrid/defaults.hpp>
+#include <gauxc/runtime_environment.hpp>
+#include <gauxc/shell.hpp>
+#include <gauxc/util/environment.hpp>
+#include <gauxc/util/mpi.hpp>
+#include <gauxc/xc_integrator/local_work_driver.hpp>
+#include <gauxc/xc_task.hpp>
+
+#include "host/atomic_domain_load_balancer.hpp"
+#include "host/eigen_types.hpp"
+#include "host/skala_host_driver.hpp"
+#include "skala_driver.hpp"
+
+#ifdef SKALAXC_HAS_CUDA
+#include "device/skala_device_driver.hpp"
+#endif
+
+#include <algorithm>
+#include <cmath>
+#include <cstddef>
+#include <memory>
+#include <utility>
+#include <vector>
+
+#ifdef SKALAXC_HAS_CUDA
+#include <cuda_runtime_api.h>
+#endif
+
+namespace SkalaXC {
+
+std::string_view version() noexcept { return SKALAXC_VERSION_STRING; }
+
+// ===========================================================================
+// PIMPL definitions: each pipeline stage owns its GauXC state.
+// ===========================================================================
+struct RuntimeEnvironment::Impl {
+  GauXC::RuntimeEnvironment rt;
+  ExecutionSpace ex = ExecutionSpace::Host;
+  types::DeviceId device_id{-1};
+  double device_memory_fraction = 0.0;
+  explicit Impl(SKALAXC_MPI_CODE(MPI_Comm comm)) : rt{GAUXC_MPI_CODE(comm)} {}
+#ifdef SKALAXC_HAS_CUDA
+  Impl(SKALAXC_MPI_CODE(MPI_Comm comm, ) DeviceRuntimeSettings settings)
+      : rt{GauXC::DeviceRuntimeEnvironment(SKALAXC_MPI_CODE(comm, )
+                                               settings.memory_fraction)},
+        ex(ExecutionSpace::Device),
+        device_id(types::DeviceId{settings.device_id}),
+        device_memory_fraction(settings.memory_fraction) {}
+#endif
+};
+
+struct MolGrid::Impl {
+  GauXC::MolGrid mg;
+  explicit Impl(GauXC::MolGrid grid) : mg(std::move(grid)) {}
+};
+
+struct LoadBalancer::Impl {
+  GauXC::LoadBalancer lb;
+  ExecutionSpace ex = ExecutionSpace::Host;
+  types::DeviceId device_id{-1};
+  double device_memory_fraction = 0.0;
+  /// Pre-partition ("raw") quadrature weights, captured by modify_weights.
+  std::vector<std::vector<double>> raw_weights;
+  Impl(GauXC::LoadBalancer balancer, ExecutionSpace execution_space,
+       types::DeviceId selected_device, double selected_memory_fraction)
+      : lb(std::move(balancer)),
+        ex(execution_space),
+        device_id(selected_device),
+        device_memory_fraction(selected_memory_fraction) {}
+};
+
+struct MolecularWeights::Impl {
+  ExecutionSpace ex = ExecutionSpace::Host;
+  std::string kernel;
+  MolecularWeightsSettings settings;
+};
+
+namespace detail {
+
+struct IntegratorCore::Impl {
+  std::unique_ptr<SkalaDriver> driver;
+  std::int64_t nbf = 0;
+  std::int64_t natoms = 0;
+};
+
+/// Grants this implementation TU access to the opaque pipeline-stage internals.
+/// impl() rejects moved-from objects (null pimpl_) instead of dereferencing.
+struct Access {
+  template <typename Impl>
+  static Impl* checked(Impl* p, const char* what) {
+    if (p == nullptr)
+      throw Exception(std::string("SkalaXC ") + what +
+                      " is in a moved-from state");
+    return p;
+  }
+
+  static RuntimeEnvironment::Impl* impl(RuntimeEnvironment& r) {
+    return checked(r.pimpl_.get(), "RuntimeEnvironment");
+  }
+  static const RuntimeEnvironment::Impl* impl(const RuntimeEnvironment& r) {
+    return checked(r.pimpl_.get(), "RuntimeEnvironment");
+  }
+  static MolGrid::Impl* impl(MolGrid& m) {
+    return checked(m.pimpl_.get(), "MolGrid");
+  }
+  static const MolGrid::Impl* impl(const MolGrid& m) {
+    return checked(m.pimpl_.get(), "MolGrid");
+  }
+  static LoadBalancer::Impl* impl(LoadBalancer& l) {
+    return checked(l.pimpl_.get(), "LoadBalancer");
+  }
+  static const LoadBalancer::Impl* impl(const LoadBalancer& l) {
+    return checked(l.pimpl_.get(), "LoadBalancer");
+  }
+  static MolecularWeights::Impl* impl(MolecularWeights& w) {
+    return checked(w.pimpl_.get(), "MolecularWeights");
+  }
+  static const MolecularWeights::Impl* impl(const MolecularWeights& w) {
+    return checked(w.pimpl_.get(), "MolecularWeights");
+  }
+
+  static MolGrid make_molgrid(std::unique_ptr<MolGrid::Impl> p) {
+    return MolGrid(std::move(p));
+  }
+  static LoadBalancer make_load_balancer(
+      std::unique_ptr<LoadBalancer::Impl> p) {
+    return LoadBalancer(std::move(p));
+  }
+  static MolecularWeights make_molecular_weights(
+      std::unique_ptr<MolecularWeights::Impl> p) {
+    return MolecularWeights(std::move(p));
+  }
+};
+
+}  // namespace detail
+
+namespace {
+
+#ifdef SKALAXC_HAS_CUDA
+void activate_cuda_device(types::DeviceId device_id) {
+  int device_count = 0;
+  auto status = cudaGetDeviceCount(&device_count);
+  if (status != cudaSuccess)
+    throw Exception(std::string("Failed to query CUDA devices: ") +
+                    cudaGetErrorString(status));
+  if (device_id.raw() < 0 || device_id.raw() >= device_count)
+    throw Exception("CUDA device_id is outside the available device range");
+  status = cudaSetDevice(device_id.raw());
+  if (status != cudaSuccess)
+    throw Exception(std::string("Failed to select CUDA device: ") +
+                    cudaGetErrorString(status));
+}
+#endif
+
+// ---- SkalaXC value type -> GauXC conversions -----------------------------
+constexpr std::int64_t kMaxAtomicNumber = 118;
+// Shell centres must coincide with a nucleus (atomic-domain assignment relies
+// on it); this tolerance only absorbs input round-off. Matching shells are
+// snapped to the atom's exact coordinates because GauXC matches them exactly.
+constexpr double kShellCenterTolerance = 1e-6;
+// GauXC finds each shell's cutoff radius by walking in 0.01-bohr steps until
+// its radial function crosses this tolerance. The bounds below keep that walk
+// finite: it takes ~1/sqrt(alpha) steps, never ends if the radial peak stays
+// below the tolerance, and normalization overflows for extreme coefficients.
+constexpr double kGauXCShellTolerance = 1e-10;
+constexpr double kMinExponent = 1e-8;
+constexpr double kMaxExponent = 1e12;
+constexpr double kMinCoefficient = 1e-30;
+constexpr double kMaxCoefficient = 1e30;
+
+void validate_molecule(const Molecule& mol) {
+  if (mol.empty()) throw Exception("SkalaXC molecule must not be empty");
+  for (std::size_t i = 0; i < mol.size(); ++i) {
+    const auto& a = mol[i];
+    if (a.Z.raw() < 1 || a.Z.raw() > kMaxAtomicNumber)
+      throw Exception("Atom " + std::to_string(i) +
+                      " has an atomic number outside [1," +
+                      std::to_string(kMaxAtomicNumber) + "]");
+    if (!std::isfinite(a.x) || !std::isfinite(a.y) || !std::isfinite(a.z))
+      throw Exception("Atom " + std::to_string(i) +
+                      " has a non-finite coordinate");
+  }
+}
+
+const Atom* atom_at(const Molecule& mol, const double* center) {
+  const auto it = std::find_if(mol.begin(), mol.end(), [&](const Atom& a) {
+    return std::abs(a.x - center[0]) <= kShellCenterTolerance &&
+           std::abs(a.y - center[1]) <= kShellCenterTolerance &&
+           std::abs(a.z - center[2]) <= kShellCenterTolerance;
+  });
+  return it == mol.end() ? nullptr : &*it;
+}
+
+void validate_basis(const BasisSet<double>& basis, const Molecule& mol,
+                    int max_l) {
+  if (basis.empty()) throw Exception("SkalaXC basis set must not be empty");
+  for (std::size_t i = 0; i < basis.size(); ++i) {
+    const auto& s = basis[i];
+    const std::string shell = "Shell " + std::to_string(i);
+    if (s.nprim() < 1 || s.nprim() > 32)
+      throw Exception("Shell primitive count must be in [1,32]");
+    if (s.l() < 0 || s.l() > max_l)
+      throw Exception(shell + " has angular momentum " + std::to_string(s.l()) +
+                      " outside the supported range [0," +
+                      std::to_string(max_l) + "]");
+    double max_coefficient = 0.0;
+    double radial_peak = 0.0;
+    for (std::int32_t p = 0; p < s.nprim(); ++p) {
+      const double alpha = s.alpha_data()[p];
+      const double coefficient = std::abs(s.coeff_data()[p]);
+      if (!(alpha >= kMinExponent && alpha <= kMaxExponent))
+        throw Exception(shell + " has an exponent outside [" +
+                        std::to_string(kMinExponent) + ", " +
+                        std::to_string(kMaxExponent) + "]");
+      if (!std::isfinite(coefficient))
+        throw Exception(shell + " has a non-finite contraction coefficient");
+      max_coefficient = std::max(max_coefficient, coefficient);
+      // Peak of |c| r^l exp(-alpha r^2).
+      const double shape =
+          s.l() == 0
+              ? 1.0
+              : std::pow(s.l() / (2.0 * alpha * std::exp(1.0)), 0.5 * s.l());
+      radial_peak = std::max(radial_peak, coefficient * shape);
+    }
+    if (!(max_coefficient >= kMinCoefficient &&
+          max_coefficient <= kMaxCoefficient))
+      throw Exception(shell + " has contraction coefficients outside [" +
+                      std::to_string(kMinCoefficient) + ", " +
+                      std::to_string(kMaxCoefficient) + "]");
+    if (!s.normalized() && radial_peak < kGauXCShellTolerance)
+      throw Exception(shell +
+                      " has an unnormalized radial function below the "
+                      "shell tolerance");
+    const double* O = s.O_data();
+    if (!std::isfinite(O[0]) || !std::isfinite(O[1]) || !std::isfinite(O[2]))
+      throw Exception(shell + " has a non-finite center");
+    if (atom_at(mol, O) == nullptr)
+      throw Exception(shell + " is not centered on any atom of the molecule");
+  }
+}
+
+GauXC::Molecule to_gauxc(const Molecule& mol) {
+  GauXC::Molecule out;
+  out.reserve(mol.size());
+  for (const auto& a : mol)
+    out.push_back(GauXC::Atom{GauXC::AtomicNumber(a.Z.raw()), a.x, a.y, a.z});
+  return out;
+}
+
+// Shell centres must already have passed validate_basis.
+GauXC::BasisSet<double> to_gauxc(const BasisSet<double>& basis,
+                                 const Molecule& mol) {
+  GauXC::BasisSet<double> out;
+  out.reserve(basis.size());
+  for (const auto& s : basis) {
+    const std::int32_t nprim = s.nprim();
+    GauXC::Shell<double>::prim_array alpha;
+    alpha.fill(0.0);
+    GauXC::Shell<double>::prim_array coeff;
+    coeff.fill(0.0);
+    for (std::int32_t i = 0; i < nprim; ++i) {
+      alpha[i] = s.alpha_data()[i];
+      coeff[i] = s.coeff_data()[i];
+    }
+    const Atom& atom = *atom_at(mol, s.O_data());
+    GauXC::Shell<double>::cart_array O{atom.x, atom.y, atom.z};
+    out.push_back(GauXC::Shell<double>(
+        GauXC::PrimSize(nprim), GauXC::AngularMomentum(s.l()),
+        GauXC::SphericalType(s.pure()), alpha, coeff, O, s.normalized()));
+  }
+  return out;
+}
+
+GauXC::PruningScheme to_gauxc(PruningScheme s) {
+  switch (s) {
+    case PruningScheme::Unpruned:
+      return GauXC::PruningScheme::Unpruned;
+    case PruningScheme::Robust:
+      return GauXC::PruningScheme::Robust;
+    case PruningScheme::Treutler:
+      return GauXC::PruningScheme::Treutler;
+  }
+  throw Exception("Unknown SkalaXC PruningScheme");
+}
+
+GauXC::RadialQuad to_gauxc(RadialQuad q) {
+  switch (q) {
+    case RadialQuad::Becke:
+      return GauXC::RadialQuad::Becke;
+    case RadialQuad::MuraKnowles:
+      return GauXC::RadialQuad::MuraKnowles;
+    case RadialQuad::MurrayHandyLaming:
+      return GauXC::RadialQuad::MurrayHandyLaming;
+    case RadialQuad::TreutlerAhlrichs:
+      return GauXC::RadialQuad::TreutlerAhlrichs;
+  }
+  throw Exception("Unknown SkalaXC RadialQuad");
+}
+
+GauXC::AtomicGridSizeDefault to_gauxc(AtomicGridSizeDefault g) {
+  switch (g) {
+    case AtomicGridSizeDefault::FineGrid:
+      return GauXC::AtomicGridSizeDefault::FineGrid;
+    case AtomicGridSizeDefault::UltraFineGrid:
+      return GauXC::AtomicGridSizeDefault::UltraFineGrid;
+    case AtomicGridSizeDefault::SuperFineGrid:
+      return GauXC::AtomicGridSizeDefault::SuperFineGrid;
+    case AtomicGridSizeDefault::GM3:
+      return GauXC::AtomicGridSizeDefault::GM3;
+    case AtomicGridSizeDefault::GM5:
+      return GauXC::AtomicGridSizeDefault::GM5;
+  }
+  throw Exception("Unknown SkalaXC AtomicGridSize");
+}
+
+GauXC::XCWeightAlg to_gauxc(XCWeightAlg a) {
+  switch (a) {
+    case XCWeightAlg::NOTPARTITIONED:
+      return GauXC::XCWeightAlg::NOTPARTITIONED;
+    case XCWeightAlg::Becke:
+      return GauXC::XCWeightAlg::Becke;
+    case XCWeightAlg::SSF:
+      return GauXC::XCWeightAlg::SSF;
+  }
+  throw Exception("Unknown SkalaXC XCWeightAlg");
+}
+
+}  // namespace
+
+#ifdef SKALAXC_HAS_HDF5
+// ===========================================================================
+// HDF5 record readers (mirror GauXC::read_hdf5_record).
+// ===========================================================================
+void read_hdf5_record(std::vector<Atom>& mol, std::string fname,
+                      std::string dset) {
+  try {
+    GauXC::Molecule gmol;
+    GauXC::read_hdf5_record(gmol, std::move(fname), std::move(dset));
+    mol.clear();
+    mol.reserve(gmol.size());
+    for (const auto& a : gmol)
+      mol.push_back(Atom{AtomicNumber(a.Z.get()), a.x, a.y, a.z});
+  } catch (const Exception&) {
+    throw;
+  } catch (const std::exception& e) {
+    throw Exception(e.what());
+  }
+}
+
+void read_hdf5_record(std::vector<Shell<double>>& basis, std::string fname,
+                      std::string dset) {
+  try {
+    GauXC::BasisSet<double> gbasis;
+    GauXC::read_hdf5_record(gbasis, std::move(fname), std::move(dset));
+    basis.clear();
+    basis.reserve(gbasis.size());
+    for (const auto& gs : gbasis) {
+      Shell<double>::prim_array alpha{};
+      Shell<double>::prim_array coeff{};
+      const std::int32_t nprim = gs.nprim();
+      for (std::int32_t i = 0; i < nprim && i < 32; ++i) {
+        alpha[i] = gs.alpha_data()[i];
+        coeff[i] = gs.coeff_data()[i];
+      }
+      Shell<double>::cart_array O{gs.O_data()[0], gs.O_data()[1],
+                                  gs.O_data()[2]};
+      // GauXC has already normalized the coefficients on read; wrap them
+      // verbatim (normalize=false) so the pipeline reuses them unchanged.
+      basis.push_back(Shell<double>(PrimSize(nprim), AngularMomentum(gs.l()),
+                                    SphericalType(gs.pure()), alpha, coeff, O,
+                                    /*normalize=*/false));
+    }
+  } catch (const Exception&) {
+    throw;
+  } catch (const std::exception& e) {
+    throw Exception(e.what());
+  }
+}
+#endif  // SKALAXC_HAS_HDF5
+
+// ===========================================================================
+// RuntimeEnvironment
+// ===========================================================================
+RuntimeEnvironment::RuntimeEnvironment(SKALAXC_MPI_CODE(MPI_Comm comm))
+    : pimpl_(std::make_unique<Impl>(SKALAXC_MPI_CODE(comm))) {}
+RuntimeEnvironment::RuntimeEnvironment(SKALAXC_MPI_CODE(MPI_Comm comm, )
+                                           DeviceRuntimeSettings settings) {
+#ifdef SKALAXC_HAS_CUDA
+  if (!(settings.memory_fraction > 0.0 && settings.memory_fraction <= 1.0))
+    throw Exception("CUDA memory_fraction must be in (0, 1]");
+  activate_cuda_device(types::DeviceId{settings.device_id});
+  pimpl_ = std::make_unique<Impl>(SKALAXC_MPI_CODE(comm, ) settings);
+#else
+  (void)settings;
+  SKALAXC_MPI_CODE((void)comm;)
+  throw Exception("SkalaXC was built without CUDA support");
+#endif
+}
+RuntimeEnvironment::~RuntimeEnvironment() = default;
+RuntimeEnvironment::RuntimeEnvironment(RuntimeEnvironment&&) noexcept = default;
+RuntimeEnvironment& RuntimeEnvironment::operator=(
+    RuntimeEnvironment&&) noexcept = default;
+
+int RuntimeEnvironment::comm_rank() const {
+  return detail::Access::impl(*this)->rt.comm_rank();
+}
+int RuntimeEnvironment::comm_size() const {
+  return detail::Access::impl(*this)->rt.comm_size();
+}
+
+// ===========================================================================
+// MolGrid / MolGridFactory
+// ===========================================================================
+MolGrid::MolGrid(std::unique_ptr<Impl> impl) : pimpl_(std::move(impl)) {}
+MolGrid::~MolGrid() = default;
+MolGrid::MolGrid(MolGrid&&) noexcept = default;
+MolGrid& MolGrid::operator=(MolGrid&&) noexcept = default;
+
+MolGrid MolGridFactory::create_default_molgrid(
+    const Molecule& mol, PruningScheme pruning_scheme, BatchSize batch_size,
+    RadialQuad radial_quad, AtomicGridSizeDefault grid_size) {
+  try {
+    if (batch_size.raw() <= 0)
+      throw Exception("SkalaXC batch size must be positive");
+    validate_molecule(mol);
+    GauXC::Molecule gmol = to_gauxc(mol);
+    GauXC::MolGrid gmg = GauXC::MolGridFactory::create_default_molgrid(
+        gmol, to_gauxc(pruning_scheme), GauXC::BatchSize(batch_size.raw()),
+        to_gauxc(radial_quad), to_gauxc(grid_size));
+    return detail::Access::make_molgrid(
+        std::make_unique<MolGrid::Impl>(std::move(gmg)));
+  } catch (const Exception&) {
+    throw;
+  } catch (const std::exception& e) {
+    throw Exception(e.what());
+  }
+}
+
+// ===========================================================================
+// LoadBalancer / LoadBalancerFactory
+// ===========================================================================
+LoadBalancer::LoadBalancer(std::unique_ptr<Impl> impl)
+    : pimpl_(std::move(impl)) {}
+LoadBalancer::~LoadBalancer() = default;
+LoadBalancer::LoadBalancer(LoadBalancer&&) noexcept = default;
+LoadBalancer& LoadBalancer::operator=(LoadBalancer&&) noexcept = default;
+
+LoadBalancerFactory::LoadBalancerFactory(ExecutionSpace ex,
+                                         std::string kernel_name)
+    : ex_(ex), kernel_name_(std::move(kernel_name)) {}
+
+LoadBalancer LoadBalancerFactory::get_instance(const RuntimeEnvironment& rt,
+                                               const Molecule& mol,
+                                               const MolGrid& mg,
+                                               const BasisSet<double>& basis) {
+  try {
+    const auto* rtimpl = detail::Access::impl(rt);
+    const auto* mgimpl = detail::Access::impl(mg);
+    if (ex_ == ExecutionSpace::Device) {
+#ifdef SKALAXC_HAS_CUDA
+      if (rtimpl->ex != ExecutionSpace::Device)
+        throw Exception("Device load balancing requires a device runtime");
+      activate_cuda_device(rtimpl->device_id);
+#else
+      throw Exception("SkalaXC was built without CUDA support");
+#endif
+    }
+    validate_molecule(mol);
+    validate_basis(basis, mol,
+                   GauXC::gauxc_max_am(ex_ == ExecutionSpace::Device
+                                           ? GauXC::ExecutionSpace::Device
+                                           : GauXC::ExecutionSpace::Host,
+                                       GauXC::SupportedAlg::XC));
+    GauXC::Molecule gmol = to_gauxc(mol);
+    GauXC::BasisSet<double> gbasis = to_gauxc(basis, mol);
+    GauXC::LoadBalancer glb = detail::make_atomic_domain_load_balancer(
+        rtimpl->rt, gmol, mgimpl->mg, gbasis, kernel_name_);
+    return detail::Access::make_load_balancer(
+        std::make_unique<LoadBalancer::Impl>(std::move(glb), ex_,
+                                             rtimpl->device_id,
+                                             rtimpl->device_memory_fraction));
+  } catch (const Exception&) {
+    throw;
+  } catch (const std::exception& e) {
+    throw Exception(e.what());
+  }
+}
+
+// ===========================================================================
+// MolecularWeights / MolecularWeightsFactory
+// ===========================================================================
+MolecularWeights::MolecularWeights(std::unique_ptr<Impl> impl)
+    : pimpl_(std::move(impl)) {}
+MolecularWeights::~MolecularWeights() = default;
+MolecularWeights::MolecularWeights(MolecularWeights&&) noexcept = default;
+MolecularWeights& MolecularWeights::operator=(MolecularWeights&&) noexcept =
+    default;
+
+void MolecularWeights::modify_weights(LoadBalancer& lb) const {
+  try {
+    const auto* wimpl = detail::Access::impl(*this);
+    auto* lbimpl = detail::Access::impl(lb);
+    auto& glb = lbimpl->lb;
+    if (wimpl->ex != lbimpl->ex)
+      throw Exception(
+          "Molecular weights and load balancer execution spaces must match");
+    if (glb.state().modified_weights_are_stored)
+      throw Exception("Attempting to overwrite modified weights");
+
+    // Replicate GauXC::MolecularWeights::modify_weights (sort tasks ->
+    // partition) but snapshot the pre-partition ("raw") quadrature weights in
+    // between. SkalaXC owns those raw weights so GauXC master stays untouched;
+    // ML models that request the atomic_grid_weights feature consume them.
+    // The snapshot is committed only after partitioning succeeds so a failed
+    // call can be retried.
+    const GauXC::XCWeightAlg weight_alg = to_gauxc(wimpl->settings.weight_alg);
+    if (wimpl->ex == ExecutionSpace::Host) {
+      lbimpl->raw_weights = partition_host_weights(glb, weight_alg);
+    } else {
+#ifdef SKALAXC_HAS_CUDA
+      activate_cuda_device(lbimpl->device_id);
+      auto raw_weights = sort_tasks_and_snapshot_weights(glb);
+      try {
+        GauXC::MolecularWeightsSettings settings;
+        settings.weight_alg = weight_alg;
+        GauXC::MolecularWeightsFactory factory(GauXC::ExecutionSpace::Device,
+                                               wimpl->kernel, settings);
+        factory.get_shared_instance()->modify_weights(glb);
+      } catch (...) {
+        restore_task_weights(glb.get_tasks(), raw_weights);
+        throw;
+      }
+      lbimpl->raw_weights = std::move(raw_weights);
+#else
+      throw Exception("SkalaXC was built without CUDA support");
+#endif
+    }
+  } catch (const Exception&) {
+    throw;
+  } catch (const std::exception& e) {
+    throw Exception(e.what());
+  }
+}
+
+MolecularWeightsFactory::MolecularWeightsFactory(
+    ExecutionSpace ex, std::string kernel_name,
+    MolecularWeightsSettings settings)
+    : ex_(ex), kernel_name_(std::move(kernel_name)), settings_(settings) {}
+
+MolecularWeights MolecularWeightsFactory::get_instance() {
+  (void)to_gauxc(settings_.weight_alg);
+#ifndef SKALAXC_HAS_CUDA
+  if (ex_ == ExecutionSpace::Device)
+    throw Exception("SkalaXC was built without CUDA support");
+#endif
+  auto impl = std::make_unique<MolecularWeights::Impl>();
+  impl->ex = ex_;
+  impl->kernel = kernel_name_;
+  impl->settings = settings_;
+  return detail::Access::make_molecular_weights(std::move(impl));
+}
+
+// ===========================================================================
+// detail::IntegratorCore + make_integrator_core
+// ===========================================================================
+namespace detail {
+
+IntegratorCore::IntegratorCore(std::unique_ptr<Impl> impl)
+    : pimpl_(std::move(impl)) {}
+IntegratorCore::~IntegratorCore() = default;
+IntegratorCore::IntegratorCore(IntegratorCore&&) noexcept = default;
+IntegratorCore& IntegratorCore::operator=(IntegratorCore&&) noexcept = default;
+
+std::int64_t IntegratorCore::nbf() const { return pimpl_->nbf; }
+std::int64_t IntegratorCore::natoms() const { return pimpl_->natoms; }
+
+namespace {
+
+// A null or non-dense buffer is reported as an empty extent so the backend's
+// collective shape validation rejects it before the buffer is dereferenced.
+template <typename Matrix, typename Pointer>
+Eigen::Map<Matrix> map_matrix(Pointer data, MatrixExtent extent) {
+  if (data == nullptr || extent.rows < 0 || extent.cols < 0 ||
+      extent.outer_stride != extent.rows)
+    return Eigen::Map<Matrix>(nullptr, 0, 0);
+  return Eigen::Map<Matrix>(data, extent.rows, extent.cols);
+}
+
+}  // namespace
+
+double IntegratorCore::eval_exc_vxc(const double* Ps, MatrixExtent Ps_extent,
+                                    const double* Pz, MatrixExtent Pz_extent,
+                                    double* VXCs, MatrixExtent VXCs_extent,
+                                    double* VXCz, MatrixExtent VXCz_extent) {
+  try {
+    const auto scalar_density = map_matrix<const ColMajorMatrix>(Ps, Ps_extent);
+    const auto spin_density = map_matrix<const ColMajorMatrix>(Pz, Pz_extent);
+    auto scalar_potential = map_matrix<ColMajorMatrix>(VXCs, VXCs_extent);
+    auto spin_potential = map_matrix<ColMajorMatrix>(VXCz, VXCz_extent);
+    return pimpl_->driver->eval_exc_vxc_uks(scalar_density, spin_density,
+                                            scalar_potential, spin_potential);
+  } catch (const Exception&) {
+    throw;
+  } catch (const std::exception& e) {
+    throw Exception(e.what());
+  }
+}
+
+void IntegratorCore::eval_exc_grad(const double* Ps, MatrixExtent Ps_extent,
+                                   const double* Pz, MatrixExtent Pz_extent,
+                                   double* gradient,
+                                   std::size_t gradient_size) {
+  try {
+    const auto scalar_density = map_matrix<const ColMajorMatrix>(Ps, Ps_extent);
+    const auto spin_density = map_matrix<const ColMajorMatrix>(Pz, Pz_extent);
+    // A size that is not a whole number of atoms is reported as an empty
+    // gradient so the backend rejects it collectively.
+    const bool whole_atoms = gradient != nullptr && gradient_size % 3 == 0;
+    Eigen::Map<RowMajorMatrix> gradient_matrix(
+        whole_atoms ? gradient : nullptr,
+        whole_atoms ? static_cast<Eigen::Index>(gradient_size / 3) : 0,
+        whole_atoms ? 3 : 0);
+    pimpl_->driver->eval_exc_grad_uks(scalar_density, spin_density,
+                                      gradient_matrix);
+  } catch (const Exception&) {
+    throw;
+  } catch (const std::exception& e) {
+    throw Exception(e.what());
+  }
+}
+
+DiagnosticsSnapshot IntegratorCore::diagnostics() const {
+  return pimpl_->driver->diagnostics();
+}
+
+void IntegratorCore::reset_diagnostics() {
+  pimpl_->driver->reset_diagnostics();
+}
+
+std::unique_ptr<IntegratorCore> make_integrator_core(
+    ExecutionSpace ex, const functional_type& func, const LoadBalancer& lb,
+    TimingSettings timing_settings, DomainBatchMode domain_batch_mode) {
+  try {
+    if (func.empty())
+      throw Exception("SkalaXC functional model must not be empty");
+    const auto* lbimpl = Access::impl(lb);
+    if (ex != lbimpl->ex)
+      throw Exception(
+          "XC integrator and load balancer execution spaces must match");
+    // GauXC exposes only a non-const state() accessor; reading the
+    // modified-weights flag is a logically const observation.
+    if (!const_cast<GauXC::LoadBalancer&>(lbimpl->lb)
+             .state()
+             .modified_weights_are_stored)
+      throw Exception(
+          "SkalaXC XCIntegratorFactory requires modified weights; call "
+          "MolecularWeights::modify_weights first");
+    auto impl = std::make_unique<IntegratorCore::Impl>();
+    if (ex == ExecutionSpace::Host) {
+      impl->driver = std::make_unique<SkalaHostDriver>(
+          lbimpl->lb, lbimpl->raw_weights, func.model(), timing_settings,
+          domain_batch_mode);
+    } else {
+#ifdef SKALAXC_HAS_CUDA
+      impl->driver = std::make_unique<SkalaDeviceDriver>(
+          lbimpl->lb, lbimpl->raw_weights, func.model(), lbimpl->device_id,
+          lbimpl->device_memory_fraction, timing_settings, domain_batch_mode);
+#else
+      throw Exception("SkalaXC was built without CUDA support");
+#endif
+    }
+    impl->driver->log_model_load_timing();
+    impl->nbf = lbimpl->lb.basis().nbf();
+    impl->natoms = static_cast<std::int64_t>(lbimpl->lb.molecule().size());
+    return std::make_unique<IntegratorCore>(std::move(impl));
+  } catch (const Exception&) {
+    throw;
+  } catch (const std::exception& e) {
+    throw Exception(e.what());
+  }
+}
+
+}  // namespace detail
+
+}  // namespace SkalaXC
