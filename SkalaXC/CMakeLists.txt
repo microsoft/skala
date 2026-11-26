@@ -34,7 +34,7 @@ option(SKALAXC_ENABLE_MPI    "Enable MPI support"                            OFF
 option(SKALAXC_ENABLE_OPENMP "Enable OpenMP support"                         ON)
 option(SKALAXC_ENABLE_HDF5   "Enable HDF5 molecule and basis-set I/O"         ON)
 option(SKALAXC_BUILD_TESTS   "Build SkalaXC tests"                           OFF)
-option(SKALAXC_BUILD_EXAMPLES "Build the SkalaXC C++ example program" OFF)
+option(SKALAXC_BUILD_EXAMPLES "Build the SkalaXC C and C++ example programs" OFF)
 option(SKALAXC_BUILD_DOCS "Build project-wide SkalaXC Doxygen documentation" OFF)
 option(SKALAXC_DOWNLOAD_MODELS "Download baseline .fun models when required and missing" ON)
 option(SKALAXC_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
@@ -174,7 +174,7 @@ include(skalaxc-skala)   # LibTorch + nlohmann_json
 add_subdirectory(src)
 # ML VXC/gradient CUDA kernels (option-gated; see src/device/CMakeLists.txt).
 # OFF by default -- never compiled on a host-only toolchain.
-# Minimal C++ consumer example (option-gated; see examples/).
+# Minimal C and C++ consumer examples (option-gated; see examples/).
 if(SKALAXC_BUILD_EXAMPLES)
   add_subdirectory(examples)
 endif()
@@ -192,8 +192,10 @@ set(_skalaxc_owned_targets
   skalaxc_core
   skalaxc
   skalaxc_eval_cpp
+  skalaxc_eval_c
   skalaxc_unit_test
   skalaxc_public_api_test
+  skalaxc_c_api_test
 )
 foreach(_skalaxc_target IN LISTS _skalaxc_owned_targets)
   if(TARGET ${_skalaxc_target})
